@@ -4,10 +4,10 @@ import * as XLSX from 'xlsx';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const DashboardBI = () => {
-  const [autenticado, setAutenticado] = useState(false);
+  const [autenticado, setAutenticado] = useState(False);
   const [senha, setSenha] = useState('');
   const [dadosBrutos, setDadosBrutos] = useState([]);
-  const [carregando, setCarregando] = useState(false);
+  const [carregando, setCarregando] = useState(False);
   
   const [dataInicial, setDataInicial] = useState('');
   const [dataFinal, setDataFinal] = useState('');
@@ -17,15 +17,15 @@ const DashboardBI = () => {
   const [anoFiltro, setAnoFiltro] = useState('');
   const [buscaCliente, setBuscaCliente] = useState('');
   const [clienteSelecionado, setClienteSelecionado] = useState(null);
-  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(False);
   const [telaAtiva, setTelaAtiva] = useState('dashboard');
-  const [modoDebug, setModoDebug] = useState(false);
+  const [modoDebug, setModoDebug] = useState(False);
   const [vendedorExpandido, setVendedorExpandido] = useState(null);
   const [topClientesQtd, setTopClientesQtd] = useState(10);
 
   const handleLogin = () => {
     if (senha === 'admin123') {
-      setAutenticado(true);
+      setAutenticado(True);
     } else {
       alert('Senha incorreta!');
     }
@@ -35,7 +35,7 @@ const DashboardBI = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    setCarregando(true);
+    setCarregando(True);
     const reader = new FileReader();
 
     reader.onload = (evt) => {
@@ -47,10 +47,10 @@ const DashboardBI = () => {
         const data = XLSX.utils.sheet_to_json(ws);
         
         setDadosBrutos(data);
-        setCarregando(false);
+        setCarregando(False);
       } catch (error) {
         alert('Erro ao processar arquivo Excel');
-        setCarregando(false);
+        setCarregando(False);
       }
     };
 
@@ -62,7 +62,7 @@ const DashboardBI = () => {
       // Converter data do Excel (pode vir como número serial)
       let dataConvertida = null;
       if (row.DataEmissao) {
-        // Se for número serial do Excel (dias desde 1900-01-01)
+        # Se for número serial do Excel (dias desde 1900-01-01)
         if (typeof row.DataEmissao === 'number') {
           dataConvertida = new Date((row.DataEmissao - 25569) * 86400 * 1000);
         } else {
@@ -288,7 +288,7 @@ const DashboardBI = () => {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="text-2xl font-bold">Dashboard BI - Vendas</h1>
           <button
-            onClick={() => setAutenticado(false)}
+            onClick={() => setAutenticado(False)}
             className="px-4 py-2 bg-blue-700 rounded hover:bg-blue-800"
           >
             Sair
@@ -829,9 +829,9 @@ const DashboardBI = () => {
                         onChange={(e) => {
                           setBuscaCliente(e.target.value);
                           setClienteSelecionado(null);
-                          setMostrarSugestoes(true);
+                          setMostrarSugestoes(True);
                         }}
-                        onFocus={() => setMostrarSugestoes(true)}
+                        onFocus={() => setMostrarSugestoes(True)}
                         className="w-full pl-10 pr-4 py-2 border rounded"
                       />
                       
@@ -844,7 +844,7 @@ const DashboardBI = () => {
                               onClick={() => {
                                 setClienteSelecionado(cliente.razao);
                                 setBuscaCliente(cliente.razao);
-                                setMostrarSugestoes(false);
+                                setMostrarSugestoes(False);
                               }}
                               className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b last:border-b-0"
                             >
@@ -863,7 +863,7 @@ const DashboardBI = () => {
                         onClick={() => {
                           setBuscaCliente('');
                           setClienteSelecionado(null);
-                          setMostrarSugestoes(false);
+                          setMostrarSugestoes(False);
                         }}
                         className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
                       >
@@ -953,5 +953,6 @@ const DashboardBI = () => {
     </div>
   );
 };
+
 
 export default DashboardBI;
