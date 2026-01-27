@@ -23,10 +23,11 @@ GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 def listar_planilhas_github():
     """Lista todos os arquivos Excel do repositório GitHub"""
     try:
+        # Adiciona timeout para evitar travamentos
         if GITHUB_TOKEN:
-            g = Github(GITHUB_TOKEN)
+            g = Github(GITHUB_TOKEN, timeout=15)
         else:
-            g = Github()
+            g = Github(timeout=15)
         
         repo = g.get_repo(GITHUB_REPO)
         contents = repo.get_contents("")
@@ -40,20 +41,34 @@ def listar_planilhas_github():
                     'path': content.path
                 })
         
+        if not planilhas:
+            st.warning("⚠️ Nenhuma planilha Excel encontrada no repositório")
+        
         return planilhas
     except Exception as e:
-        st.error(f"Erro ao conectar ao GitHub: {e}")
+        st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
+        st.info("💡 Dicas:")
+        st.info(f"- Verifique se o repositório '{GITHUB_REPO}' existe e está público")
+        st.info("- Se for privado, adicione um token de acesso válido")
+        st.info("- Verifique sua conexão com a internet")
         return []
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
     """Carrega planilha diretamente do GitHub"""
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
         df = pd.read_excel(io.BytesIO(response.content))
         return df
+    except requests.exceptions.Timeout:
+        st.error("⏱️ Timeout ao carregar planilha. Tente novamente.")
+        return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Erro ao carregar planilha: {str(e)}")
+        return None
     except Exception as e:
-        st.error(f"Erro ao carregar planilha: {e}")
+        st.error(f"❌ Erro ao processar planilha: {str(e)}")
         return None
 
 # ====================== AUTENTICAÇÃO ======================
@@ -113,7 +128,8 @@ st.markdown("---")
 col_header1, col_header2 = st.columns([3, 1])
 
 with col_header1:
-    planilhas_disponiveis = listar_planilhas_github()
+    with st.spinner("🔄 Conectando ao GitHub..."):
+        planilhas_disponiveis = listar_planilhas_github()
     
     if planilhas_disponiveis:
         planilha_selecionada = st.selectbox(
@@ -123,7 +139,8 @@ with col_header1:
         )
         url_planilha = next(p['url'] for p in planilhas_disponiveis if p['nome'] == planilha_selecionada)
     else:
-        st.error("Nenhuma planilha encontrada no repositório GitHub")
+        st.error("❌ Não foi possível carregar as planilhas do GitHub")
+        st.info("💡 Verifique as configurações e tente recarregar a página")
         st.stop()
 
 with col_header2:
@@ -131,10 +148,11 @@ with col_header2:
         st.cache_data.clear()
         st.rerun()
 
-with st.spinner("Carregando dados do GitHub..."):
+with st.spinner("📥 Carregando dados do GitHub..."):
     df = carregar_planilha_github(url_planilha)
 
 if df is None:
+    st.error("❌ Não foi possível carregar os dados")
     st.stop()
 
 df = processar_dados(df)
