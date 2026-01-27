@@ -71,8 +71,13 @@ def carregar_planilha_github(url):
 
 # ====================== AUTENTICAÇÃO ======================
 def check_password():
+    """Sistema de autenticação - ALTERE A SENHA AQUI"""
+    
+    # 🔐 ALTERE A SENHA AQUI (linha abaixo)
+    SENHA_CORRETA = "admin123"  # ⬅️ MUDE AQUI PARA SUA SENHA
+    
     def password_entered():
-        if st.session_state["password"] == "admin123":
+        if st.session_state["password"] == SENHA_CORRETA:
             st.session_state["password_correct"] = True
             del st.session_state["password"]
         else:
@@ -81,7 +86,6 @@ def check_password():
     if "password_correct" not in st.session_state:
         st.markdown("### 🔐 Login - Dashboard BI Medtextil")
         st.text_input("Senha", type="password", on_change=password_entered, key="password")
-        st.caption("Senha padrão: admin123")
         return False
     elif not st.session_state["password_correct"]:
         st.markdown("### 🔐 Login - Dashboard BI Medtextil")
@@ -235,15 +239,23 @@ if menu == "Dashboard":
         vendas_tempo = notas_unicas.groupby('MesAno')['Valor_Real'].sum().reset_index()
         vendas_tempo = vendas_tempo.sort_values('MesAno')
         
-        fig_linha = px.line(
-            vendas_tempo, 
-            x='MesAno', 
-            y='Valor_Real',
-            labels={'MesAno': 'Período', 'Valor_Real': 'Valor (R$)'},
-            template='plotly_white'
-        )
-        fig_linha.update_traces(line_color='#1f77b4', line_width=3)
-        st.plotly_chart(fig_linha, use_container_width=True)
+        if len(vendas_tempo) > 0:
+            fig_linha = px.line(
+                vendas_tempo, 
+                x='MesAno', 
+                y='Valor_Real',
+                labels={'MesAno': 'Período', 'Valor_Real': 'Valor (R$)'},
+                template='plotly_white'
+            )
+            fig_linha.update_traces(line_color='#1f77b4', line_width=3)
+            fig_linha.update_layout(
+                xaxis_title="Período",
+                yaxis_title="Valor (R$)",
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig_linha, use_container_width=True)
+        else:
+            st.info("Sem dados para exibir no período selecionado")
     
     with col6:
         st.subheader("🗺️ Top 10 Estados")
