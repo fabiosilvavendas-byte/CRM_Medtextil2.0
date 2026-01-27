@@ -17,20 +17,21 @@ st.set_page_config(
 
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
+GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
 @st.cache_data(ttl=3600)
 def listar_planilhas_github():
-    """Lista todos os arquivos Excel do repositório GitHub"""
+    """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
-        # Adiciona timeout para evitar travamentos
         if GITHUB_TOKEN:
             g = Github(GITHUB_TOKEN, timeout=15)
         else:
             g = Github(timeout=15)
         
         repo = g.get_repo(GITHUB_REPO)
-        contents = repo.get_contents("")
+        # ⭐ BUSCAR NA PASTA 'dados'
+        contents = repo.get_contents(GITHUB_FOLDER)
         
         planilhas = []
         for content in contents:
@@ -42,15 +43,12 @@ def listar_planilhas_github():
                 })
         
         if not planilhas:
-            st.warning("⚠️ Nenhuma planilha Excel encontrada no repositório")
+            st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
         
         return planilhas
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
-        st.info("💡 Dicas:")
-        st.info(f"- Verifique se o repositório '{GITHUB_REPO}' existe e está público")
-        st.info("- Se for privado, adicione um token de acesso válido")
-        st.info("- Verifique sua conexão com a internet")
+        st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
         return []
 
 @st.cache_data(ttl=3600)
@@ -133,14 +131,17 @@ with col_header1:
     
     if planilhas_disponiveis:
         planilha_selecionada = st.selectbox(
-            "📁 Selecione a planilha do GitHub",
+            f"📁 Selecione a planilha da pasta '{GITHUB_FOLDER}'",
             options=[p['nome'] for p in planilhas_disponiveis],
             index=0
         )
         url_planilha = next(p['url'] for p in planilhas_disponiveis if p['nome'] == planilha_selecionada)
     else:
-        st.error("❌ Não foi possível carregar as planilhas do GitHub")
-        st.info("💡 Verifique as configurações e tente recarregar a página")
+        st.error(f"❌ Não foi possível carregar planilhas da pasta '{GITHUB_FOLDER}'")
+        st.info("💡 Verifique se:")
+        st.info(f"  • O repositório '{GITHUB_REPO}' existe e é público")
+        st.info(f"  • A pasta '{GITHUB_FOLDER}' existe no repositório")
+        st.info(f"  • Há arquivos .xlsx ou .xls dentro da pasta '{GITHUB_FOLDER}'")
         st.stop()
 
 with col_header2:
