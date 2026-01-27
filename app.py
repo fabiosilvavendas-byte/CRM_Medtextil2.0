@@ -568,17 +568,42 @@ elif menu == "Clientes sem Compra":
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas por Cliente")
     
-    clientes_disponiveis = df[['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
-    clientes_disponiveis['Display'] = clientes_disponiveis['RazaoSocial'] + " - " + clientes_disponiveis['CPF_CNPJ'] + " (" + clientes_disponiveis['Cidade'] + "/" + clientes_disponiveis['Estado'] + ")"
+    # Buscar cliente por CPF/CNPJ ou Nome
+    col_busca1, col_busca2 = st.columns(2)
     
-    cliente_selecionado = st.selectbox(
-        "🔍 Selecione o Cliente",
-        options=[''] + clientes_disponiveis['Display'].tolist(),
-        format_func=lambda x: "Selecione um cliente..." if x == '' else x
-    )
+    with col_busca1:
+        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True)
     
-    if cliente_selecionado and cliente_selecionado != '':
-        cpf_cnpj = cliente_selecionado.split(' - ')[1].split(' (')[0]
+    with col_busca2:
+        if busca_tipo == "Nome":
+            busca_texto = st.text_input("Digite o nome do cliente", placeholder="Ex: Nome da Empresa")
+        else:
+            busca_texto = st.text_input("Digite o CPF/CNPJ", placeholder="Ex: 12345678901234")
+    
+    cliente_selecionado = None
+    cpf_cnpj = None
+    
+    if busca_texto and len(busca_texto) >= 3:
+        if busca_tipo == "Nome":
+            clientes_filtrados = df[df['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+        else:
+            clientes_filtrados = df[df['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+        
+        if len(clientes_filtrados) > 0:
+            clientes_filtrados['Display'] = clientes_filtrados['RazaoSocial'] + " - " + clientes_filtrados['CPF_CNPJ'] + " (" + clientes_filtrados['Cidade'] + "/" + clientes_filtrados['Estado'] + ")"
+            
+            cliente_selecionado = st.selectbox(
+                f"📋 Clientes encontrados ({len(clientes_filtrados)}):",
+                options=clientes_filtrados['Display'].tolist(),
+                key="cliente_hist"
+            )
+            
+            if cliente_selecionado:
+                cpf_cnpj = cliente_selecionado.split(' - ')[1].split(' (')[0]
+        else:
+            st.warning("❌ Nenhum cliente encontrado com esse critério")
+    
+    if cpf_cnpj:
         historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
         
         if len(historico) > 0:
@@ -652,7 +677,7 @@ elif menu == "Histórico":
         else:
             st.warning("Nenhum registro encontrado para este cliente")
     else:
-        st.info("👆 Selecione um cliente para visualizar o histórico completo")
+        st.info("👆 Digite pelo menos 3 caracteres para buscar um cliente")
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
