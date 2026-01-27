@@ -1,6 +1,8 @@
 streamlit
 pandas
+plotly
 openpyxl
 xlsxwriter
-plotly
+requests
+PyGithub
 reportlab
