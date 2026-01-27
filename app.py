@@ -215,36 +215,61 @@ if menu == "Dashboard":
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        faturamento_total = notas_unicas['Valor_Real'].sum()
-        st.metric("💰 Faturamento Líquido", f"R$ {faturamento_total:,.2f}")
+        # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
+        vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
+        st.metric("💰 Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
     
     with col2:
+        # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
+        # Valor_Real já negativiza as devoluções automaticamente
+        faturamento_liquido = notas_unicas['Valor_Real'].sum()
+        st.metric("💵 Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
+    
+    with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
         st.metric("👥 Clientes Únicos", f"{clientes_unicos:,}")
     
-    with col3:
-        total_notas = len(notas_unicas)
-        st.metric("📄 Total de Notas", f"{total_notas:,}")
-    
     with col4:
-        ticket_medio = faturamento_total / clientes_unicos if clientes_unicos > 0 else 0
+        total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
+        st.metric("📄 Notas de Venda", f"{total_notas:,}")
+    
+    # Segunda linha de métricas - Detalhamento
+    col1b, col2b, col3b, col4b = st.columns(4)
+    
+    with col1b:
+        # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
+        total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
+        st.metric("↩️ Devoluções", f"R$ {total_devolucoes:,.2f}")
+    
+    with col2b:
+        ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
         st.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+    
+    with col3b:
+        qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
+        st.metric("📋 Notas Devolução", f"{qtd_notas_dev:,}")
+    
+    with col4b:
+        taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
+        st.metric("📊 Taxa Devolução", f"{taxa_devolucao:.1f}%")
     
     st.markdown("---")
     
     col5, col6 = st.columns(2)
     
     with col5:
-        st.subheader("📈 Evolução de Vendas")
-        vendas_tempo = notas_unicas.groupby('MesAno')['Valor_Real'].sum().reset_index()
+        st.subheader("📈 Evolução de Vendas Brutas")
+        # Filtra apenas vendas (sem devoluções) para o gráfico
+        vendas_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        vendas_tempo = vendas_apenas.groupby('MesAno')['TotalProduto'].sum().reset_index()
         vendas_tempo = vendas_tempo.sort_values('MesAno')
         
         if len(vendas_tempo) > 0:
             fig_linha = px.line(
                 vendas_tempo, 
                 x='MesAno', 
-                y='Valor_Real',
-                labels={'MesAno': 'Período', 'Valor_Real': 'Valor (R$)'},
+                y='TotalProduto',
+                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'},
                 template='plotly_white'
             )
             fig_linha.update_traces(line_color='#1f77b4', line_width=3)
@@ -259,16 +284,18 @@ if menu == "Dashboard":
     
     with col6:
         st.subheader("🗺️ Top 10 Estados")
-        vendas_estado = notas_unicas.groupby('Estado')['Valor_Real'].sum().reset_index()
-        vendas_estado = vendas_estado.sort_values('Valor_Real', ascending=False).head(10)
+        # Filtra apenas vendas (sem devoluções)
+        vendas_estado_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        vendas_estado = vendas_estado_apenas.groupby('Estado')['TotalProduto'].sum().reset_index()
+        vendas_estado = vendas_estado.sort_values('TotalProduto', ascending=False).head(10)
         
         fig_bar = px.bar(
             vendas_estado, 
             x='Estado', 
-            y='Valor_Real',
-            labels={'Estado': 'Estado', 'Valor_Real': 'Valor (R$)'},
+            y='TotalProduto',
+            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
             template='plotly_white',
-            color='Valor_Real',
+            color='TotalProduto',
             color_continuous_scale='Greens'
         )
         st.plotly_chart(fig_bar, use_container_width=True)
@@ -297,17 +324,19 @@ if menu == "Dashboard":
     
     with col8:
         st.subheader("🏆 Top 10 Clientes")
-        ranking_clientes = notas_unicas.groupby('RazaoSocial')['Valor_Real'].sum().reset_index()
-        ranking_clientes = ranking_clientes.sort_values('Valor_Real', ascending=False).head(10)
+        # Filtra apenas vendas
+        vendas_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        ranking_clientes = vendas_clientes.groupby('RazaoSocial')['TotalProduto'].sum().reset_index()
+        ranking_clientes = ranking_clientes.sort_values('TotalProduto', ascending=False).head(10)
         
         fig_clientes = px.bar(
             ranking_clientes,
-            x='Valor_Real',
+            x='TotalProduto',
             y='RazaoSocial',
             orientation='h',
-            labels={'RazaoSocial': 'Cliente', 'Valor_Real': 'Valor (R$)'},
+            labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
             template='plotly_white',
-            color='Valor_Real',
+            color='TotalProduto',
             color_continuous_scale='Oranges'
         )
         st.plotly_chart(fig_clientes, use_container_width=True)
@@ -343,17 +372,19 @@ if menu == "Dashboard":
     
     with col10:
         st.subheader("📊 Ranking de Vendedores")
-        ranking_vendedores = notas_unicas.groupby('Vendedor')['Valor_Real'].sum().reset_index()
-        ranking_vendedores = ranking_vendedores.sort_values('Valor_Real', ascending=False).head(10)
+        # Filtra apenas vendas
+        vendas_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        ranking_vendedores = vendas_vendedores.groupby('Vendedor')['TotalProduto'].sum().reset_index()
+        ranking_vendedores = ranking_vendedores.sort_values('TotalProduto', ascending=False).head(10)
         
         fig_rank_vend = px.bar(
             ranking_vendedores,
-            x='Valor_Real',
+            x='TotalProduto',
             y='Vendedor',
             orientation='h',
-            labels={'Vendedor': 'Vendedor', 'Valor_Real': 'Valor Total (R$)'},
+            labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
             template='plotly_white',
-            color='Valor_Real',
+            color='TotalProduto',
             color_continuous_scale='Purples'
         )
         st.plotly_chart(fig_rank_vend, use_container_width=True)
