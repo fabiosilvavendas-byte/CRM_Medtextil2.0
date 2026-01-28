@@ -33,23 +33,37 @@ def listar_planilhas_github():
         # ⭐ BUSCAR NA PASTA 'dados'
         contents = repo.get_contents(GITHUB_FOLDER)
         
-        planilhas = []
+        planilhas = {
+            'vendas': None,
+            'inadimplencia': None,
+            'todas': []
+        }
+        
         for content in contents:
             if content.name.endswith(('.xlsx', '.xls')):
-                planilhas.append({
+                info = {
                     'nome': content.name,
                     'url': content.download_url,
                     'path': content.path
-                })
+                }
+                planilhas['todas'].append(info)
+                
+                # Identificar planilha de vendas
+                if 'CONSULTA_VENDEDORES' in content.name.upper():
+                    planilhas['vendas'] = info
+                
+                # Identificar planilha de inadimplência
+                if 'LANCAMENTO A RECEBER' in content.name.upper() or 'LANCAMENTO_A_RECEBER' in content.name.upper():
+                    planilhas['inadimplencia'] = info
         
-        if not planilhas:
+        if not planilhas['todas']:
             st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
         
         return planilhas
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
-        return []
+        return {'vendas': None, 'inadimplencia': None, 'todas': []}
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
@@ -67,31 +81,6 @@ def carregar_planilha_github(url):
         return None
     except Exception as e:
         st.error(f"❌ Erro ao processar planilha: {str(e)}")
-        return None
-
-@st.cache_data(ttl=3600)
-def carregar_inadimplencia_github():
-    """Carrega a planilha de inadimplência do GitHub"""
-    try:
-        if GITHUB_TOKEN:
-            g = Github(GITHUB_TOKEN, timeout=15)
-        else:
-            g = Github(timeout=15)
-        
-        repo = g.get_repo(GITHUB_REPO)
-        # Buscar o arquivo específico de inadimplência
-        contents = repo.get_contents(GITHUB_FOLDER)
-        
-        for content in contents:
-            if content.name == "XLS_Grid_LANCAMENTO A RECEBER.xlsx":
-                response = requests.get(content.download_url, timeout=30)
-                response.raise_for_status()
-                df = pd.read_excel(io.BytesIO(response.content))
-                return df
-        
-        return None
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar planilha de inadimplência: {str(e)}")
         return None
 
 # ====================== AUTENTICAÇÃO ======================
@@ -214,35 +203,33 @@ with col_header1:
     with st.spinner("🔄 Conectando ao GitHub..."):
         planilhas_disponiveis = listar_planilhas_github()
     
-    if planilhas_disponiveis:
-        planilha_selecionada = st.selectbox(
-            f"📁 Selecione a planilha da pasta '{GITHUB_FOLDER}'",
-            options=[p['nome'] for p in planilhas_disponiveis],
-            index=0
-        )
-        url_planilha = next(p['url'] for p in planilhas_disponiveis if p['nome'] == planilha_selecionada)
+    if planilhas_disponiveis['vendas']:
+        st.info(f"📊 Planilha de Vendas: **{planilhas_disponiveis['vendas']['nome']}**")
+        url_planilha_vendas = planilhas_disponiveis['vendas']['url']
     else:
-        st.error(f"❌ Não foi possível carregar planilhas da pasta '{GITHUB_FOLDER}'")
-        st.info("💡 Verifique se:")
-        st.info(f"  • O repositório '{GITHUB_REPO}' existe e é público")
-        st.info(f"  • A pasta '{GITHUB_FOLDER}' existe no repositório")
-        st.info(f"  • Há arquivos .xlsx ou .xls dentro da pasta '{GITHUB_FOLDER}'")
+        st.error("❌ Planilha de vendas não encontrada")
+        st.info("💡 Procurando por arquivo com 'CONSULTA_VENDEDORES' no nome")
         st.stop()
+    
+    if planilhas_disponiveis['inadimplencia']:
+        st.info(f"💳 Planilha de Inadimplência: **{planilhas_disponiveis['inadimplencia']['nome']}**")
+    else:
+        st.warning("⚠️ Planilha de inadimplência não encontrada (módulo desabilitado)")
 
 with col_header2:
     if st.button("🔄 Recarregar Dados", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
-with st.spinner("📥 Carregando dados do GitHub..."):
-    df = carregar_planilha_github(url_planilha)
+with st.spinner("📥 Carregando dados de vendas..."):
+    df = carregar_planilha_github(url_planilha_vendas)
 
 if df is None:
-    st.error("❌ Não foi possível carregar os dados")
+    st.error("❌ Não foi possível carregar os dados de vendas")
     st.stop()
 
 df = processar_dados(df)
-st.success(f"✅ Planilha carregada: **{planilha_selecionada}** ({len(df):,} registros)")
+st.success(f"✅ Dados de vendas carregados: ({len(df):,} registros)")
 
 # ====================== SIDEBAR - FILTROS GLOBAIS ======================
 st.sidebar.header("🔍 Filtros Globais")
@@ -628,9 +615,17 @@ elif menu == "Positivação":
 elif menu == "Inadimplência":
     st.header("💳 Relatório de Inadimplência")
     
+    # Verificar se a planilha de inadimplência existe
+    if not planilhas_disponiveis['inadimplencia']:
+        st.error("❌ Planilha de inadimplência não encontrada")
+        st.info("💡 Para usar este módulo, adicione no GitHub um arquivo com 'LANCAMENTO A RECEBER' no nome")
+        st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
+        st.info("📋 Colunas necessárias: Funcionário, Razão Social, N_Doc, Dt.Vencimento, Vr.Líquido, Conta/Caixa, UF")
+        st.stop()
+    
     # Carregar dados de inadimplência
     with st.spinner("📥 Carregando dados de inadimplência..."):
-        df_inadimplencia = carregar_inadimplencia_github()
+        df_inadimplencia = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
     
     if df_inadimplencia is not None and len(df_inadimplencia) > 0:
         df_inadimplencia = processar_inadimplencia(df_inadimplencia)
@@ -825,10 +820,6 @@ elif menu == "Inadimplência":
             "relatorio_inadimplencia.xlsx",
             "application/vnd.ms-excel"
         )
-        
-    else:
-        st.warning("⚠️ Planilha de inadimplência não encontrada ou vazia")
-        st.info("💡 Certifique-se de que o arquivo 'XLS_Grid_LANCAMENTO A RECEBER.xlsx' está na pasta 'dados' do GitHub")
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
