@@ -834,7 +834,7 @@ elif menu == "Inadimplência":
 elif menu == "Clientes sem Compra":
     st.header("⚠️ Clientes sem Compra no Período (Churn)")
     
-    col_f1, col_f2, col_f3 = st.columns(3)
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         vendedor_churn_filtro = st.selectbox(
             "Filtrar por Vendedor",
@@ -850,30 +850,49 @@ elif menu == "Clientes sem Compra":
     with col_f3:
         ordem = st.selectbox(
             "Ordenar por",
-            ["Valor Histórico (Maior)", "Valor Histórico (Menor)", "Nome (A-Z)"],
+            ["Valor Histórico (Maior)", "Valor Histórico (Menor)", "Nome (A-Z)", "Última Compra (Mais Recente)"],
             key="ordem_churn"
+        )
+    with col_f4:
+        busca_cliente_churn = st.text_input(
+            "🔍 Buscar Cliente",
+            placeholder="Digite o nome...",
+            key="busca_churn"
         )
     
     clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-    valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
-    valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
     
-    todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
+    # Calcular valor histórico e data da última compra
+    vendas_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ').agg({
+        'TotalProduto': 'sum',
+        'DataEmissao': 'max'
+    }).reset_index()
+    vendas_historico.columns = ['CPF_CNPJ', 'ValorHistorico', 'UltimaCompra']
+    
+    todos_clientes = pd.merge(todos_clientes, vendas_historico, on='CPF_CNPJ', how='left')
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
     
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico']]
+    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'UltimaCompra']]
     
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
     if estado_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
     
+    # Filtro de busca por nome do cliente
+    if busca_cliente_churn and len(busca_cliente_churn) >= 2:
+        clientes_sem_compra = clientes_sem_compra[
+            clientes_sem_compra['RazaoSocial'].str.contains(busca_cliente_churn, case=False, na=False)
+        ]
+    
     if ordem == "Valor Histórico (Maior)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
     elif ordem == "Valor Histórico (Menor)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=True)
+    elif ordem == "Última Compra (Mais Recente)":
+        clientes_sem_compra = clientes_sem_compra.sort_values('UltimaCompra', ascending=False)
     else:
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
     
@@ -901,8 +920,28 @@ elif menu == "Clientes sem Compra":
         )
         st.plotly_chart(fig_churn, use_container_width=True)
     
-    # Formatar para exibição
-    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
+    # Preparar dados para exibição
+    clientes_sem_compra_display = clientes_sem_compra.copy()
+    
+    # Formatar data da última compra
+    clientes_sem_compra_display['UltimaCompra'] = clientes_sem_compra_display['UltimaCompra'].apply(
+        lambda x: x.strftime('%d/%m/%Y') if pd.notnull(x) else 'Sem registro'
+    )
+    
+    # Formatar valores monetários
+    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra_display, ['ValorHistorico'])
+    
+    # Renomear colunas para exibição
+    clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
+        'RazaoSocial': 'Razão Social',
+        'CPF_CNPJ': 'CPF/CNPJ',
+        'Vendedor': 'Vendedor',
+        'Cidade': 'Cidade',
+        'Estado': 'Estado',
+        'ValorHistorico': 'Valor Histórico',
+        'UltimaCompra': 'Última Compra'
+    })
+    
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
     
     st.download_button(
