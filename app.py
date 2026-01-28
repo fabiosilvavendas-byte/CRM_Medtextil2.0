@@ -15,33 +15,6 @@ st.set_page_config(
     page_icon="📊"
 )
 
-# ====================== ÍCONE PERSONALIZADO PARA IPHONE ======================
-# Adiciona meta tags para ícone do app no iPhone/iPad
-st.markdown("""
-    <head>
-        <!-- Ícone para iPhone (180x180px) -->
-        <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
-        
-        <!-- Ícone para iPhone Retina (180x180px) -->
-        <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
-        
-        <!-- Ícone para iPad (152x152px) -->
-        <link rel="apple-touch-icon" sizes="152x152" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
-        
-        <!-- Ícone para iPad Retina (167x167px) -->
-        <link rel="apple-touch-icon" sizes="167x167" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
-        
-        <!-- Nome do app quando adicionado à tela inicial -->
-        <meta name="apple-mobile-web-app-title" content="BI Medtextil">
-        
-        <!-- Faz o app abrir em tela cheia (sem barra do navegador) -->
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        
-        <!-- Cor da barra de status no iPhone -->
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    </head>
-""", unsafe_allow_html=True)
-
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
@@ -94,6 +67,31 @@ def carregar_planilha_github(url):
         return None
     except Exception as e:
         st.error(f"❌ Erro ao processar planilha: {str(e)}")
+        return None
+
+@st.cache_data(ttl=3600)
+def carregar_inadimplencia_github():
+    """Carrega a planilha de inadimplência do GitHub"""
+    try:
+        if GITHUB_TOKEN:
+            g = Github(GITHUB_TOKEN, timeout=15)
+        else:
+            g = Github(timeout=15)
+        
+        repo = g.get_repo(GITHUB_REPO)
+        # Buscar o arquivo específico de inadimplência
+        contents = repo.get_contents(GITHUB_FOLDER)
+        
+        for content in contents:
+            if content.name == "XLS_Grid_LANCAMENTO A RECEBER.xlsx":
+                response = requests.get(content.download_url, timeout=30)
+                response.raise_for_status()
+                df = pd.read_excel(io.BytesIO(response.content))
+                return df
+        
+        return None
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar planilha de inadimplência: {str(e)}")
         return None
 
 # ====================== AUTENTICAÇÃO ======================
@@ -163,6 +161,45 @@ def formatar_dataframe_moeda(df, colunas_moeda):
         if col in df_formatado.columns:
             df_formatado[col] = df_formatado[col].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
     return df_formatado
+
+@st.cache_data
+def processar_inadimplencia(df):
+    """Processa dados de inadimplência"""
+    # Padronizar nomes das colunas
+    df = df.rename(columns={
+        'Funcionário': 'Vendedor',
+        'Razão Social': 'Cliente',
+        'N_Doc': 'NumeroDoc',
+        'Dt.Vencimento': 'DataVencimento',
+        'Vr.Líquido': 'ValorLiquido',
+        'Conta/Caixa': 'Banco',
+        'UF': 'Estado'
+    })
+    
+    # Converter data de vencimento
+    df['DataVencimento'] = pd.to_datetime(df['DataVencimento'], errors='coerce')
+    
+    # Calcular dias de atraso
+    hoje = pd.Timestamp.now()
+    df['DiasAtraso'] = (hoje - df['DataVencimento']).dt.days
+    df['DiasAtraso'] = df['DiasAtraso'].apply(lambda x: max(0, x))  # Não mostrar valores negativos
+    
+    # Classificar inadimplência
+    def classificar_inadimplencia(dias):
+        if dias == 0:
+            return 'A Vencer'
+        elif dias <= 30:
+            return '1-30 dias'
+        elif dias <= 60:
+            return '31-60 dias'
+        elif dias <= 90:
+            return '61-90 dias'
+        else:
+            return 'Acima de 90 dias'
+    
+    df['FaixaAtraso'] = df['DiasAtraso'].apply(classificar_inadimplencia)
+    
+    return df
 
 # ====================== INÍCIO DO APP ======================
 if not check_password():
@@ -260,7 +297,7 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 st.sidebar.markdown("---")
 menu = st.sidebar.radio(
     "📑 Navegação",
-    ["Dashboard", "Positivação", "Clientes sem Compra", "Histórico", "Rankings"],
+    ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Rankings"],
     index=0
 )
 
@@ -586,6 +623,212 @@ elif menu == "Positivação":
             "positivacao_estado.xlsx",
             "application/vnd.ms-excel"
         )
+
+# ====================== INADIMPLÊNCIA ======================
+elif menu == "Inadimplência":
+    st.header("💳 Relatório de Inadimplência")
+    
+    # Carregar dados de inadimplência
+    with st.spinner("📥 Carregando dados de inadimplência..."):
+        df_inadimplencia = carregar_inadimplencia_github()
+    
+    if df_inadimplencia is not None and len(df_inadimplencia) > 0:
+        df_inadimplencia = processar_inadimplencia(df_inadimplencia)
+        
+        st.success(f"✅ Dados carregados: {len(df_inadimplencia):,} títulos a receber")
+        
+        # ========== FILTROS ==========
+        st.subheader("🔍 Filtros")
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        
+        with col_f1:
+            vendedores_inad = ['Todos'] + sorted(df_inadimplencia['Vendedor'].dropna().unique().tolist())
+            vendedor_inad_filtro = st.selectbox("Vendedor", vendedores_inad, key="vend_inad")
+        
+        with col_f2:
+            estados_inad = ['Todos'] + sorted(df_inadimplencia['Estado'].dropna().unique().tolist())
+            estado_inad_filtro = st.selectbox("Estado", estados_inad, key="est_inad")
+        
+        with col_f3:
+            data_inicial_inad = st.date_input(
+                "Vencimento De", 
+                value=None, 
+                key="data_ini_inad",
+                format="DD/MM/YYYY"
+            )
+        
+        with col_f4:
+            data_final_inad = st.date_input(
+                "Vencimento Até", 
+                value=None, 
+                key="data_fim_inad",
+                format="DD/MM/YYYY"
+            )
+        
+        # Aplicar filtros
+        df_inad_filtrado = df_inadimplencia.copy()
+        
+        if vendedor_inad_filtro != 'Todos':
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['Vendedor'] == vendedor_inad_filtro]
+        if estado_inad_filtro != 'Todos':
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['Estado'] == estado_inad_filtro]
+        if data_inicial_inad:
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['DataVencimento'] >= pd.to_datetime(data_inicial_inad)]
+        if data_final_inad:
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['DataVencimento'] <= pd.to_datetime(data_final_inad)]
+        
+        st.markdown("---")
+        
+        # ========== CARDS DE RESUMO ==========
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_inadimplencia = df_inad_filtrado['ValorLiquido'].sum()
+            st.metric("💰 Total em Aberto", f"R$ {total_inadimplencia:,.2f}")
+        
+        with col2:
+            qtd_titulos = len(df_inad_filtrado)
+            st.metric("📄 Quantidade de Títulos", f"{qtd_titulos:,}")
+        
+        with col3:
+            clientes_inadimplentes = df_inad_filtrado['Cliente'].nunique()
+            st.metric("👥 Clientes Inadimplentes", f"{clientes_inadimplentes:,}")
+        
+        with col4:
+            atraso_medio = df_inad_filtrado['DiasAtraso'].mean()
+            st.metric("📅 Atraso Médio", f"{atraso_medio:.0f} dias")
+        
+        st.markdown("---")
+        
+        # ========== GRÁFICOS ==========
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            st.subheader("📊 Inadimplência por Faixa de Atraso")
+            
+            # Ordenar faixas corretamente
+            ordem_faixas = ['A Vencer', '1-30 dias', '31-60 dias', '61-90 dias', 'Acima de 90 dias']
+            inad_por_faixa = df_inad_filtrado.groupby('FaixaAtraso')['ValorLiquido'].sum().reset_index()
+            inad_por_faixa['FaixaAtraso'] = pd.Categorical(inad_por_faixa['FaixaAtraso'], categories=ordem_faixas, ordered=True)
+            inad_por_faixa = inad_por_faixa.sort_values('FaixaAtraso')
+            
+            fig_faixa = px.bar(
+                inad_por_faixa,
+                x='FaixaAtraso',
+                y='ValorLiquido',
+                labels={'FaixaAtraso': 'Faixa de Atraso', 'ValorLiquido': 'Valor (R$)'},
+                template='plotly_white',
+                color='ValorLiquido',
+                color_continuous_scale='Reds'
+            )
+            st.plotly_chart(fig_faixa, use_container_width=True)
+        
+        with col6:
+            st.subheader("🏦 Inadimplência por Banco")
+            inad_por_banco = df_inad_filtrado.groupby('Banco')['ValorLiquido'].sum().reset_index()
+            inad_por_banco = inad_por_banco.sort_values('ValorLiquido', ascending=False).head(10)
+            
+            fig_banco = px.bar(
+                inad_por_banco,
+                x='ValorLiquido',
+                y='Banco',
+                orientation='h',
+                labels={'Banco': 'Banco', 'ValorLiquido': 'Valor (R$)'},
+                template='plotly_white',
+                color='ValorLiquido',
+                color_continuous_scale='Blues'
+            )
+            st.plotly_chart(fig_banco, use_container_width=True)
+        
+        st.markdown("---")
+        
+        col7, col8 = st.columns(2)
+        
+        with col7:
+            st.subheader("👤 Top 10 Vendedores - Inadimplência")
+            inad_por_vendedor = df_inad_filtrado.groupby('Vendedor').agg({
+                'ValorLiquido': 'sum',
+                'NumeroDoc': 'count'
+            }).reset_index()
+            inad_por_vendedor.columns = ['Vendedor', 'Valor', 'QtdTitulos']
+            inad_por_vendedor = inad_por_vendedor.sort_values('Valor', ascending=False).head(10)
+            
+            fig_vend_inad = px.bar(
+                inad_por_vendedor,
+                x='Vendedor',
+                y='Valor',
+                labels={'Vendedor': 'Vendedor', 'Valor': 'Valor (R$)'},
+                template='plotly_white',
+                color='Valor',
+                color_continuous_scale='Oranges'
+            )
+            st.plotly_chart(fig_vend_inad, use_container_width=True)
+        
+        with col8:
+            st.subheader("🗺️ Top 10 Estados - Inadimplência")
+            inad_por_estado = df_inad_filtrado.groupby('Estado')['ValorLiquido'].sum().reset_index()
+            inad_por_estado = inad_por_estado.sort_values('ValorLiquido', ascending=False).head(10)
+            
+            fig_est_inad = px.bar(
+                inad_por_estado,
+                x='Estado',
+                y='ValorLiquido',
+                labels={'Estado': 'Estado', 'ValorLiquido': 'Valor (R$)'},
+                template='plotly_white',
+                color='ValorLiquido',
+                color_continuous_scale='Purples'
+            )
+            st.plotly_chart(fig_est_inad, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========== TABELA DETALHADA ==========
+        st.subheader("📋 Detalhamento dos Títulos")
+        
+        # Preparar dados para exibição
+        df_detalhado = df_inad_filtrado[[
+            'Vendedor', 'Cliente', 'NumeroDoc', 'DataVencimento', 
+            'ValorLiquido', 'DiasAtraso', 'FaixaAtraso', 'Banco', 'Estado'
+        ]].copy()
+        
+        # Formatar data
+        df_detalhado['DataVencimento'] = df_detalhado['DataVencimento'].dt.strftime('%d/%m/%Y')
+        
+        # Formatar valores para exibição
+        df_detalhado_display = df_detalhado.copy()
+        df_detalhado_display['ValorLiquido'] = df_detalhado_display['ValorLiquido'].apply(
+            lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+        )
+        
+        # Renomear colunas
+        df_detalhado_display = df_detalhado_display.rename(columns={
+            'Vendedor': 'Vendedor',
+            'Cliente': 'Cliente',
+            'NumeroDoc': 'Nº Documento',
+            'DataVencimento': 'Vencimento',
+            'ValorLiquido': 'Valor em Aberto',
+            'DiasAtraso': 'Dias Atraso',
+            'FaixaAtraso': 'Faixa',
+            'Banco': 'Banco',
+            'Estado': 'UF'
+        })
+        
+        # Ordenar por dias de atraso (maior para menor)
+        df_detalhado_display = df_detalhado_display.sort_values('Dias Atraso', ascending=False)
+        
+        st.dataframe(df_detalhado_display, use_container_width=True, height=400)
+        
+        # Botão de download
+        st.download_button(
+            "📥 Exportar Relatório Completo",
+            to_excel(df_detalhado),
+            "relatorio_inadimplencia.xlsx",
+            "application/vnd.ms-excel"
+        )
+        
+    else:
+        st.warning("⚠️ Planilha de inadimplência não encontrada ou vazia")
+        st.info("💡 Certifique-se de que o arquivo 'XLS_Grid_LANCAMENTO A RECEBER.xlsx' está na pasta 'dados' do GitHub")
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
