@@ -17,19 +17,21 @@ st.set_page_config(
 
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
+GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
 @st.cache_data(ttl=3600)
 def listar_planilhas_github():
-    """Lista todos os arquivos Excel do repositório GitHub"""
+    """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
         if GITHUB_TOKEN:
-            g = Github(GITHUB_TOKEN)
+            g = Github(GITHUB_TOKEN, timeout=15)
         else:
-            g = Github()
+            g = Github(timeout=15)
         
         repo = g.get_repo(GITHUB_REPO)
-        contents = repo.get_contents("")
+        # ⭐ BUSCAR NA PASTA 'dados'
+        contents = repo.get_contents(GITHUB_FOLDER)
         
         planilhas = []
         for content in contents:
@@ -40,40 +42,85 @@ def listar_planilhas_github():
                     'path': content.path
                 })
         
+        if not planilhas:
+            st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
+        
         return planilhas
     except Exception as e:
-        st.error(f"Erro ao conectar ao GitHub: {e}")
+        st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
+        st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
         return []
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
     """Carrega planilha diretamente do GitHub"""
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
         df = pd.read_excel(io.BytesIO(response.content))
         return df
+    except requests.exceptions.Timeout:
+        st.error("⏱️ Timeout ao carregar planilha. Tente novamente.")
+        return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Erro ao carregar planilha: {str(e)}")
+        return None
     except Exception as e:
-        st.error(f"Erro ao carregar planilha: {e}")
+        st.error(f"❌ Erro ao processar planilha: {str(e)}")
+        return None
+
+@st.cache_data(ttl=3600)
+def carregar_inadimplencia_github():
+    """Carrega a planilha de inadimplência do GitHub"""
+    try:
+        if GITHUB_TOKEN:
+            g = Github(GITHUB_TOKEN, timeout=15)
+        else:
+            g = Github(timeout=15)
+        
+        repo = g.get_repo(GITHUB_REPO)
+        # Buscar o arquivo específico de inadimplência
+        contents = repo.get_contents(GITHUB_FOLDER)
+        
+        for content in contents:
+            if content.name == "XLS_Grid_LANCAMENTO A RECEBER.xlsx":
+                response = requests.get(content.download_url, timeout=30)
+                response.raise_for_status()
+                df = pd.read_excel(io.BytesIO(response.content))
+                return df
+        
+        return None
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar planilha de inadimplência: {str(e)}")
         return None
 
 # ====================== AUTENTICAÇÃO ======================
 def check_password():
+    """Sistema de autenticação - ALTERE A SENHA AQUI"""
+    
+    # 🔐 ALTERE A SENHA AQUI (linha abaixo)
+    SENHA_CORRETA = "admin123"  # ⬅️ MUDE AQUI PARA SUA SENHA
+    
     def password_entered():
-        if st.session_state["password"] == "admin123":
+        if st.session_state.get("password_input", "") == SENHA_CORRETA:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
+            st.session_state["show_error"] = True
 
     if "password_correct" not in st.session_state:
         st.markdown("### 🔐 Login - Dashboard BI Medtextil")
-        st.text_input("Senha", type="password", on_change=password_entered, key="password")
-        st.caption("Senha padrão: admin123")
+        st.text_input("Senha", type="password", key="password_input")
+        if st.button("🔓 Entrar", use_container_width=True):
+            password_entered()
         return False
     elif not st.session_state["password_correct"]:
         st.markdown("### 🔐 Login - Dashboard BI Medtextil")
-        st.text_input("Senha", type="password", on_change=password_entered, key="password")
-        st.error("😕 Senha incorreta")
+        st.text_input("Senha", type="password", key="password_input")
+        if st.button("🔓 Entrar", use_container_width=True):
+            password_entered()
+        if st.session_state.get("show_error", False):
+            st.error("😕 Senha incorreta")
         return False
     else:
         return True
@@ -103,6 +150,57 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='Dados')
     return output.getvalue()
 
+def formatar_moeda(valor):
+    """Formata valor para moeda brasileira"""
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def formatar_dataframe_moeda(df, colunas_moeda):
+    """Formata colunas de moeda em um dataframe para exibição"""
+    df_formatado = df.copy()
+    for col in colunas_moeda:
+        if col in df_formatado.columns:
+            df_formatado[col] = df_formatado[col].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+    return df_formatado
+
+@st.cache_data
+def processar_inadimplencia(df):
+    """Processa dados de inadimplência"""
+    # Padronizar nomes das colunas
+    df = df.rename(columns={
+        'Funcionário': 'Vendedor',
+        'Razão Social': 'Cliente',
+        'N_Doc': 'NumeroDoc',
+        'Dt.Vencimento': 'DataVencimento',
+        'Vr.Líquido': 'ValorLiquido',
+        'Conta/Caixa': 'Banco',
+        'UF': 'Estado'
+    })
+    
+    # Converter data de vencimento
+    df['DataVencimento'] = pd.to_datetime(df['DataVencimento'], errors='coerce')
+    
+    # Calcular dias de atraso
+    hoje = pd.Timestamp.now()
+    df['DiasAtraso'] = (hoje - df['DataVencimento']).dt.days
+    df['DiasAtraso'] = df['DiasAtraso'].apply(lambda x: max(0, x))  # Não mostrar valores negativos
+    
+    # Classificar inadimplência
+    def classificar_inadimplencia(dias):
+        if dias == 0:
+            return 'A Vencer'
+        elif dias <= 30:
+            return '1-30 dias'
+        elif dias <= 60:
+            return '31-60 dias'
+        elif dias <= 90:
+            return '61-90 dias'
+        else:
+            return 'Acima de 90 dias'
+    
+    df['FaixaAtraso'] = df['DiasAtraso'].apply(classificar_inadimplencia)
+    
+    return df
+
 # ====================== INÍCIO DO APP ======================
 if not check_password():
     st.stop()
@@ -113,17 +211,22 @@ st.markdown("---")
 col_header1, col_header2 = st.columns([3, 1])
 
 with col_header1:
-    planilhas_disponiveis = listar_planilhas_github()
+    with st.spinner("🔄 Conectando ao GitHub..."):
+        planilhas_disponiveis = listar_planilhas_github()
     
     if planilhas_disponiveis:
         planilha_selecionada = st.selectbox(
-            "📁 Selecione a planilha do GitHub",
+            f"📁 Selecione a planilha da pasta '{GITHUB_FOLDER}'",
             options=[p['nome'] for p in planilhas_disponiveis],
             index=0
         )
         url_planilha = next(p['url'] for p in planilhas_disponiveis if p['nome'] == planilha_selecionada)
     else:
-        st.error("Nenhuma planilha encontrada no repositório GitHub")
+        st.error(f"❌ Não foi possível carregar planilhas da pasta '{GITHUB_FOLDER}'")
+        st.info("💡 Verifique se:")
+        st.info(f"  • O repositório '{GITHUB_REPO}' existe e é público")
+        st.info(f"  • A pasta '{GITHUB_FOLDER}' existe no repositório")
+        st.info(f"  • Há arquivos .xlsx ou .xls dentro da pasta '{GITHUB_FOLDER}'")
         st.stop()
 
 with col_header2:
@@ -131,10 +234,11 @@ with col_header2:
         st.cache_data.clear()
         st.rerun()
 
-with st.spinner("Carregando dados do GitHub..."):
+with st.spinner("📥 Carregando dados do GitHub..."):
     df = carregar_planilha_github(url_planilha)
 
 if df is None:
+    st.error("❌ Não foi possível carregar os dados")
     st.stop()
 
 df = processar_dados(df)
@@ -145,9 +249,19 @@ st.sidebar.header("🔍 Filtros Globais")
 
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    data_inicial = st.date_input("Data Inicial", value=None, key="data_ini")
+    data_inicial = st.date_input(
+        "Data Inicial", 
+        value=None, 
+        key="data_ini",
+        format="DD/MM/YYYY"
+    )
 with col2:
-    data_final = st.date_input("Data Final", value=None, key="data_fim")
+    data_final = st.date_input(
+        "Data Final", 
+        value=None, 
+        key="data_fim",
+        format="DD/MM/YYYY"
+    )
 
 vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
 vendedor_filtro = st.sidebar.selectbox("Vendedor", vendedores, key="vend_global")
@@ -183,7 +297,7 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 st.sidebar.markdown("---")
 menu = st.sidebar.radio(
     "📑 Navegação",
-    ["Dashboard", "Positivação", "Clientes sem Compra", "Histórico", "Rankings"],
+    ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Rankings"],
     index=0
 )
 
@@ -192,52 +306,87 @@ if menu == "Dashboard":
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        faturamento_total = notas_unicas['Valor_Real'].sum()
-        st.metric("💰 Faturamento Líquido", f"R$ {faturamento_total:,.2f}")
+        # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
+        vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
+        st.metric("💰 Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
     
     with col2:
+        # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
+        # Valor_Real já negativiza as devoluções automaticamente
+        faturamento_liquido = notas_unicas['Valor_Real'].sum()
+        st.metric("💵 Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
+    
+    with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
         st.metric("👥 Clientes Únicos", f"{clientes_unicos:,}")
     
-    with col3:
-        total_notas = len(notas_unicas)
-        st.metric("📄 Total de Notas", f"{total_notas:,}")
-    
     with col4:
-        ticket_medio = faturamento_total / clientes_unicos if clientes_unicos > 0 else 0
+        total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
+        st.metric("📄 Notas de Venda", f"{total_notas:,}")
+    
+    # Segunda linha de métricas - Detalhamento
+    col1b, col2b, col3b, col4b = st.columns(4)
+    
+    with col1b:
+        # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
+        total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
+        st.metric("↩️ Devoluções", f"R$ {total_devolucoes:,.2f}")
+    
+    with col2b:
+        ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
         st.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+    
+    with col3b:
+        qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
+        st.metric("📋 Notas Devolução", f"{qtd_notas_dev:,}")
+    
+    with col4b:
+        taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
+        st.metric("📊 Taxa Devolução", f"{taxa_devolucao:.1f}%")
     
     st.markdown("---")
     
     col5, col6 = st.columns(2)
     
     with col5:
-        st.subheader("📈 Evolução de Vendas")
-        vendas_tempo = notas_unicas.groupby('MesAno')['Valor_Real'].sum().reset_index()
+        st.subheader("📈 Evolução de Vendas Brutas")
+        # Filtra apenas vendas (sem devoluções) para o gráfico
+        vendas_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        vendas_tempo = vendas_apenas.groupby('MesAno')['TotalProduto'].sum().reset_index()
         vendas_tempo = vendas_tempo.sort_values('MesAno')
         
-        fig_linha = px.line(
-            vendas_tempo, 
-            x='MesAno', 
-            y='Valor_Real',
-            labels={'MesAno': 'Período', 'Valor_Real': 'Valor (R$)'},
-            template='plotly_white'
-        )
-        fig_linha.update_traces(line_color='#1f77b4', line_width=3)
-        st.plotly_chart(fig_linha, use_container_width=True)
+        if len(vendas_tempo) > 0:
+            fig_linha = px.line(
+                vendas_tempo, 
+                x='MesAno', 
+                y='TotalProduto',
+                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'},
+                template='plotly_white'
+            )
+            fig_linha.update_traces(line_color='#1f77b4', line_width=3)
+            fig_linha.update_layout(
+                xaxis_title="Período",
+                yaxis_title="Valor (R$)",
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig_linha, use_container_width=True)
+        else:
+            st.info("Sem dados para exibir no período selecionado")
     
     with col6:
         st.subheader("🗺️ Top 10 Estados")
-        vendas_estado = notas_unicas.groupby('Estado')['Valor_Real'].sum().reset_index()
-        vendas_estado = vendas_estado.sort_values('Valor_Real', ascending=False).head(10)
+        # Filtra apenas vendas (sem devoluções)
+        vendas_estado_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        vendas_estado = vendas_estado_apenas.groupby('Estado')['TotalProduto'].sum().reset_index()
+        vendas_estado = vendas_estado.sort_values('TotalProduto', ascending=False).head(10)
         
         fig_bar = px.bar(
             vendas_estado, 
             x='Estado', 
-            y='Valor_Real',
-            labels={'Estado': 'Estado', 'Valor_Real': 'Valor (R$)'},
+            y='TotalProduto',
+            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
             template='plotly_white',
-            color='Valor_Real',
+            color='TotalProduto',
             color_continuous_scale='Greens'
         )
         st.plotly_chart(fig_bar, use_container_width=True)
@@ -266,17 +415,19 @@ if menu == "Dashboard":
     
     with col8:
         st.subheader("🏆 Top 10 Clientes")
-        ranking_clientes = notas_unicas.groupby('RazaoSocial')['Valor_Real'].sum().reset_index()
-        ranking_clientes = ranking_clientes.sort_values('Valor_Real', ascending=False).head(10)
+        # Filtra apenas vendas
+        vendas_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        ranking_clientes = vendas_clientes.groupby('RazaoSocial')['TotalProduto'].sum().reset_index()
+        ranking_clientes = ranking_clientes.sort_values('TotalProduto', ascending=False).head(10)
         
         fig_clientes = px.bar(
             ranking_clientes,
-            x='Valor_Real',
+            x='TotalProduto',
             y='RazaoSocial',
             orientation='h',
-            labels={'RazaoSocial': 'Cliente', 'Valor_Real': 'Valor (R$)'},
+            labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
             template='plotly_white',
-            color='Valor_Real',
+            color='TotalProduto',
             color_continuous_scale='Oranges'
         )
         st.plotly_chart(fig_clientes, use_container_width=True)
@@ -312,17 +463,19 @@ if menu == "Dashboard":
     
     with col10:
         st.subheader("📊 Ranking de Vendedores")
-        ranking_vendedores = notas_unicas.groupby('Vendedor')['Valor_Real'].sum().reset_index()
-        ranking_vendedores = ranking_vendedores.sort_values('Valor_Real', ascending=False).head(10)
+        # Filtra apenas vendas
+        vendas_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        ranking_vendedores = vendas_vendedores.groupby('Vendedor')['TotalProduto'].sum().reset_index()
+        ranking_vendedores = ranking_vendedores.sort_values('TotalProduto', ascending=False).head(10)
         
         fig_rank_vend = px.bar(
             ranking_vendedores,
-            x='Valor_Real',
+            x='TotalProduto',
             y='Vendedor',
             orientation='h',
-            labels={'Vendedor': 'Vendedor', 'Valor_Real': 'Valor Total (R$)'},
+            labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
             template='plotly_white',
-            color='Valor_Real',
+            color='TotalProduto',
             color_continuous_scale='Purples'
         )
         st.plotly_chart(fig_rank_vend, use_container_width=True)
@@ -363,7 +516,9 @@ elif menu == "Positivação":
         )
         st.plotly_chart(fig_posit_vend, use_container_width=True)
         
-        st.dataframe(relatorio_positivacao, use_container_width=True)
+        # Formatar para exibição
+        relatorio_positivacao_display = formatar_dataframe_moeda(relatorio_positivacao, ['ValorTotal'])
+        st.dataframe(relatorio_positivacao_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Positivação por Vendedor",
@@ -395,7 +550,9 @@ elif menu == "Positivação":
             with col2:
                 st.metric("Valor Total", f"R$ {clientes_vendedor['Valor Total'].sum():,.2f}")
             
-            st.dataframe(clientes_vendedor, use_container_width=True)
+            # Formatar para exibição
+            clientes_vendedor_display = formatar_dataframe_moeda(clientes_vendedor, ['Valor Total'])
+            st.dataframe(clientes_vendedor_display, use_container_width=True)
             
             st.download_button(
                 f"📥 Exportar Clientes - {vendedor_selecionado}",
@@ -456,7 +613,9 @@ elif menu == "Positivação":
         )
         st.plotly_chart(fig_posit_estado, use_container_width=True)
         
-        st.dataframe(relatorio_estado, use_container_width=True)
+        # Formatar para exibição
+        relatorio_estado_display = formatar_dataframe_moeda(relatorio_estado, ['ValorTotal'])
+        st.dataframe(relatorio_estado_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Positivação por Estado",
@@ -464,6 +623,212 @@ elif menu == "Positivação":
             "positivacao_estado.xlsx",
             "application/vnd.ms-excel"
         )
+
+# ====================== INADIMPLÊNCIA ======================
+elif menu == "Inadimplência":
+    st.header("💳 Relatório de Inadimplência")
+    
+    # Carregar dados de inadimplência
+    with st.spinner("📥 Carregando dados de inadimplência..."):
+        df_inadimplencia = carregar_inadimplencia_github()
+    
+    if df_inadimplencia is not None and len(df_inadimplencia) > 0:
+        df_inadimplencia = processar_inadimplencia(df_inadimplencia)
+        
+        st.success(f"✅ Dados carregados: {len(df_inadimplencia):,} títulos a receber")
+        
+        # ========== FILTROS ==========
+        st.subheader("🔍 Filtros")
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        
+        with col_f1:
+            vendedores_inad = ['Todos'] + sorted(df_inadimplencia['Vendedor'].dropna().unique().tolist())
+            vendedor_inad_filtro = st.selectbox("Vendedor", vendedores_inad, key="vend_inad")
+        
+        with col_f2:
+            estados_inad = ['Todos'] + sorted(df_inadimplencia['Estado'].dropna().unique().tolist())
+            estado_inad_filtro = st.selectbox("Estado", estados_inad, key="est_inad")
+        
+        with col_f3:
+            data_inicial_inad = st.date_input(
+                "Vencimento De", 
+                value=None, 
+                key="data_ini_inad",
+                format="DD/MM/YYYY"
+            )
+        
+        with col_f4:
+            data_final_inad = st.date_input(
+                "Vencimento Até", 
+                value=None, 
+                key="data_fim_inad",
+                format="DD/MM/YYYY"
+            )
+        
+        # Aplicar filtros
+        df_inad_filtrado = df_inadimplencia.copy()
+        
+        if vendedor_inad_filtro != 'Todos':
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['Vendedor'] == vendedor_inad_filtro]
+        if estado_inad_filtro != 'Todos':
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['Estado'] == estado_inad_filtro]
+        if data_inicial_inad:
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['DataVencimento'] >= pd.to_datetime(data_inicial_inad)]
+        if data_final_inad:
+            df_inad_filtrado = df_inad_filtrado[df_inad_filtrado['DataVencimento'] <= pd.to_datetime(data_final_inad)]
+        
+        st.markdown("---")
+        
+        # ========== CARDS DE RESUMO ==========
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_inadimplencia = df_inad_filtrado['ValorLiquido'].sum()
+            st.metric("💰 Total em Aberto", f"R$ {total_inadimplencia:,.2f}")
+        
+        with col2:
+            qtd_titulos = len(df_inad_filtrado)
+            st.metric("📄 Quantidade de Títulos", f"{qtd_titulos:,}")
+        
+        with col3:
+            clientes_inadimplentes = df_inad_filtrado['Cliente'].nunique()
+            st.metric("👥 Clientes Inadimplentes", f"{clientes_inadimplentes:,}")
+        
+        with col4:
+            atraso_medio = df_inad_filtrado['DiasAtraso'].mean()
+            st.metric("📅 Atraso Médio", f"{atraso_medio:.0f} dias")
+        
+        st.markdown("---")
+        
+        # ========== GRÁFICOS ==========
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            st.subheader("📊 Inadimplência por Faixa de Atraso")
+            
+            # Ordenar faixas corretamente
+            ordem_faixas = ['A Vencer', '1-30 dias', '31-60 dias', '61-90 dias', 'Acima de 90 dias']
+            inad_por_faixa = df_inad_filtrado.groupby('FaixaAtraso')['ValorLiquido'].sum().reset_index()
+            inad_por_faixa['FaixaAtraso'] = pd.Categorical(inad_por_faixa['FaixaAtraso'], categories=ordem_faixas, ordered=True)
+            inad_por_faixa = inad_por_faixa.sort_values('FaixaAtraso')
+            
+            fig_faixa = px.bar(
+                inad_por_faixa,
+                x='FaixaAtraso',
+                y='ValorLiquido',
+                labels={'FaixaAtraso': 'Faixa de Atraso', 'ValorLiquido': 'Valor (R$)'},
+                template='plotly_white',
+                color='ValorLiquido',
+                color_continuous_scale='Reds'
+            )
+            st.plotly_chart(fig_faixa, use_container_width=True)
+        
+        with col6:
+            st.subheader("🏦 Inadimplência por Banco")
+            inad_por_banco = df_inad_filtrado.groupby('Banco')['ValorLiquido'].sum().reset_index()
+            inad_por_banco = inad_por_banco.sort_values('ValorLiquido', ascending=False).head(10)
+            
+            fig_banco = px.bar(
+                inad_por_banco,
+                x='ValorLiquido',
+                y='Banco',
+                orientation='h',
+                labels={'Banco': 'Banco', 'ValorLiquido': 'Valor (R$)'},
+                template='plotly_white',
+                color='ValorLiquido',
+                color_continuous_scale='Blues'
+            )
+            st.plotly_chart(fig_banco, use_container_width=True)
+        
+        st.markdown("---")
+        
+        col7, col8 = st.columns(2)
+        
+        with col7:
+            st.subheader("👤 Top 10 Vendedores - Inadimplência")
+            inad_por_vendedor = df_inad_filtrado.groupby('Vendedor').agg({
+                'ValorLiquido': 'sum',
+                'NumeroDoc': 'count'
+            }).reset_index()
+            inad_por_vendedor.columns = ['Vendedor', 'Valor', 'QtdTitulos']
+            inad_por_vendedor = inad_por_vendedor.sort_values('Valor', ascending=False).head(10)
+            
+            fig_vend_inad = px.bar(
+                inad_por_vendedor,
+                x='Vendedor',
+                y='Valor',
+                labels={'Vendedor': 'Vendedor', 'Valor': 'Valor (R$)'},
+                template='plotly_white',
+                color='Valor',
+                color_continuous_scale='Oranges'
+            )
+            st.plotly_chart(fig_vend_inad, use_container_width=True)
+        
+        with col8:
+            st.subheader("🗺️ Top 10 Estados - Inadimplência")
+            inad_por_estado = df_inad_filtrado.groupby('Estado')['ValorLiquido'].sum().reset_index()
+            inad_por_estado = inad_por_estado.sort_values('ValorLiquido', ascending=False).head(10)
+            
+            fig_est_inad = px.bar(
+                inad_por_estado,
+                x='Estado',
+                y='ValorLiquido',
+                labels={'Estado': 'Estado', 'ValorLiquido': 'Valor (R$)'},
+                template='plotly_white',
+                color='ValorLiquido',
+                color_continuous_scale='Purples'
+            )
+            st.plotly_chart(fig_est_inad, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========== TABELA DETALHADA ==========
+        st.subheader("📋 Detalhamento dos Títulos")
+        
+        # Preparar dados para exibição
+        df_detalhado = df_inad_filtrado[[
+            'Vendedor', 'Cliente', 'NumeroDoc', 'DataVencimento', 
+            'ValorLiquido', 'DiasAtraso', 'FaixaAtraso', 'Banco', 'Estado'
+        ]].copy()
+        
+        # Formatar data
+        df_detalhado['DataVencimento'] = df_detalhado['DataVencimento'].dt.strftime('%d/%m/%Y')
+        
+        # Formatar valores para exibição
+        df_detalhado_display = df_detalhado.copy()
+        df_detalhado_display['ValorLiquido'] = df_detalhado_display['ValorLiquido'].apply(
+            lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+        )
+        
+        # Renomear colunas
+        df_detalhado_display = df_detalhado_display.rename(columns={
+            'Vendedor': 'Vendedor',
+            'Cliente': 'Cliente',
+            'NumeroDoc': 'Nº Documento',
+            'DataVencimento': 'Vencimento',
+            'ValorLiquido': 'Valor em Aberto',
+            'DiasAtraso': 'Dias Atraso',
+            'FaixaAtraso': 'Faixa',
+            'Banco': 'Banco',
+            'Estado': 'UF'
+        })
+        
+        # Ordenar por dias de atraso (maior para menor)
+        df_detalhado_display = df_detalhado_display.sort_values('Dias Atraso', ascending=False)
+        
+        st.dataframe(df_detalhado_display, use_container_width=True, height=400)
+        
+        # Botão de download
+        st.download_button(
+            "📥 Exportar Relatório Completo",
+            to_excel(df_detalhado),
+            "relatorio_inadimplencia.xlsx",
+            "application/vnd.ms-excel"
+        )
+        
+    else:
+        st.warning("⚠️ Planilha de inadimplência não encontrada ou vazia")
+        st.info("💡 Certifique-se de que o arquivo 'XLS_Grid_LANCAMENTO A RECEBER.xlsx' está na pasta 'dados' do GitHub")
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
@@ -491,19 +856,14 @@ elif menu == "Clientes sem Compra":
     
     clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-    
-    # Calcular valor histórico e última data de compra
-    valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ').agg({
-        'TotalProduto': 'sum',
-        'DataEmissao': 'max'
-    }).reset_index()
-    valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico', 'UltimaCompra']
+    valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+    valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
     
     todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
     
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'UltimaCompra', 'ValorHistorico']]
+    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico']]
     
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
@@ -541,7 +901,9 @@ elif menu == "Clientes sem Compra":
         )
         st.plotly_chart(fig_churn, use_container_width=True)
     
-    st.dataframe(clientes_sem_compra, use_container_width=True, height=400)
+    # Formatar para exibição
+    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
+    st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
     
     st.download_button(
         "📥 Exportar Clientes sem Compra",
@@ -554,17 +916,42 @@ elif menu == "Clientes sem Compra":
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas por Cliente")
     
-    clientes_disponiveis = df[['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
-    clientes_disponiveis['Display'] = clientes_disponiveis['RazaoSocial'] + " - " + clientes_disponiveis['CPF_CNPJ'] + " (" + clientes_disponiveis['Cidade'] + "/" + clientes_disponiveis['Estado'] + ")"
+    # Buscar cliente por CPF/CNPJ ou Nome
+    col_busca1, col_busca2 = st.columns(2)
     
-    cliente_selecionado = st.selectbox(
-        "🔍 Selecione o Cliente",
-        options=[''] + clientes_disponiveis['Display'].tolist(),
-        format_func=lambda x: "Selecione um cliente..." if x == '' else x
-    )
+    with col_busca1:
+        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True)
     
-    if cliente_selecionado and cliente_selecionado != '':
-        cpf_cnpj = cliente_selecionado.split(' - ')[1].split(' (')[0]
+    with col_busca2:
+        if busca_tipo == "Nome":
+            busca_texto = st.text_input("Digite o nome do cliente", placeholder="Ex: Nome da Empresa")
+        else:
+            busca_texto = st.text_input("Digite o CPF/CNPJ", placeholder="Ex: 12345678901234")
+    
+    cliente_selecionado = None
+    cpf_cnpj = None
+    
+    if busca_texto and len(busca_texto) >= 3:
+        if busca_tipo == "Nome":
+            clientes_filtrados = df[df['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+        else:
+            clientes_filtrados = df[df['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+        
+        if len(clientes_filtrados) > 0:
+            clientes_filtrados['Display'] = clientes_filtrados['RazaoSocial'] + " - " + clientes_filtrados['CPF_CNPJ'] + " (" + clientes_filtrados['Cidade'] + "/" + clientes_filtrados['Estado'] + ")"
+            
+            cliente_selecionado = st.selectbox(
+                f"📋 Clientes encontrados ({len(clientes_filtrados)}):",
+                options=clientes_filtrados['Display'].tolist(),
+                key="cliente_hist"
+            )
+            
+            if cliente_selecionado:
+                cpf_cnpj = cliente_selecionado.split(' - ')[1].split(' (')[0]
+        else:
+            st.warning("❌ Nenhum cliente encontrado com esse critério")
+    
+    if cpf_cnpj:
         historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
         
         if len(historico) > 0:
@@ -616,6 +1003,11 @@ elif menu == "Histórico":
             
             historico_display = historico[['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']].copy()
             historico_display['DataEmissao'] = historico_display['DataEmissao'].dt.strftime('%d/%m/%Y')
+            
+            # Formatar valores monetários
+            historico_display['PrecoUnit'] = historico_display['PrecoUnit'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+            historico_display['TotalProduto'] = historico_display['TotalProduto'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+            
             historico_display = historico_display.rename(columns={
                 'DataEmissao': 'Data',
                 'TipoMov': 'Tipo',
@@ -638,7 +1030,7 @@ elif menu == "Histórico":
         else:
             st.warning("Nenhum registro encontrado para este cliente")
     else:
-        st.info("👆 Selecione um cliente para visualizar o histórico completo")
+        st.info("👆 Digite pelo menos 3 caracteres para buscar um cliente")
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
@@ -670,7 +1062,9 @@ elif menu == "Rankings":
         )
         st.plotly_chart(fig_rank_vend, use_container_width=True)
         
-        st.dataframe(ranking_vendedores, use_container_width=True)
+        # Formatar para exibição
+        ranking_vendedores_display = formatar_dataframe_moeda(ranking_vendedores, ['Valor Total'])
+        st.dataframe(ranking_vendedores_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Ranking Vendedores",
@@ -705,7 +1099,9 @@ elif menu == "Rankings":
         )
         st.plotly_chart(fig_rank_cli, use_container_width=True)
         
-        st.dataframe(ranking_clientes, use_container_width=True)
+        # Formatar para exibição
+        ranking_clientes_display = formatar_dataframe_moeda(ranking_clientes, ['Valor Total'])
+        st.dataframe(ranking_clientes_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Ranking Clientes",
