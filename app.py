@@ -15,6 +15,33 @@ st.set_page_config(
     page_icon="📊"
 )
 
+# ====================== ÍCONE PERSONALIZADO PARA IPHONE ======================
+# Adiciona meta tags para ícone do app no iPhone/iPad
+st.markdown("""
+    <head>
+        <!-- Ícone para iPhone (180x180px) -->
+        <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
+        
+        <!-- Ícone para iPhone Retina (180x180px) -->
+        <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
+        
+        <!-- Ícone para iPad (152x152px) -->
+        <link rel="apple-touch-icon" sizes="152x152" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
+        
+        <!-- Ícone para iPad Retina (167x167px) -->
+        <link rel="apple-touch-icon" sizes="167x167" href="https://raw.githubusercontent.com/fabiosilvavendas-byte/CRM_Medtextil2.0/main/logo.png">
+        
+        <!-- Nome do app quando adicionado à tela inicial -->
+        <meta name="apple-mobile-web-app-title" content="BI Medtextil">
+        
+        <!-- Faz o app abrir em tela cheia (sem barra do navegador) -->
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        
+        <!-- Cor da barra de status no iPhone -->
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    </head>
+""", unsafe_allow_html=True)
+
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
@@ -77,20 +104,25 @@ def check_password():
     SENHA_CORRETA = "admin123"  # ⬅️ MUDE AQUI PARA SUA SENHA
     
     def password_entered():
-        if st.session_state["password"] == SENHA_CORRETA:
+        if st.session_state.get("password_input", "") == SENHA_CORRETA:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
+            st.session_state["show_error"] = True
 
     if "password_correct" not in st.session_state:
         st.markdown("### 🔐 Login - Dashboard BI Medtextil")
-        st.text_input("Senha", type="password", on_change=password_entered, key="password")
+        st.text_input("Senha", type="password", key="password_input")
+        if st.button("🔓 Entrar", use_container_width=True):
+            password_entered()
         return False
     elif not st.session_state["password_correct"]:
         st.markdown("### 🔐 Login - Dashboard BI Medtextil")
-        st.text_input("Senha", type="password", on_change=password_entered, key="password")
-        st.error("😕 Senha incorreta")
+        st.text_input("Senha", type="password", key="password_input")
+        if st.button("🔓 Entrar", use_container_width=True):
+            password_entered()
+        if st.session_state.get("show_error", False):
+            st.error("😕 Senha incorreta")
         return False
     else:
         return True
@@ -119,6 +151,18 @@ def to_excel(df):
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Dados')
     return output.getvalue()
+
+def formatar_moeda(valor):
+    """Formata valor para moeda brasileira"""
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def formatar_dataframe_moeda(df, colunas_moeda):
+    """Formata colunas de moeda em um dataframe para exibição"""
+    df_formatado = df.copy()
+    for col in colunas_moeda:
+        if col in df_formatado.columns:
+            df_formatado[col] = df_formatado[col].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+    return df_formatado
 
 # ====================== INÍCIO DO APP ======================
 if not check_password():
@@ -168,9 +212,19 @@ st.sidebar.header("🔍 Filtros Globais")
 
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    data_inicial = st.date_input("Data Inicial", value=None, key="data_ini")
+    data_inicial = st.date_input(
+        "Data Inicial", 
+        value=None, 
+        key="data_ini",
+        format="DD/MM/YYYY"
+    )
 with col2:
-    data_final = st.date_input("Data Final", value=None, key="data_fim")
+    data_final = st.date_input(
+        "Data Final", 
+        value=None, 
+        key="data_fim",
+        format="DD/MM/YYYY"
+    )
 
 vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
 vendedor_filtro = st.sidebar.selectbox("Vendedor", vendedores, key="vend_global")
@@ -425,7 +479,9 @@ elif menu == "Positivação":
         )
         st.plotly_chart(fig_posit_vend, use_container_width=True)
         
-        st.dataframe(relatorio_positivacao, use_container_width=True)
+        # Formatar para exibição
+        relatorio_positivacao_display = formatar_dataframe_moeda(relatorio_positivacao, ['ValorTotal'])
+        st.dataframe(relatorio_positivacao_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Positivação por Vendedor",
@@ -457,7 +513,9 @@ elif menu == "Positivação":
             with col2:
                 st.metric("Valor Total", f"R$ {clientes_vendedor['Valor Total'].sum():,.2f}")
             
-            st.dataframe(clientes_vendedor, use_container_width=True)
+            # Formatar para exibição
+            clientes_vendedor_display = formatar_dataframe_moeda(clientes_vendedor, ['Valor Total'])
+            st.dataframe(clientes_vendedor_display, use_container_width=True)
             
             st.download_button(
                 f"📥 Exportar Clientes - {vendedor_selecionado}",
@@ -518,7 +576,9 @@ elif menu == "Positivação":
         )
         st.plotly_chart(fig_posit_estado, use_container_width=True)
         
-        st.dataframe(relatorio_estado, use_container_width=True)
+        # Formatar para exibição
+        relatorio_estado_display = formatar_dataframe_moeda(relatorio_estado, ['ValorTotal'])
+        st.dataframe(relatorio_estado_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Positivação por Estado",
@@ -598,7 +658,9 @@ elif menu == "Clientes sem Compra":
         )
         st.plotly_chart(fig_churn, use_container_width=True)
     
-    st.dataframe(clientes_sem_compra, use_container_width=True, height=400)
+    # Formatar para exibição
+    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
+    st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
     
     st.download_button(
         "📥 Exportar Clientes sem Compra",
@@ -698,6 +760,11 @@ elif menu == "Histórico":
             
             historico_display = historico[['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']].copy()
             historico_display['DataEmissao'] = historico_display['DataEmissao'].dt.strftime('%d/%m/%Y')
+            
+            # Formatar valores monetários
+            historico_display['PrecoUnit'] = historico_display['PrecoUnit'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+            historico_display['TotalProduto'] = historico_display['TotalProduto'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+            
             historico_display = historico_display.rename(columns={
                 'DataEmissao': 'Data',
                 'TipoMov': 'Tipo',
@@ -752,7 +819,9 @@ elif menu == "Rankings":
         )
         st.plotly_chart(fig_rank_vend, use_container_width=True)
         
-        st.dataframe(ranking_vendedores, use_container_width=True)
+        # Formatar para exibição
+        ranking_vendedores_display = formatar_dataframe_moeda(ranking_vendedores, ['Valor Total'])
+        st.dataframe(ranking_vendedores_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Ranking Vendedores",
@@ -787,7 +856,9 @@ elif menu == "Rankings":
         )
         st.plotly_chart(fig_rank_cli, use_container_width=True)
         
-        st.dataframe(ranking_clientes, use_container_width=True)
+        # Formatar para exibição
+        ranking_clientes_display = formatar_dataframe_moeda(ranking_clientes, ['Valor Total'])
+        st.dataframe(ranking_clientes_display, use_container_width=True)
         
         st.download_button(
             "📥 Exportar Ranking Clientes",
