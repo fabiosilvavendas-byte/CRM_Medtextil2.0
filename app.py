@@ -853,19 +853,14 @@ elif menu == "Clientes sem Compra":
     
     clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+    valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+    valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
     
-    # Calcular valor histórico e data da última compra
-    vendas_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ').agg({
-        'TotalProduto': 'sum',
-        'DataEmissao': 'max'
-    }).reset_index()
-    vendas_historico.columns = ['CPF_CNPJ', 'ValorHistorico', 'UltimaCompra']
-    
-    todos_clientes = pd.merge(todos_clientes, vendas_historico, on='CPF_CNPJ', how='left')
+    todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
     
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'UltimaCompra']]
+    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico']]
     
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
@@ -882,9 +877,7 @@ elif menu == "Clientes sem Compra":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
     elif ordem == "Valor Histórico (Menor)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=True)
-    elif ordem == "Última Compra (Mais Recente)":
-        clientes_sem_compra = clientes_sem_compra.sort_values('UltimaCompra', ascending=False)
-    else:
+    elif ordem == "Nome (A-Z)":
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
     
     col1, col2, col3 = st.columns(3)
@@ -911,16 +904,8 @@ elif menu == "Clientes sem Compra":
         )
         st.plotly_chart(fig_churn, use_container_width=True)
     
-    # Preparar dados para exibição
-    clientes_sem_compra_display = clientes_sem_compra.copy()
-    
-    # Formatar data da última compra
-    clientes_sem_compra_display['UltimaCompra'] = clientes_sem_compra_display['UltimaCompra'].apply(
-        lambda x: x.strftime('%d/%m/%Y') if pd.notnull(x) else 'Sem registro'
-    )
-    
-    # Formatar valores monetários
-    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra_display, ['ValorHistorico'])
+    # Formatar para exibição
+    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
     
     # Renomear colunas para exibição
     clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
@@ -929,8 +914,7 @@ elif menu == "Clientes sem Compra":
         'Vendedor': 'Vendedor',
         'Cidade': 'Cidade',
         'Estado': 'Estado',
-        'ValorHistorico': 'Valor Histórico',
-        'UltimaCompra': 'Última Compra'
+        'ValorHistorico': 'Valor Histórico'
     })
     
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
@@ -944,123 +928,217 @@ elif menu == "Clientes sem Compra":
 
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
-    st.header("📜 Histórico de Vendas por Cliente")
+    st.header("📜 Histórico de Vendas")
     
-    # Buscar cliente por CPF/CNPJ ou Nome
-    col_busca1, col_busca2 = st.columns(2)
+    tab1, tab2 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor"])
     
-    with col_busca1:
-        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True)
-    
-    with col_busca2:
-        if busca_tipo == "Nome":
-            busca_texto = st.text_input("Digite o nome do cliente", placeholder="Ex: Nome da Empresa")
-        else:
-            busca_texto = st.text_input("Digite o CPF/CNPJ", placeholder="Ex: 12345678901234")
-    
-    cliente_selecionado = None
-    cpf_cnpj = None
-    
-    if busca_texto and len(busca_texto) >= 3:
-        if busca_tipo == "Nome":
-            clientes_filtrados = df[df['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
-        else:
-            clientes_filtrados = df[df['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+    # ========== ABA: POR CLIENTE ==========
+    with tab1:
+        st.subheader("Histórico de Vendas por Cliente")
         
-        if len(clientes_filtrados) > 0:
-            clientes_filtrados['Display'] = clientes_filtrados['RazaoSocial'] + " - " + clientes_filtrados['CPF_CNPJ'] + " (" + clientes_filtrados['Cidade'] + "/" + clientes_filtrados['Estado'] + ")"
+        # Buscar cliente por CPF/CNPJ ou Nome
+        col_busca1, col_busca2 = st.columns(2)
+        
+        with col_busca1:
+            busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True, key="busca_tipo_cliente")
+        
+        with col_busca2:
+            if busca_tipo == "Nome":
+                busca_texto = st.text_input("Digite o nome do cliente", placeholder="Ex: Nome da Empresa", key="busca_nome_cliente")
+            else:
+                busca_texto = st.text_input("Digite o CPF/CNPJ", placeholder="Ex: 12345678901234", key="busca_cpf_cliente")
+        
+        cliente_selecionado = None
+        cpf_cnpj = None
+        
+        if busca_texto and len(busca_texto) >= 3:
+            if busca_tipo == "Nome":
+                clientes_filtrados = df[df['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+            else:
+                clientes_filtrados = df[df['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
             
-            cliente_selecionado = st.selectbox(
-                f"📋 Clientes encontrados ({len(clientes_filtrados)}):",
-                options=clientes_filtrados['Display'].tolist(),
-                key="cliente_hist"
+            if len(clientes_filtrados) > 0:
+                clientes_filtrados['Display'] = clientes_filtrados['RazaoSocial'] + " - " + clientes_filtrados['CPF_CNPJ'] + " (" + clientes_filtrados['Cidade'] + "/" + clientes_filtrados['Estado'] + ")"
+                
+                cliente_selecionado = st.selectbox(
+                    f"📋 Clientes encontrados ({len(clientes_filtrados)}):",
+                    options=clientes_filtrados['Display'].tolist(),
+                    key="cliente_hist"
+                )
+                
+                if cliente_selecionado:
+                    cpf_cnpj = cliente_selecionado.split(' - ')[1].split(' (')[0]
+            else:
+                st.warning("❌ Nenhum cliente encontrado com esse critério")
+        
+        if cpf_cnpj:
+            historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
+            
+            if len(historico) > 0:
+                cliente_info = historico.iloc[0]
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Cliente", cliente_info['RazaoSocial'])
+                with col2:
+                    st.metric("CPF/CNPJ", cliente_info['CPF_CNPJ'])
+                with col3:
+                    st.metric("Cidade/Estado", f"{cliente_info['Cidade']}/{cliente_info['Estado']}")
+                with col4:
+                    st.metric("Total de Registros", len(historico))
+                
+                st.markdown("---")
+                
+                vendas_cliente = historico[historico['TipoMov'] == 'NF Venda']
+                devolucoes_cliente = historico[historico['TipoMov'] == 'NF Dev.Venda']
+                
+                col5, col6, col7, col8 = st.columns(4)
+                with col5:
+                    st.metric("Total Vendas", f"R$ {vendas_cliente['TotalProduto'].sum():,.2f}")
+                with col6:
+                    st.metric("Total Devoluções", f"R$ {devolucoes_cliente['TotalProduto'].sum():,.2f}")
+                with col7:
+                    st.metric("Qtd Notas Vendas", len(vendas_cliente['Numero_NF'].unique()))
+                with col8:
+                    st.metric("Qtd Notas Devoluções", len(devolucoes_cliente['Numero_NF'].unique()))
+                
+                vendas_tempo_cliente = vendas_cliente.groupby('MesAno')['TotalProduto'].sum().reset_index()
+                vendas_tempo_cliente = vendas_tempo_cliente.sort_values('MesAno')
+                
+                if len(vendas_tempo_cliente) > 0:
+                    fig_hist = px.line(
+                        vendas_tempo_cliente,
+                        x='MesAno',
+                        y='TotalProduto',
+                        labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'},
+                        template='plotly_white',
+                        title='Evolução de Compras'
+                    )
+                    fig_hist.update_traces(line_color='#2ECC71', line_width=3)
+                    st.plotly_chart(fig_hist, use_container_width=True)
+                
+                st.markdown("---")
+                
+                st.subheader("📋 Detalhamento de Produtos")
+                
+                historico_display = historico[['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']].copy()
+                historico_display['DataEmissao'] = historico_display['DataEmissao'].dt.strftime('%d/%m/%Y')
+                
+                # Formatar valores monetários
+                historico_display['PrecoUnit'] = historico_display['PrecoUnit'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+                historico_display['TotalProduto'] = historico_display['TotalProduto'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+                
+                historico_display = historico_display.rename(columns={
+                    'DataEmissao': 'Data',
+                    'TipoMov': 'Tipo',
+                    'Numero_NF': 'Nota Fiscal',
+                    'CodigoProduto': 'Código',
+                    'NomeProduto': 'Produto',
+                    'Quantidade': 'Qtd',
+                    'PrecoUnit': 'Preço Unit.',
+                    'TotalProduto': 'Total'
+                })
+                
+                st.dataframe(historico_display, use_container_width=True, height=400)
+                
+                st.download_button(
+                    "📥 Exportar Histórico",
+                    to_excel(historico),
+                    f"historico_{cpf_cnpj}.xlsx",
+                    "application/vnd.ms-excel"
+                )
+            else:
+                st.warning("Nenhum registro encontrado para este cliente")
+        else:
+            st.info("👆 Digite pelo menos 3 caracteres para buscar um cliente")
+    
+    # ========== ABA: POR VENDEDOR ==========
+    with tab2:
+        st.subheader("Histórico de Vendas por Vendedor")
+        
+        # Filtros
+        col_f1, col_f2, col_f3 = st.columns(3)
+        
+        with col_f1:
+            vendedores_hist = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
+            vendedor_hist_filtro = st.selectbox("Vendedor", vendedores_hist, key="vend_hist")
+        
+        with col_f2:
+            data_inicial_hist = st.date_input(
+                "Data Inicial", 
+                value=None, 
+                key="data_ini_hist",
+                format="DD/MM/YYYY"
             )
-            
-            if cliente_selecionado:
-                cpf_cnpj = cliente_selecionado.split(' - ')[1].split(' (')[0]
-        else:
-            st.warning("❌ Nenhum cliente encontrado com esse critério")
-    
-    if cpf_cnpj:
-        historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
         
-        if len(historico) > 0:
-            cliente_info = historico.iloc[0]
+        with col_f3:
+            data_final_hist = st.date_input(
+                "Data Final", 
+                value=None, 
+                key="data_fim_hist",
+                format="DD/MM/YYYY"
+            )
+        
+        # Aplicar filtros
+        df_hist_vendedor = df[df['TipoMov'] == 'NF Venda'].copy()
+        
+        if vendedor_hist_filtro != 'Todos':
+            df_hist_vendedor = df_hist_vendedor[df_hist_vendedor['Vendedor'] == vendedor_hist_filtro]
+        if data_inicial_hist:
+            df_hist_vendedor = df_hist_vendedor[df_hist_vendedor['DataEmissao'] >= pd.to_datetime(data_inicial_hist)]
+        if data_final_hist:
+            df_hist_vendedor = df_hist_vendedor[df_hist_vendedor['DataEmissao'] <= pd.to_datetime(data_final_hist)]
+        
+        if len(df_hist_vendedor) > 0:
+            # Obter notas únicas e agrupar por NF para somar o valor total
+            notas_vendedor = obter_notas_unicas(df_hist_vendedor)
             
+            # Preparar dados para exibição
+            historico_vendedor = notas_vendedor[['DataEmissao', 'RazaoSocial', 'Numero_NF', 'TotalProduto', 'Vendedor']].copy()
+            historico_vendedor = historico_vendedor.sort_values('DataEmissao', ascending=False)
+            
+            # Métricas resumidas
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Cliente", cliente_info['RazaoSocial'])
+                st.metric("Total de Vendas", f"R$ {historico_vendedor['TotalProduto'].sum():,.2f}")
             with col2:
-                st.metric("CPF/CNPJ", cliente_info['CPF_CNPJ'])
+                st.metric("Quantidade de Notas", len(historico_vendedor))
             with col3:
-                st.metric("Cidade/Estado", f"{cliente_info['Cidade']}/{cliente_info['Estado']}")
+                st.metric("Clientes Atendidos", historico_vendedor['RazaoSocial'].nunique())
             with col4:
-                st.metric("Total de Registros", len(historico))
+                ticket_medio_vend = historico_vendedor['TotalProduto'].mean() if len(historico_vendedor) > 0 else 0
+                st.metric("Ticket Médio", f"R$ {ticket_medio_vend:,.2f}")
             
             st.markdown("---")
             
-            vendas_cliente = historico[historico['TipoMov'] == 'NF Venda']
-            devolucoes_cliente = historico[historico['TipoMov'] == 'NF Dev.Venda']
+            # Formatar para exibição
+            historico_vendedor_display = historico_vendedor.copy()
+            historico_vendedor_display['DataEmissao'] = historico_vendedor_display['DataEmissao'].dt.strftime('%d/%m/%Y')
+            historico_vendedor_display['TotalProduto'] = historico_vendedor_display['TotalProduto'].apply(
+                lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+            )
             
-            col5, col6, col7, col8 = st.columns(4)
-            with col5:
-                st.metric("Total Vendas", f"R$ {vendas_cliente['TotalProduto'].sum():,.2f}")
-            with col6:
-                st.metric("Total Devoluções", f"R$ {devolucoes_cliente['TotalProduto'].sum():,.2f}")
-            with col7:
-                st.metric("Qtd Notas Vendas", len(vendas_cliente['Numero_NF'].unique()))
-            with col8:
-                st.metric("Qtd Notas Devoluções", len(devolucoes_cliente['Numero_NF'].unique()))
-            
-            vendas_tempo_cliente = vendas_cliente.groupby('MesAno')['TotalProduto'].sum().reset_index()
-            vendas_tempo_cliente = vendas_tempo_cliente.sort_values('MesAno')
-            
-            if len(vendas_tempo_cliente) > 0:
-                fig_hist = px.line(
-                    vendas_tempo_cliente,
-                    x='MesAno',
-                    y='TotalProduto',
-                    labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'},
-                    template='plotly_white',
-                    title='Evolução de Compras'
-                )
-                fig_hist.update_traces(line_color='#2ECC71', line_width=3)
-                st.plotly_chart(fig_hist, use_container_width=True)
-            
-            st.markdown("---")
-            
-            st.subheader("📋 Detalhamento de Produtos")
-            
-            historico_display = historico[['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']].copy()
-            historico_display['DataEmissao'] = historico_display['DataEmissao'].dt.strftime('%d/%m/%Y')
-            
-            # Formatar valores monetários
-            historico_display['PrecoUnit'] = historico_display['PrecoUnit'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
-            historico_display['TotalProduto'] = historico_display['TotalProduto'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
-            
-            historico_display = historico_display.rename(columns={
+            # Renomear colunas
+            historico_vendedor_display = historico_vendedor_display.rename(columns={
                 'DataEmissao': 'Data',
-                'TipoMov': 'Tipo',
+                'RazaoSocial': 'Cliente',
                 'Numero_NF': 'Nota Fiscal',
-                'CodigoProduto': 'Código',
-                'NomeProduto': 'Produto',
-                'Quantidade': 'Qtd',
-                'PrecoUnit': 'Preço Unit.',
-                'TotalProduto': 'Total'
+                'TotalProduto': 'Valor Total',
+                'Vendedor': 'Vendedor'
             })
             
-            st.dataframe(historico_display, use_container_width=True, height=400)
+            st.dataframe(historico_vendedor_display, use_container_width=True, height=400)
             
+            # Botão de download
             st.download_button(
-                "📥 Exportar Histórico",
-                to_excel(historico),
-                f"historico_{cpf_cnpj}.xlsx",
-                "application/vnd.ms-excel"
+                "📥 Exportar Histórico de Vendas",
+                to_excel(historico_vendedor),
+                f"historico_vendedor_{vendedor_hist_filtro if vendedor_hist_filtro != 'Todos' else 'todos'}.xlsx",
+                "application/vnd.ms-excel",
+                key="download_hist_vend"
             )
         else:
-            st.warning("Nenhum registro encontrado para este cliente")
-    else:
-        st.info("👆 Digite pelo menos 3 caracteres para buscar um cliente")
+            st.info("Nenhuma venda encontrada com os filtros selecionados")
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
