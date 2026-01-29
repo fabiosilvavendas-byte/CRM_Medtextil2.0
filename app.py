@@ -945,26 +945,6 @@ elif menu == "Clientes sem Compra":
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas por Cliente")
-        st.markdown("### 🔍 Filtros adicionais")
-
-    col_f1, col_f2 = st.columns(2)
-
-    with col_f1:
-        vendedor_hist_filtro = st.selectbox(
-            "Filtrar por Vendedor",
-            ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist()),
-            key="vend_hist"
-        )
-
-    with col_f2:
-        col_d1, col_d2 = st.columns(2)
-
-        with col_d1:
-            data_ini_hist = st.text_input("Data Inicial (dd/mm/aaaa)", key="data_ini_hist")
-
-        with col_d2:
-            data_fim_hist = st.text_input("Data Final (dd/mm/aaaa)", key="data_fim_hist")
-
     
     # Buscar cliente por CPF/CNPJ ou Nome
     col_busca1, col_busca2 = st.columns(2)
@@ -1001,27 +981,21 @@ elif menu == "Histórico":
         else:
             st.warning("❌ Nenhum cliente encontrado com esse critério")
     
-        if cpf_cnpj:
-        historico = df[df['CPF_CNPJ'] == cpf_cnpj]
-
-        # Filtro por vendedor
-        if vendedor_hist_filtro != 'Todos':
-            historico = historico[historico['Vendedor'] == vendedor_hist_filtro]
-
-        # Filtro por datas (dd/mm/aaaa)
-        try:
-            if data_ini_hist:
-                data_ini = pd.to_datetime(data_ini_hist, format="%d/%m/%Y")
-                historico = historico[historico['DataEmissao'] >= data_ini]
-
-            if data_fim_hist:
-                data_fim = pd.to_datetime(data_fim_hist, format="%d/%m/%Y")
-                historico = historico[historico['DataEmissao'] <= data_fim]
-        except:
-            st.error("❌ Datas inválidas. Use o formato dd/mm/aaaa.")
-
-        historico = historico.sort_values('DataEmissao', ascending=False)
-
+    if cpf_cnpj:
+        historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
+        
+        if len(historico) > 0:
+            cliente_info = historico.iloc[0]
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Cliente", cliente_info['RazaoSocial'])
+            with col2:
+                st.metric("CPF/CNPJ", cliente_info['CPF_CNPJ'])
+            with col3:
+                st.metric("Cidade/Estado", f"{cliente_info['Cidade']}/{cliente_info['Estado']}")
+            with col4:
+                st.metric("Total de Registros", len(historico))
             
             st.markdown("---")
             
@@ -1168,4 +1142,3 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
-
