@@ -15,6 +15,30 @@ st.set_page_config(
     page_icon="📊"
 )
 
+# ====================== ÍCONE PERSONALIZADO PARA PWA/IPHONE ======================
+# Adicionar meta tags para ícone personalizado quando adicionar à tela inicial
+st.markdown("""
+    <head>
+        <!-- Ícone para iPhone/iPad (Apple Touch Icon) -->
+        <link rel="apple-touch-icon" sizes="180x180" href="https://imgur.com/a/za03v6v">
+        <link rel="apple-touch-icon" sizes="152x152" href="https://imgur.com/a/za03v6v">
+        <link rel="apple-touch-icon" sizes="120x120" href="https://imgur.com/a/za03v6v">
+        
+        <!-- Ícone padrão (favicon) -->
+        <link rel="icon" type="image/png" sizes="192x192" href="https://imgur.com/a/za03v6v">
+        <link rel="icon" type="image/png" sizes="32x32" href="https://imgur.com/a/za03v6v">
+        <link rel="icon" type="image/png" sizes="16x16" href="https://imgur.com/a/za03v6v">
+        
+        <!-- Nome do app na tela inicial -->
+        <meta name="apple-mobile-web-app-title" content="Medtextil BI">
+        <meta name="application-name" content="Medtextil BI">
+        
+        <!-- Modo standalone (abre sem barra do Safari) -->
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    </head>
+""", unsafe_allow_html=True)
+
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
