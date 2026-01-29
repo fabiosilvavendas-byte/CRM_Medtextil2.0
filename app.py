@@ -16,27 +16,26 @@ st.set_page_config(
 )
 
 # ====================== ÍCONE PERSONALIZADO PARA PWA/IPHONE ======================
-# Adicionar meta tags para ícone personalizado quando adicionar à tela inicial
-st.markdown("""
-    <head>
-        <!-- Ícone para iPhone/iPad (Apple Touch Icon) -->
-        <link rel="apple-touch-icon" sizes="180x180" href="https://imgur.com/a/za03v6v">
-        <link rel="apple-touch-icon" sizes="152x152" href="https://imgur.com/a/za03v6v">
-        <link rel="apple-touch-icon" sizes="120x120" href="https://imgur.com/a/za03v6v">
-        
-        <!-- Ícone padrão (favicon) -->
-        <link rel="icon" type="image/png" sizes="192x192" href="https://imgur.com/a/za03v6v">
-        <link rel="icon" type="image/png" sizes="32x32" href="https://imgur.com/a/za03v6v">
-        <link rel="icon" type="image/png" sizes="16x16" href="https://imgur.com/a/za03v6v">
-        
-        <!-- Nome do app na tela inicial -->
-        <meta name="apple-mobile-web-app-title" content="Medtextil BI">
-        <meta name="application-name" content="Medtextil BI">
-        
-        <!-- Modo standalone (abre sem barra do Safari) -->
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    </head>
+# IMPORTANTE: Substitua a URL abaixo pelo link DIRETO da sua imagem
+# Para pegar o link correto do Imgur:
+# 1. Abra a imagem
+# 2. Clique com botão direito na imagem
+# 3. "Copiar endereço da imagem"
+# 4. Deve ser algo como: https://i.imgur.com/XXXXX.png
+
+https://imgur.com/IrvV9fl = "https://i.imgur.com/XXXXX.png"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
+
+st.markdown(f"""
+    <link rel="apple-touch-icon" sizes="180x180" href="{https://imgur.com/IrvV9fl}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{https://imgur.com/IrvV9fl}">
+    <link rel="apple-touch-icon" sizes="120x120" href="{https://imgur.com/IrvV9fl}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{https://imgur.com/IrvV9fl}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{https://imgur.com/IrvV9fl}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{https://imgur.com/IrvV9fl}">
+    <meta name="apple-mobile-web-app-title" content="Medtextil BI">
+    <meta name="application-name" content="Medtextil BI">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 """, unsafe_allow_html=True)
 
 # ====================== CONFIGURAÇÕES GITHUB ======================
