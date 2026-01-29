@@ -945,26 +945,6 @@ elif menu == "Clientes sem Compra":
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas por Cliente")
-        st.markdown("### 🔍 Filtros adicionais")
-
-    col_f1, col_f2 = st.columns(2)
-
-    with col_f1:
-        vendedor_hist_filtro = st.selectbox(
-            "Filtrar por Vendedor",
-            ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist()),
-            key="vend_hist"
-        )
-
-    with col_f2:
-        col_d1, col_d2 = st.columns(2)
-
-        with col_d1:
-            data_ini_hist = st.text_input("Data Inicial (dd/mm/aaaa)", key="data_ini_hist")
-
-        with col_d2:
-            data_fim_hist = st.text_input("Data Final (dd/mm/aaaa)", key="data_fim_hist")
-
     
     # Buscar cliente por CPF/CNPJ ou Nome
     col_busca1, col_busca2 = st.columns(2)
@@ -1002,29 +982,7 @@ elif menu == "Histórico":
             st.warning("❌ Nenhum cliente encontrado com esse critério")
     
     if cpf_cnpj:
-        >elif menu == "Histórico":
->    st.header("📜 Histórico de Vendas por Cliente")
->
->    st.markdown("### 🔍 Filtros adicionais")
->
->    col_f1, col_f2 = st.columns(2)
->
->    with col_f1:
->        vendedor_hist_filtro = st.selectbox(
->            "Filtrar por Vendedor",
->            ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist()),
->            key="vend_hist"
->        )
->
->    with col_f2:
->        col_d1, col_d2 = st.columns(2)
->
->        with col_d1:
->            data_ini_hist = st.text_input("Data Inicial (dd/mm/aaaa)", key="data_ini_hist")
->
->        with col_d2:
->            data_fim_hist = st.text_input("Data Final (dd/mm/aaaa)", key="data_fim_hist")
-
+        historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
         
         if len(historico) > 0:
             cliente_info = historico.iloc[0]
