@@ -945,32 +945,49 @@ elif menu == "Clientes sem Compra":
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas por Cliente")
-    # --- ADICIONE ESTE BLOCO A PARTIR DA LINHA 495 ---
     
-    # Linha de Filtros para restringir a busca de clientes
+    # 1. Criamos os filtros de restrição
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         vendedor_hist = st.selectbox(
-            "Filtrar Lista por Vendedor",
+            "Filtrar por Vendedor",
             options=['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist()),
             key="filtro_vend_hist"
         )
     with col_f2:
-        # Filtro de data para a lista de clientes (opcional, mas útil)
-        data_hist = st.date_input("Filtrar Lista por Período", value=[], key="filtro_data_hist")
+        data_hist = st.date_input("Filtrar por Período", value=[], key="filtro_data_hist", format="DD/MM/YYYY")
 
-    # Aplicando o filtro na lista de clientes que aparecerão no selectbox
-    df_clientes_lista = df.copy()
+    # 2. ⭐ CRIAMOS A BASE DE BUSCA FILTRADA (Essencial para não dar NameError)
+    df_busca = df.copy()
     if vendedor_hist != 'Todos':
-        df_clientes_lista = df_clientes_lista[df_clientes_lista['Vendedor'] == vendedor_hist]
+        df_busca = df_busca[df_busca['Vendedor'] == vendedor_hist]
     if len(data_hist) == 2:
-        df_clientes_lista = df_clientes_lista[
-            (df_clientes_lista['DataEmissao'].dt.date >= data_hist[0]) & 
-            (df_clientes_lista['DataEmissao'].dt.date <= data_hist[1])
+        df_busca = df_busca[
+            (df_busca['DataEmissao'].dt.date >= data_hist[0]) & 
+            (df_busca['DataEmissao'].dt.date <= data_hist[1])
         ]
 
-    # Substitua a sua linha antiga de 'clientes_disponiveis' por esta:
-    clientes_disponiveis = df_clientes_lista[['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+    # 3. Campos de busca por texto (Nome ou CPF)
+    col_busca1, col_busca2 = st.columns(2)
+    with col_busca1:
+        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True)
+    with col_busca2:
+        if busca_tipo == "Nome":
+            busca_texto = st.text_input("Digite o nome do cliente", placeholder="Ex: Nome da Empresa")
+        else:
+            busca_texto = st.text_input("Digite o CPF/CNPJ", placeholder="Ex: 1234")
+    
+    cliente_selecionado = None
+    cpf_cnpj = None
+    
+    # 4. ⭐ A BUSCA AGORA USA 'df_busca' EM VEZ DE 'df'
+    if busca_texto and len(busca_texto) >= 3:
+        if busca_tipo == "Nome":
+            # Aqui mudamos para df_busca para respeitar o vendedor selecionado
+            clientes_filtrados = df_busca[df_busca['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+        else:
+            # Aqui também mudamos para df_busca
+            clientes_filtrados = df_busca[df_busca['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
 # --- FIM DO BLOCO ADICIONADO ---
     
     # Buscar cliente por CPF/CNPJ ou Nome
@@ -1169,4 +1186,5 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
