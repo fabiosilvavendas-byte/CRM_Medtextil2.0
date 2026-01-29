@@ -118,7 +118,10 @@ def check_password():
 @st.cache_data
 def processar_dados(df):
     """Aplica as regras de negócio nos dados"""
-    # Converter data
+    df['Valor_Real'] = df.apply(
+        lambda row: row['TotalProduto'] if row['TipoMov'] == 'NF Venda' else -row['TotalProduto'],
+        axis=1
+    )
     df['DataEmissao'] = pd.to_datetime(df['DataEmissao'], errors='coerce')
     df['Mes'] = df['DataEmissao'].dt.month
     df['Ano'] = df['DataEmissao'].dt.year
@@ -126,35 +129,8 @@ def processar_dados(df):
     return df
 
 def obter_notas_unicas(df):
-    """
-    ✅ NOVA LÓGICA CORRIGIDA:
-    - Agrupa por Numero_NF (nota fiscal)
-    - Soma TODOS os produtos de cada nota
-    - Mantém informações da nota (primeira linha)
-    """
-    # Agrupa por número da nota e soma os valores dos produtos
-    notas_agrupadas = df.groupby('Numero_NF').agg({
-        'TotalProduto': 'sum',           # ← SOMA todos os produtos da nota
-        'TipoMov': 'first',              # Mantém o tipo (NF Venda ou NF Dev.Venda)
-        'DataEmissao': 'first',
-        'Vendedor': 'first',
-        'CPF_CNPJ': 'first',
-        'RazaoSocial': 'first',
-        'Cidade': 'first',
-        'Estado': 'first',
-        'Mes': 'first',
-        'Ano': 'first',
-        'MesAno': 'first'
-    }).reset_index()
-    
-    # Agora aplica a lógica de devolução no TOTAL da nota
-    notas_agrupadas['Valor_Real'] = notas_agrupadas.apply(
-        lambda row: row['TotalProduto'] if row['TipoMov'] == 'NF Venda' 
-                    else -row['TotalProduto'],  # ← Negativiza devoluções
-        axis=1
-    )
-    
-    return notas_agrupadas
+    """Remove duplicatas de Numero_NF mantendo apenas primeira ocorrência"""
+    return df.drop_duplicates(subset=['Numero_NF'], keep='first')
 
 def to_excel(df):
     """Converte DataFrame para Excel"""
@@ -303,7 +279,6 @@ if mes_filtro != 'Todos':
 if ano_filtro != 'Todos':
     df_filtrado = df_filtrado[df_filtrado['Ano'] == ano_filtro]
 
-# ✅ APLICAR A NOVA LÓGICA: agrupa por NF e soma produtos
 notas_unicas = obter_notas_unicas(df_filtrado)
 
 st.sidebar.markdown("---")
@@ -318,12 +293,13 @@ if menu == "Dashboard":
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        # VENDAS BRUTAS = SOMA de todas as NF de Venda (já somados os produtos)
+        # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
         st.metric("💰 Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
     
     with col2:
-        # FATURAMENTO LÍQUIDO = Vendas - Devoluções (usando Valor_Real)
+        # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
+        # Valor_Real já negativiza as devoluções automaticamente
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
         st.metric("💵 Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
     
@@ -339,12 +315,12 @@ if menu == "Dashboard":
     col1b, col2b, col3b, col4b = st.columns(4)
     
     with col1b:
-        # DEVOLUÇÕES = SOMA de todas as NF de Devolução (já somados os produtos)
+        # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
         st.metric("↩️ Devoluções", f"R$ {total_devolucoes:,.2f}")
     
     with col2b:
-        ticket_medio = vendas_brutas / total_notas if total_notas > 0 else 0
+        ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
         st.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
     
     with col3b:
@@ -451,10 +427,7 @@ if menu == "Dashboard":
         st.subheader("⚠️ Clientes sem Compra (Top 10)")
         clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
         todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-        
-        # Calcular valor histórico usando a nova lógica
-        notas_historico = obter_notas_unicas(df[df['TipoMov'] == 'NF Venda'])
-        valor_historico = notas_historico.groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+        valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
         valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
         
         todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
@@ -508,9 +481,7 @@ elif menu == "Positivação":
         atendidos = vendas_periodo.groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
         atendidos.columns = ['Vendedor', 'QtdAtendidos']
         
-        # Usar a nova lógica para calcular valor total
-        notas_vendedor = obter_notas_unicas(vendas_periodo)
-        valor_vendedor = notas_vendedor.groupby('Vendedor')['TotalProduto'].sum().reset_index()
+        valor_vendedor = obter_notas_unicas(vendas_periodo).groupby('Vendedor')['Valor_Real'].sum().reset_index()
         valor_vendedor.columns = ['Vendedor', 'ValorTotal']
         
         relatorio_positivacao = pd.merge(base_vendedor, atendidos, on='Vendedor', how='left')
@@ -552,12 +523,10 @@ elif menu == "Positivação":
         )
         
         if vendedor_selecionado:
-            # Usar nova lógica para clientes do vendedor
-            vendas_vendedor_periodo = vendas_periodo[vendas_periodo['Vendedor'] == vendedor_selecionado]
-            notas_vendedor_det = obter_notas_unicas(vendas_vendedor_periodo)
+            notas_vendedor = obter_notas_unicas(vendas_periodo[vendas_periodo['Vendedor'] == vendedor_selecionado])
             
-            clientes_vendedor = notas_vendedor_det.groupby(['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']).agg({
-                'TotalProduto': 'sum'
+            clientes_vendedor = notas_vendedor.groupby(['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']).agg({
+                'Valor_Real': 'sum'
             }).reset_index()
             clientes_vendedor.columns = ['CPF/CNPJ', 'Razão Social', 'Cidade', 'Estado', 'Valor Total']
             clientes_vendedor = clientes_vendedor.sort_values('Valor Total', ascending=False)
@@ -609,9 +578,7 @@ elif menu == "Positivação":
         atendidos_estado = vendas_estado.groupby('Estado')['CPF_CNPJ'].nunique().reset_index()
         atendidos_estado.columns = ['Estado', 'QtdAtendidos']
         
-        # Usar nova lógica
-        notas_estado = obter_notas_unicas(vendas_estado)
-        valor_estado = notas_estado.groupby('Estado')['TotalProduto'].sum().reset_index()
+        valor_estado = obter_notas_unicas(vendas_estado).groupby('Estado')['Valor_Real'].sum().reset_index()
         valor_estado.columns = ['Estado', 'ValorTotal']
         
         relatorio_estado = pd.merge(base_estado, atendidos_estado, on='Estado', how='left')
@@ -887,17 +854,14 @@ elif menu == "Clientes sem Compra":
     clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
     
-    # Calcular valor histórico e data da última compra usando nova lógica
-    vendas_historico_df = df[df['TipoMov'] == 'NF Venda']
-    notas_historico = obter_notas_unicas(vendas_historico_df)
-    
-    valor_historico = notas_historico.groupby('CPF_CNPJ').agg({
+    # Calcular valor histórico e data da última compra
+    vendas_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ').agg({
         'TotalProduto': 'sum',
         'DataEmissao': 'max'
     }).reset_index()
-    valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico', 'UltimaCompra']
+    vendas_historico.columns = ['CPF_CNPJ', 'ValorHistorico', 'UltimaCompra']
     
-    todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
+    todos_clientes = pd.merge(todos_clientes, vendas_historico, on='CPF_CNPJ', how='left')
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
     
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
@@ -1035,29 +999,20 @@ elif menu == "Histórico":
             
             st.markdown("---")
             
-            # Usar nova lógica para calcular totais
-            vendas_cliente_df = historico[historico['TipoMov'] == 'NF Venda']
-            devolucoes_cliente_df = historico[historico['TipoMov'] == 'NF Dev.Venda']
-            
-            notas_vendas_cliente = obter_notas_unicas(vendas_cliente_df)
-            notas_dev_cliente = obter_notas_unicas(devolucoes_cliente_df)
-            
-            total_vendas = notas_vendas_cliente['TotalProduto'].sum()
-            total_dev = notas_dev_cliente['TotalProduto'].sum()
-            qtd_notas_vendas = len(notas_vendas_cliente)
-            qtd_notas_dev = len(notas_dev_cliente)
+            vendas_cliente = historico[historico['TipoMov'] == 'NF Venda']
+            devolucoes_cliente = historico[historico['TipoMov'] == 'NF Dev.Venda']
             
             col5, col6, col7, col8 = st.columns(4)
             with col5:
-                st.metric("Total Vendas", f"R$ {total_vendas:,.2f}")
+                st.metric("Total Vendas", f"R$ {vendas_cliente['TotalProduto'].sum():,.2f}")
             with col6:
-                st.metric("Total Devoluções", f"R$ {total_dev:,.2f}")
+                st.metric("Total Devoluções", f"R$ {devolucoes_cliente['TotalProduto'].sum():,.2f}")
             with col7:
-                st.metric("Qtd Notas Vendas", qtd_notas_vendas)
+                st.metric("Qtd Notas Vendas", len(vendas_cliente['Numero_NF'].unique()))
             with col8:
-                st.metric("Qtd Notas Devoluções", qtd_notas_dev)
+                st.metric("Qtd Notas Devoluções", len(devolucoes_cliente['Numero_NF'].unique()))
             
-            vendas_tempo_cliente = notas_vendas_cliente.groupby('MesAno')['TotalProduto'].sum().reset_index()
+            vendas_tempo_cliente = vendas_cliente.groupby('MesAno')['TotalProduto'].sum().reset_index()
             vendas_tempo_cliente = vendas_tempo_cliente.sort_values('MesAno')
             
             if len(vendas_tempo_cliente) > 0:
@@ -1116,7 +1071,6 @@ elif menu == "Rankings":
     with tab1:
         st.subheader("Ranking de Vendedores por Valor")
         
-        # Usar nova lógica
         ranking_vendedores = notas_unicas.groupby('Vendedor').agg({
             'Valor_Real': 'sum',
             'Numero_NF': 'count',
@@ -1154,7 +1108,6 @@ elif menu == "Rankings":
         
         top_n = st.selectbox("Exibir Top:", [10, 20, 50, 100], key="top_clientes")
         
-        # Usar nova lógica
         ranking_clientes = notas_unicas.groupby(['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']).agg({
             'Valor_Real': 'sum',
             'Numero_NF': 'count'
