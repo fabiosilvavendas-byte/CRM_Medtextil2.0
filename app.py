@@ -982,23 +982,7 @@ elif menu == "Histórico":
             st.warning("❌ Nenhum cliente encontrado com esse critério")
     
     if cpf_cnpj:
-        historico = df[df['CPF_CNPJ'] == cpf_cnpj]
-
-if vendedor_hist_filtro != 'Todos':
-    historico = historico[historico['Vendedor'] == vendedor_hist_filtro]
-
-try:
-    if data_ini_hist:
-        data_ini = pd.to_datetime(data_ini_hist, format="%d/%m/%Y")
-        historico = historico[historico['DataEmissao'] >= data_ini]
-
-    if data_fim_hist:
-        data_fim = pd.to_datetime(data_fim_hist, format="%d/%m/%Y")
-        historico = historico[historico['DataEmissao'] <= data_fim]
-except:
-    st.error("❌ Datas inválidas. Use o formato dd/mm/aaaa.")
-
-historico = historico.sort_values('DataEmissao', ascending=False)
+        historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
         
         if len(historico) > 0:
             cliente_info = historico.iloc[0]
