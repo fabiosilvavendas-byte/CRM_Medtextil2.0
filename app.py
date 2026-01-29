@@ -945,6 +945,33 @@ elif menu == "Clientes sem Compra":
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas por Cliente")
+    # --- ADICIONE ESTE BLOCO A PARTIR DA LINHA 495 ---
+    
+    # Linha de Filtros para restringir a busca de clientes
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        vendedor_hist = st.selectbox(
+            "Filtrar Lista por Vendedor",
+            options=['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist()),
+            key="filtro_vend_hist"
+        )
+    with col_f2:
+        # Filtro de data para a lista de clientes (opcional, mas útil)
+        data_hist = st.date_input("Filtrar Lista por Período", value=[], key="filtro_data_hist")
+
+    # Aplicando o filtro na lista de clientes que aparecerão no selectbox
+    df_clientes_lista = df.copy()
+    if vendedor_hist != 'Todos':
+        df_clientes_lista = df_clientes_lista[df_clientes_lista['Vendedor'] == vendedor_hist]
+    if len(data_hist) == 2:
+        df_clientes_lista = df_clientes_lista[
+            (df_clientes_lista['DataEmissao'].dt.date >= data_hist[0]) & 
+            (df_clientes_lista['DataEmissao'].dt.date <= data_hist[1])
+        ]
+
+    # Substitua a sua linha antiga de 'clientes_disponiveis' por esta:
+    clientes_disponiveis = df_clientes_lista[['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+# --- FIM DO BLOCO ADICIONADO ---
     
     # Buscar cliente por CPF/CNPJ ou Nome
     col_busca1, col_busca2 = st.columns(2)
@@ -963,9 +990,9 @@ elif menu == "Histórico":
     
     if busca_texto and len(busca_texto) >= 3:
         if busca_tipo == "Nome":
-            clientes_filtrados = df[df['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+            clientes_filtrados = df[df_busca['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
         else:
-            clientes_filtrados = df[df['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+            clientes_filtrados = df[df_busca['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
         
         if len(clientes_filtrados) > 0:
             clientes_filtrados['Display'] = clientes_filtrados['RazaoSocial'] + " - " + clientes_filtrados['CPF_CNPJ'] + " (" + clientes_filtrados['Cidade'] + "/" + clientes_filtrados['Estado'] + ")"
@@ -1142,3 +1169,4 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
