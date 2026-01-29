@@ -994,7 +994,13 @@ elif menu == "Histórico":
     col_busca1, col_busca2 = st.columns(2)
     
     with col_busca1:
-        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True)
+        # Adicionamos o parâmetro key="busca_tipo_historico" para diferenciar de outros rádios
+        busca_tipo = st.radio(
+            "Buscar por:", 
+            ["Nome", "CPF/CNPJ"], 
+            horizontal=True, 
+            key="busca_tipo_historico" 
+        )
     
     with col_busca2:
         if busca_tipo == "Nome":
@@ -1186,5 +1192,6 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
 
