@@ -946,61 +946,11 @@ elif menu == "Clientes sem Compra":
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas por Cliente")
     
-    # 1. Criamos os filtros de restrição
-    col_f1, col_f2 = st.columns(2)
-    with col_f1:
-        vendedor_hist = st.selectbox(
-            "Filtrar por Vendedor",
-            options=['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist()),
-            key="filtro_vend_hist"
-        )
-    with col_f2:
-        data_hist = st.date_input("Filtrar por Período", value=[], key="filtro_data_hist", format="DD/MM/YYYY")
-
-    # 2. ⭐ CRIAMOS A BASE DE BUSCA FILTRADA (Essencial para não dar NameError)
-    df_busca = df.copy()
-    if vendedor_hist != 'Todos':
-        df_busca = df_busca[df_busca['Vendedor'] == vendedor_hist]
-    if len(data_hist) == 2:
-        df_busca = df_busca[
-            (df_busca['DataEmissao'].dt.date >= data_hist[0]) & 
-            (df_busca['DataEmissao'].dt.date <= data_hist[1])
-        ]
-
-    # 3. Campos de busca por texto (Nome ou CPF)
-    col_busca1, col_busca2 = st.columns(2)
-    with col_busca1:
-        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True)
-    with col_busca2:
-        if busca_tipo == "Nome":
-            busca_texto = st.text_input("Digite o nome do cliente", placeholder="Ex: Nome da Empresa")
-        else:
-            busca_texto = st.text_input("Digite o CPF/CNPJ", placeholder="Ex: 1234")
-    
-    cliente_selecionado = None
-    cpf_cnpj = None
-    
-    # 4. ⭐ A BUSCA AGORA USA 'df_busca' EM VEZ DE 'df'
-    if busca_texto and len(busca_texto) >= 3:
-        if busca_tipo == "Nome":
-            # Aqui mudamos para df_busca para respeitar o vendedor selecionado
-            clientes_filtrados = df_busca[df_busca['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
-        else:
-            # Aqui também mudamos para df_busca
-            clientes_filtrados = df_busca[df_busca['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
-# --- FIM DO BLOCO ADICIONADO ---
-    
     # Buscar cliente por CPF/CNPJ ou Nome
     col_busca1, col_busca2 = st.columns(2)
     
     with col_busca1:
-        # Adicionamos o parâmetro key="busca_tipo_historico" para diferenciar de outros rádios
-        busca_tipo = st.radio(
-            "Buscar por:", 
-            ["Nome", "CPF/CNPJ"], 
-            horizontal=True, 
-            key="busca_tipo_historico" 
-        )
+        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True)
     
     with col_busca2:
         if busca_tipo == "Nome":
@@ -1013,9 +963,9 @@ elif menu == "Histórico":
     
     if busca_texto and len(busca_texto) >= 3:
         if busca_tipo == "Nome":
-            clientes_filtrados = df[df_busca['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+            clientes_filtrados = df[df['RazaoSocial'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
         else:
-            clientes_filtrados = df[df_busca['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
+            clientes_filtrados = df[df['CPF_CNPJ'].str.contains(busca_texto, case=False, na=False)][['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']].drop_duplicates()
         
         if len(clientes_filtrados) > 0:
             clientes_filtrados['Display'] = clientes_filtrados['RazaoSocial'] + " - " + clientes_filtrados['CPF_CNPJ'] + " (" + clientes_filtrados['Cidade'] + "/" + clientes_filtrados['Estado'] + ")"
@@ -1192,6 +1142,3 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
-
-
-
