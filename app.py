@@ -12,7 +12,7 @@ st.set_page_config(
     page_title="Dashboard BI Medtextil", 
     layout="wide", 
     initial_sidebar_state="expanded",
-    page_icon="📊"
+    page_icon="https://i.imgur.com/IrvV9fl.png"
 )
 
 # ====================== ÍCONE PERSONALIZADO PARA PWA/IPHONE ======================
@@ -1243,6 +1243,7 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
 
 
