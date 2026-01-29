@@ -23,15 +23,15 @@ st.set_page_config(
 # 3. "Copiar endereço da imagem"
 # 4. Deve ser algo como: https://i.imgur.com/XXXXX.png
 
-LOGO_URL = "https://i.imgur.com/IrvV9fl.png"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
+LOGO_URL = "LOGO_URL"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
 
 st.markdown(f"""
-    <link rel="apple-touch-icon" sizes="180x180" href="{https://i.imgur.com/IrvV9fl.png}">
-    <link rel="apple-touch-icon" sizes="152x152" href="{https://i.imgur.com/IrvV9fl.png}">
-    <link rel="apple-touch-icon" sizes="120x120" href="{https://i.imgur.com/IrvV9fl.png}">
-    <link rel="icon" type="image/png" sizes="192x192" href="{https://i.imgur.com/IrvV9fl.png}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{https://i.imgur.com/IrvV9fl.png}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{https://i.imgur.com/IrvV9fl.png}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{LOGO_URL}">
+    <link rel="apple-touch-icon" sizes="120x120" href="{LOGO_URL}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{LOGO_URL}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{LOGO_URL}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{LOGO_URL}">
     <meta name="apple-mobile-web-app-title" content="Medtextil BI">
     <meta name="application-name" content="Medtextil BI">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1243,5 +1243,6 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
 
