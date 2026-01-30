@@ -1218,6 +1218,7 @@ elif menu == "Preço Médio":
     # ⭐ RENOMEAR ID_COD PARA CODPRODUTO (correção do merge)
     if 'ID_COD' in df_produtos.columns:
         df_produtos = df_produtos.rename(columns={'ID_COD': 'CODPRODUTO'})
+        df_produtos['CODPRODUTO'] = df_produtos['CODPRODUTO'].astype(str).str.strip()
     
     faltando_vendas = [col for col in colunas_vendas_necessarias if col not in df_vendas_produto.columns]
     faltando_produtos = [col for col in colunas_produtos_necessarias if col not in df_produtos.columns and col != 'ID_COD']
@@ -1245,7 +1246,7 @@ elif menu == "Preço Médio":
     df_vendas_produto['Mes'] = data_atual.month
     df_vendas_produto['Ano'] = data_atual.year
     df_vendas_produto['MesAno'] = data_atual.strftime('%Y-%m')
-    
+    df_vendas_produto['CODPRODUTO'] = df_vendas_produto['CODPRODUTO'].astype(str).str.strip()
     # Fazer o merge (PROCV) entre as planilhas
     df_preco_medio = pd.merge(
         df_vendas_produto,
@@ -1533,5 +1534,6 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
 
