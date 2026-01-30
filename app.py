@@ -1182,7 +1182,7 @@ elif menu == "Preço Médio":
         st.error("❌ Planilha 'Vendas por produto - GERAL.xlsx' não encontrada")
         st.info("💡 Adicione no GitHub um arquivo com 'VENDAS POR PRODUTO' e 'GERAL' no nome")
         st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
-        st.info("📋 Colunas necessárias: CODPRODUTO, TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO, DATA")
+        st.info("📋 Colunas necessárias: CODPRODUTO, TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO")
         st.stop()
     
     if not planilhas_disponiveis['produtos_agrupados']:
@@ -1208,7 +1208,7 @@ elif menu == "Preço Médio":
     df_produtos.columns = df_produtos.columns.str.upper()
     
     # Verificar se as colunas necessárias existem
-    colunas_vendas_necessarias = ['CODPRODUTO', 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO', 'DATA']
+    colunas_vendas_necessarias = ['CODPRODUTO', 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO']
     colunas_produtos_necessarias = ['CODPRODUTO', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA']
     
     # Verificar colunas alternativas
@@ -1235,11 +1235,12 @@ elif menu == "Preço Médio":
         df_produtos['LINHA'].fillna('').astype(str)
     ).str.strip()
     
-    # Converter DATA para datetime
-    df_vendas_produto['DATA'] = pd.to_datetime(df_vendas_produto['DATA'], errors='coerce')
-    df_vendas_produto['Mes'] = df_vendas_produto['DATA'].dt.month
-    df_vendas_produto['Ano'] = df_vendas_produto['DATA'].dt.year
-    df_vendas_produto['MesAno'] = df_vendas_produto['DATA'].dt.to_period('M').astype(str)
+    # Adicionar coluna DATA com o mês/ano atual (já que não existe na planilha)
+    data_atual = pd.Timestamp.now()
+    df_vendas_produto['DATA'] = data_atual
+    df_vendas_produto['Mes'] = data_atual.month
+    df_vendas_produto['Ano'] = data_atual.year
+    df_vendas_produto['MesAno'] = data_atual.strftime('%Y-%m')
     
     # Fazer o merge (PROCV) entre as planilhas
     df_preco_medio = pd.merge(
@@ -1256,6 +1257,7 @@ elif menu == "Preço Médio":
     st.success(f"✅ Dados carregados: {len(df_preco_medio):,} registros de vendas")
     st.info(f"📊 Planilha de Vendas: **{planilhas_disponiveis['vendas_produto']['nome']}**")
     st.info(f"📦 Planilha de Produtos: **{planilhas_disponiveis['produtos_agrupados']['nome']}**")
+    st.info(f"📅 Período de Referência: **{data_atual.strftime('%B/%Y')}** (mês atual)")
     
     st.markdown("---")
     
@@ -1409,7 +1411,12 @@ elif menu == "Preço Médio":
     
     # Formatar para exibição
     df_detalhado_display = df_detalhado.copy()
-    df_detalhado_display['DATA'] = df_detalhado_display['DATA'].dt.strftime('%d/%m/%Y')
+    
+    # Formatar data no padrão brasileiro com mês atual
+    mes_atual = data_atual.month
+    ano_atual = data_atual.year
+    df_detalhado_display['DATA'] = f"{mes_atual:02d}/{ano_atual}"
+    
     df_detalhado_display['PRECOUNITMEDIO'] = df_detalhado_display['PRECOUNITMEDIO'].apply(
         lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
     )
@@ -1425,7 +1432,7 @@ elif menu == "Preço Médio":
         'TOTQTD': 'Qtd Vendida',
         'PRECOUNITMEDIO': 'Preço Médio Unit.',
         'TOTLIQUIDO': 'Total Líquido',
-        'DATA': 'Data'
+        'DATA': 'Período (Mês/Ano)'
     })
     
     st.dataframe(df_detalhado_display, use_container_width=True, height=400)
