@@ -1189,7 +1189,7 @@ elif menu == "Preço Médio":
         st.error("❌ Planilha 'Produtos_Agrupados_Completos_conciliados.xlsx' não encontrada")
         st.info("💡 Adicione no GitHub um arquivo com 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' no nome")
         st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
-        st.info("📋 Colunas necessárias: CODPRODUTO, Grupo, Descrição, Linha, Gramatura")
+        st.info("📋 Colunas necessárias: ID_COD, Grupo, Descrição, Linha, Gramatura")
         st.stop()
     
     # Carregar planilhas
@@ -1209,14 +1209,18 @@ elif menu == "Preço Médio":
     
     # Verificar se as colunas necessárias existem
     colunas_vendas_necessarias = ['CODPRODUTO', 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO']
-    colunas_produtos_necessarias = ['CODPRODUTO', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA']
+    colunas_produtos_necessarias = ['ID_COD', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA']
     
     # Verificar colunas alternativas
     if 'DESCRIÇÃO' not in df_produtos.columns and 'DESCRICAO' in df_produtos.columns:
         df_produtos = df_produtos.rename(columns={'DESCRICAO': 'DESCRIÇÃO'})
     
+    # ⭐ RENOMEAR ID_COD PARA CODPRODUTO (correção do merge)
+    if 'ID_COD' in df_produtos.columns:
+        df_produtos = df_produtos.rename(columns={'ID_COD': 'CODPRODUTO'})
+    
     faltando_vendas = [col for col in colunas_vendas_necessarias if col not in df_vendas_produto.columns]
-    faltando_produtos = [col for col in colunas_produtos_necessarias if col not in df_produtos.columns]
+    faltando_produtos = [col for col in colunas_produtos_necessarias if col not in df_produtos.columns and col != 'ID_COD']
     
     if faltando_vendas:
         st.error(f"❌ Colunas faltando na planilha de vendas: {', '.join(faltando_vendas)}")
@@ -1526,3 +1530,4 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
