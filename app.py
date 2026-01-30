@@ -1207,6 +1207,11 @@ elif menu == "Preço Médio":
     df_vendas_produto.columns = df_vendas_produto.columns.str.upper()
     df_produtos.columns = df_produtos.columns.str.upper()
     
+    # IMPORTANTE: Se a planilha de vendas já tiver NOMEPRODUTO, remover para usar apenas o da planilha de produtos
+    if 'NOMEPRODUTO' in df_vendas_produto.columns:
+        df_vendas_produto = df_vendas_produto.drop(columns=['NOMEPRODUTO'])
+        st.info("ℹ️ Coluna NOMEPRODUTO da planilha de vendas foi substituída pela descrição da planilha de produtos")
+    
     # Verificar se as colunas necessárias existem
     colunas_vendas_necessarias = ['CODPRODUTO', 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO']
     colunas_produtos_necessarias = ['ID_COD', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA']
@@ -1214,6 +1219,12 @@ elif menu == "Preço Médio":
     # Verificar colunas alternativas
     if 'DESCRIÇÃO' not in df_produtos.columns and 'DESCRICAO' in df_produtos.columns:
         df_produtos = df_produtos.rename(columns={'DESCRICAO': 'DESCRIÇÃO'})
+    
+    if 'LINHA' not in df_produtos.columns and 'LINHAS' in df_produtos.columns:
+        df_produtos = df_produtos.rename(columns={'LINHAS': 'LINHA'})
+    
+    if 'GRUPO' not in df_produtos.columns and 'GRUPOS' in df_produtos.columns:
+        df_produtos = df_produtos.rename(columns={'GRUPOS': 'GRUPO'})
     
     faltando_vendas = [col for col in colunas_vendas_necessarias if col not in df_vendas_produto.columns]
     faltando_produtos = [col for col in colunas_produtos_necessarias if col not in df_produtos.columns]
@@ -1229,11 +1240,22 @@ elif menu == "Preço Médio":
         st.stop()
     
     # Criar a descrição concatenada na planilha de produtos
+    # Limpar espaços e garantir que não fique vazio
+    df_produtos['GRUPO_LIMPO'] = df_produtos['GRUPO'].fillna('').astype(str).str.strip()
+    df_produtos['DESCRIÇÃO_LIMPO'] = df_produtos['DESCRIÇÃO'].fillna('').astype(str).str.strip()
+    df_produtos['LINHA_LIMPO'] = df_produtos['LINHA'].fillna('').astype(str).str.strip()
+    
     df_produtos['NOMEPRODUTO'] = (
-        df_produtos['GRUPO'].fillna('').astype(str) + ' ' +
-        df_produtos['DESCRIÇÃO'].fillna('').astype(str) + ' ' +
-        df_produtos['LINHA'].fillna('').astype(str)
+        df_produtos['GRUPO_LIMPO'] + ' ' +
+        df_produtos['DESCRIÇÃO_LIMPO'] + ' ' +
+        df_produtos['LINHA_LIMPO']
     ).str.strip()
+    
+    # Se NOMEPRODUTO ficar vazio, usar o ID_COD como descrição
+    df_produtos.loc[df_produtos['NOMEPRODUTO'] == '', 'NOMEPRODUTO'] = 'Produto ' + df_produtos['ID_COD'].astype(str)
+    
+    # Remover colunas temporárias
+    df_produtos = df_produtos.drop(columns=['GRUPO_LIMPO', 'DESCRIÇÃO_LIMPO', 'LINHA_LIMPO'])
     
     # Renomear ID_COD para CODPRODUTO para facilitar o merge
     df_produtos = df_produtos.rename(columns={'ID_COD': 'CODPRODUTO'})
@@ -1263,10 +1285,13 @@ elif menu == "Preço Médio":
     )
     
     # Preencher valores nulos após o merge
+    produtos_nao_catalogados = 0
     if 'NOMEPRODUTO' in df_preco_medio.columns:
-        df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna('Produto não catalogado')
+        produtos_nao_catalogados = df_preco_medio['NOMEPRODUTO'].isna().sum()
+        df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna('Produto não catalogado - Código: ' + df_preco_medio['CODPRODUTO'].astype(str))
     else:
-        df_preco_medio['NOMEPRODUTO'] = 'Produto não catalogado'
+        df_preco_medio['NOMEPRODUTO'] = 'Produto não catalogado - Código: ' + df_preco_medio['CODPRODUTO'].astype(str)
+        produtos_nao_catalogados = len(df_preco_medio)
     
     if 'GRAMATURA' in df_preco_medio.columns:
         df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna(0)
@@ -1277,6 +1302,11 @@ elif menu == "Preço Médio":
     st.info(f"📊 Planilha de Vendas: **{planilhas_disponiveis['vendas_produto']['nome']}**")
     st.info(f"📦 Planilha de Produtos: **{planilhas_disponiveis['produtos_agrupados']['nome']}**")
     st.info(f"📅 Período de Referência: **{data_atual.strftime('%B/%Y')}** (mês atual)")
+    
+    if produtos_nao_catalogados > 0:
+        st.warning(f"⚠️ {produtos_nao_catalogados} produtos sem cadastro na planilha de produtos (verifique se os códigos coincidem)")
+    else:
+        st.success("✅ Todos os produtos foram encontrados no cadastro!")
     
     st.markdown("---")
     
