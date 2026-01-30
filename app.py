@@ -1247,6 +1247,9 @@ elif menu == "Preço Médio":
     df_vendas_produto['Ano'] = data_atual.year
     df_vendas_produto['MesAno'] = data_atual.strftime('%Y-%m')
     df_vendas_produto['CODPRODUTO'] = df_vendas_produto['CODPRODUTO'].astype(str).str.strip()
+    # ADICIONE ESTAS DUAS LINHAS ANTES DO MERGE:
+    df_vendas_produto['CODPRODUTO'] = df_vendas_produto['CODPRODUTO'].astype(str).str.strip().str.replace('.0', '', regex=False)
+    df_produtos['CODPRODUTO'] = df_produtos['CODPRODUTO'].astype(str).str.strip().str.replace('.0', '', regex=False)
     # Fazer o merge (PROCV) entre as planilhas
     df_preco_medio = pd.merge(
         df_vendas_produto,
@@ -1534,6 +1537,7 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
 
 
