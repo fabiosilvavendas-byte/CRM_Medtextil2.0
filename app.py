@@ -1255,6 +1255,9 @@ elif menu == "Preço Médio":
     )
     
     # Preencher produtos não encontrados
+    if 'NOMEPRODUTO' not in df_preco_medio.columns:
+        df_preco_medio['NOMEPRODUTO'] = 'Produto não catalogado'
+    
     df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna('Produto não catalogado')
     df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna(0)
     
@@ -1530,4 +1533,5 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
