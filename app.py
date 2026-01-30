@@ -1246,16 +1246,32 @@ elif menu == "Preço Médio":
     df_vendas_produto['MesAno'] = data_atual.strftime('%Y-%m')
     
     # Fazer o merge (PROCV) entre as planilhas
+    # Garantir que as colunas necessárias existam antes do merge
+    colunas_merge = ['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA']
+    for col in colunas_merge:
+        if col not in df_produtos.columns:
+            if col == 'NOMEPRODUTO':
+                df_produtos['NOMEPRODUTO'] = 'Produto não catalogado'
+            elif col == 'GRAMATURA':
+                df_produtos['GRAMATURA'] = 0
+    
     df_preco_medio = pd.merge(
         df_vendas_produto,
-        df_produtos[['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA']],
+        df_produtos[colunas_merge],
         on='CODPRODUTO',
         how='left'
     )
     
-    # Preencher produtos não encontrados
-    df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna('Produto não catalogado')
-    df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna(0)
+    # Preencher valores nulos após o merge
+    if 'NOMEPRODUTO' in df_preco_medio.columns:
+        df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna('Produto não catalogado')
+    else:
+        df_preco_medio['NOMEPRODUTO'] = 'Produto não catalogado'
+    
+    if 'GRAMATURA' in df_preco_medio.columns:
+        df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna(0)
+    else:
+        df_preco_medio['GRAMATURA'] = 0
     
     st.success(f"✅ Dados carregados: {len(df_preco_medio):,} registros de vendas")
     st.info(f"📊 Planilha de Vendas: **{planilhas_disponiveis['vendas_produto']['nome']}**")
