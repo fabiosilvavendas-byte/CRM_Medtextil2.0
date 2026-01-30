@@ -12,7 +12,7 @@ st.set_page_config(
     page_title="Dashboard BI Medtextil", 
     layout="wide", 
     initial_sidebar_state="expanded",
-    page_icon="https://i.imgur.com/IrvV9fl.png"
+    page_icon="📊"
 )
 
 # ====================== ÍCONE PERSONALIZADO PARA PWA/IPHONE ======================
@@ -23,7 +23,7 @@ st.set_page_config(
 # 3. "Copiar endereço da imagem"
 # 4. Deve ser algo como: https://i.imgur.com/XXXXX.png
 
-LOGO_URL = "https://i.imgur.com/IrvV9fl.png"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
+LOGO_URL = "https://i.imgur.com/XXXXX.png"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
 
 st.markdown(f"""
     <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
@@ -59,6 +59,8 @@ def listar_planilhas_github():
         planilhas = {
             'vendas': None,
             'inadimplencia': None,
+            'vendas_produto': None,
+            'produtos_agrupados': None,
             'todas': []
         }
         
@@ -78,6 +80,14 @@ def listar_planilhas_github():
                 # Identificar planilha de inadimplência
                 if 'LANCAMENTO A RECEBER' in content.name.upper() or 'LANCAMENTO_A_RECEBER' in content.name.upper():
                     planilhas['inadimplencia'] = info
+                
+                # Identificar planilha de vendas por produto
+                if 'VENDAS POR PRODUTO' in content.name.upper() and 'GERAL' in content.name.upper():
+                    planilhas['vendas_produto'] = info
+                
+                # Identificar planilha de produtos agrupados
+                if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in content.name.upper():
+                    planilhas['produtos_agrupados'] = info
         
         if not planilhas['todas']:
             st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
@@ -86,7 +96,7 @@ def listar_planilhas_github():
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
-        return {'vendas': None, 'inadimplencia': None, 'todas': []}
+        return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'todas': []}
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
@@ -307,7 +317,7 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 st.sidebar.markdown("---")
 menu = st.sidebar.radio(
     "📑 Navegação",
-    ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Rankings"],
+    ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Rankings"],
     index=0
 )
 
@@ -1163,6 +1173,272 @@ elif menu == "Histórico":
         else:
             st.info("Nenhuma venda encontrada com os filtros selecionados")
 
+# ====================== PREÇO MÉDIO ======================
+elif menu == "Preço Médio":
+    st.header("💰 Análise de Preço Médio por Produto")
+    
+    # Verificar se as planilhas necessárias existem
+    if not planilhas_disponiveis['vendas_produto']:
+        st.error("❌ Planilha 'Vendas por produto - GERAL.xlsx' não encontrada")
+        st.info("💡 Adicione no GitHub um arquivo com 'VENDAS POR PRODUTO' e 'GERAL' no nome")
+        st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
+        st.info("📋 Colunas necessárias: CODPRODUTO, TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO, DATA")
+        st.stop()
+    
+    if not planilhas_disponiveis['produtos_agrupados']:
+        st.error("❌ Planilha 'Produtos_Agrupados_Completos_conciliados.xlsx' não encontrada")
+        st.info("💡 Adicione no GitHub um arquivo com 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' no nome")
+        st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
+        st.info("📋 Colunas necessárias: CODPRODUTO, Grupo, Descrição, Linha, Gramatura")
+        st.stop()
+    
+    # Carregar planilhas
+    with st.spinner("📥 Carregando dados de vendas por produto..."):
+        df_vendas_produto = carregar_planilha_github(planilhas_disponiveis['vendas_produto']['url'])
+    
+    with st.spinner("📥 Carregando dados de produtos..."):
+        df_produtos = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+    
+    if df_vendas_produto is None or df_produtos is None:
+        st.error("❌ Erro ao carregar uma ou mais planilhas")
+        st.stop()
+    
+    # Padronizar nomes das colunas (case-insensitive)
+    df_vendas_produto.columns = df_vendas_produto.columns.str.upper()
+    df_produtos.columns = df_produtos.columns.str.upper()
+    
+    # Verificar se as colunas necessárias existem
+    colunas_vendas_necessarias = ['CODPRODUTO', 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO', 'DATA']
+    colunas_produtos_necessarias = ['CODPRODUTO', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA']
+    
+    # Verificar colunas alternativas
+    if 'DESCRIÇÃO' not in df_produtos.columns and 'DESCRICAO' in df_produtos.columns:
+        df_produtos = df_produtos.rename(columns={'DESCRICAO': 'DESCRIÇÃO'})
+    
+    faltando_vendas = [col for col in colunas_vendas_necessarias if col not in df_vendas_produto.columns]
+    faltando_produtos = [col for col in colunas_produtos_necessarias if col not in df_produtos.columns]
+    
+    if faltando_vendas:
+        st.error(f"❌ Colunas faltando na planilha de vendas: {', '.join(faltando_vendas)}")
+        st.info(f"📋 Colunas encontradas: {', '.join(df_vendas_produto.columns.tolist())}")
+        st.stop()
+    
+    if faltando_produtos:
+        st.error(f"❌ Colunas faltando na planilha de produtos: {', '.join(faltando_produtos)}")
+        st.info(f"📋 Colunas encontradas: {', '.join(df_produtos.columns.tolist())}")
+        st.stop()
+    
+    # Criar a descrição concatenada na planilha de produtos
+    df_produtos['NOMEPRODUTO'] = (
+        df_produtos['GRUPO'].fillna('').astype(str) + ' ' +
+        df_produtos['DESCRIÇÃO'].fillna('').astype(str) + ' ' +
+        df_produtos['LINHA'].fillna('').astype(str)
+    ).str.strip()
+    
+    # Converter DATA para datetime
+    df_vendas_produto['DATA'] = pd.to_datetime(df_vendas_produto['DATA'], errors='coerce')
+    df_vendas_produto['Mes'] = df_vendas_produto['DATA'].dt.month
+    df_vendas_produto['Ano'] = df_vendas_produto['DATA'].dt.year
+    df_vendas_produto['MesAno'] = df_vendas_produto['DATA'].dt.to_period('M').astype(str)
+    
+    # Fazer o merge (PROCV) entre as planilhas
+    df_preco_medio = pd.merge(
+        df_vendas_produto,
+        df_produtos[['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA']],
+        on='CODPRODUTO',
+        how='left'
+    )
+    
+    # Preencher produtos não encontrados
+    df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna('Produto não catalogado')
+    df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna(0)
+    
+    st.success(f"✅ Dados carregados: {len(df_preco_medio):,} registros de vendas")
+    st.info(f"📊 Planilha de Vendas: **{planilhas_disponiveis['vendas_produto']['nome']}**")
+    st.info(f"📦 Planilha de Produtos: **{planilhas_disponiveis['produtos_agrupados']['nome']}**")
+    
+    st.markdown("---")
+    
+    # ========== FILTROS ==========
+    st.subheader("🔍 Filtros")
+    
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    
+    with col_f1:
+        anos_preco = ['Todos'] + sorted(df_preco_medio['Ano'].dropna().unique().tolist(), reverse=True)
+        ano_preco_filtro = st.selectbox("Ano", anos_preco, key="ano_preco")
+    
+    with col_f2:
+        meses_preco = ['Todos'] + list(range(1, 13))
+        mes_preco_filtro = st.selectbox("Mês", meses_preco, key="mes_preco")
+    
+    with col_f3:
+        busca_cod = st.text_input("🔍 Buscar Código", placeholder="Digite o código...", key="busca_cod_preco")
+    
+    with col_f4:
+        busca_nome = st.text_input("🔍 Buscar Produto", placeholder="Digite o nome...", key="busca_nome_preco")
+    
+    # Aplicar filtros
+    df_preco_filtrado = df_preco_medio.copy()
+    
+    if ano_preco_filtro != 'Todos':
+        df_preco_filtrado = df_preco_filtrado[df_preco_filtrado['Ano'] == ano_preco_filtro]
+    if mes_preco_filtro != 'Todos':
+        df_preco_filtrado = df_preco_filtrado[df_preco_filtrado['Mes'] == mes_preco_filtro]
+    if busca_cod and len(busca_cod) >= 2:
+        df_preco_filtrado = df_preco_filtrado[
+            df_preco_filtrado['CODPRODUTO'].astype(str).str.contains(busca_cod, case=False, na=False)
+        ]
+    if busca_nome and len(busca_nome) >= 2:
+        df_preco_filtrado = df_preco_filtrado[
+            df_preco_filtrado['NOMEPRODUTO'].str.contains(busca_nome, case=False, na=False)
+        ]
+    
+    st.markdown("---")
+    
+    # ========== MÉTRICAS GERAIS ==========
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_vendido = df_preco_filtrado['TOTLIQUIDO'].sum()
+        st.metric("💰 Total Vendido", f"R$ {total_vendido:,.2f}")
+    
+    with col2:
+        qtd_total = df_preco_filtrado['TOTQTD'].sum()
+        st.metric("📦 Qtd Total Vendida", f"{qtd_total:,.0f}")
+    
+    with col3:
+        preco_medio_geral = df_preco_filtrado['PRECOUNITMEDIO'].mean() if len(df_preco_filtrado) > 0 else 0
+        st.metric("💵 Preço Médio Geral", f"R$ {preco_medio_geral:,.2f}")
+    
+    with col4:
+        produtos_unicos = df_preco_filtrado['CODPRODUTO'].nunique()
+        st.metric("🏷️ Produtos Únicos", f"{produtos_unicos:,}")
+    
+    st.markdown("---")
+    
+    # ========== GRÁFICOS ==========
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        st.subheader("📊 Top 10 Produtos por Faturamento")
+        
+        top_faturamento = df_preco_filtrado.groupby('NOMEPRODUTO')['TOTLIQUIDO'].sum().reset_index()
+        top_faturamento = top_faturamento.sort_values('TOTLIQUIDO', ascending=False).head(10)
+        
+        fig_fat = px.bar(
+            top_faturamento,
+            x='TOTLIQUIDO',
+            y='NOMEPRODUTO',
+            orientation='h',
+            labels={'NOMEPRODUTO': 'Produto', 'TOTLIQUIDO': 'Faturamento (R$)'},
+            template='plotly_white',
+            color='TOTLIQUIDO',
+            color_continuous_scale='Blues'
+        )
+        st.plotly_chart(fig_fat, use_container_width=True)
+    
+    with col6:
+        st.subheader("📈 Top 10 Produtos por Quantidade")
+        
+        top_quantidade = df_preco_filtrado.groupby('NOMEPRODUTO')['TOTQTD'].sum().reset_index()
+        top_quantidade = top_quantidade.sort_values('TOTQTD', ascending=False).head(10)
+        
+        fig_qtd = px.bar(
+            top_quantidade,
+            x='TOTQTD',
+            y='NOMEPRODUTO',
+            orientation='h',
+            labels={'NOMEPRODUTO': 'Produto', 'TOTQTD': 'Quantidade Vendida'},
+            template='plotly_white',
+            color='TOTQTD',
+            color_continuous_scale='Greens'
+        )
+        st.plotly_chart(fig_qtd, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ========== ANÁLISE DE PREÇO MÉDIO POR PERÍODO ==========
+    st.subheader("📅 Evolução de Preço Médio")
+    
+    # Permitir seleção de produto específico
+    produtos_lista = ['Todos'] + sorted(df_preco_filtrado['NOMEPRODUTO'].unique().tolist())
+    produto_selecionado = st.selectbox(
+        "Selecione um produto para ver evolução de preço:",
+        produtos_lista,
+        key="produto_evolucao"
+    )
+    
+    if produto_selecionado != 'Todos':
+        df_evolucao = df_preco_filtrado[df_preco_filtrado['NOMEPRODUTO'] == produto_selecionado]
+    else:
+        df_evolucao = df_preco_filtrado.copy()
+    
+    if len(df_evolucao) > 0:
+        evolucao_preco = df_evolucao.groupby('MesAno').agg({
+            'PRECOUNITMEDIO': 'mean',
+            'TOTQTD': 'sum',
+            'TOTLIQUIDO': 'sum'
+        }).reset_index()
+        evolucao_preco = evolucao_preco.sort_values('MesAno')
+        
+        fig_evolucao = px.line(
+            evolucao_preco,
+            x='MesAno',
+            y='PRECOUNITMEDIO',
+            labels={'MesAno': 'Período', 'PRECOUNITMEDIO': 'Preço Médio (R$)'},
+            template='plotly_white',
+            title=f'Evolução do Preço Médio - {produto_selecionado}'
+        )
+        fig_evolucao.update_traces(line_color='#FF6B6B', line_width=3)
+        st.plotly_chart(fig_evolucao, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ========== TABELA DETALHADA ==========
+    st.subheader("📋 Detalhamento de Preços")
+    
+    # Preparar dados para exibição
+    df_detalhado = df_preco_filtrado[[
+        'CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA', 'TOTQTD', 
+        'PRECOUNITMEDIO', 'TOTLIQUIDO', 'DATA'
+    ]].copy()
+    
+    # Ordenar por data (mais recente primeiro)
+    df_detalhado = df_detalhado.sort_values('DATA', ascending=False)
+    
+    # Formatar para exibição
+    df_detalhado_display = df_detalhado.copy()
+    df_detalhado_display['DATA'] = df_detalhado_display['DATA'].dt.strftime('%d/%m/%Y')
+    df_detalhado_display['PRECOUNITMEDIO'] = df_detalhado_display['PRECOUNITMEDIO'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    df_detalhado_display['TOTLIQUIDO'] = df_detalhado_display['TOTLIQUIDO'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    
+    # Renomear colunas
+    df_detalhado_display = df_detalhado_display.rename(columns={
+        'CODPRODUTO': 'Código',
+        'NOMEPRODUTO': 'Nome do Produto',
+        'GRAMATURA': 'Gramatura',
+        'TOTQTD': 'Qtd Vendida',
+        'PRECOUNITMEDIO': 'Preço Médio Unit.',
+        'TOTLIQUIDO': 'Total Líquido',
+        'DATA': 'Data'
+    })
+    
+    st.dataframe(df_detalhado_display, use_container_width=True, height=400)
+    
+    # Botão de download
+    st.download_button(
+        "📥 Exportar Relatório de Preços",
+        to_excel(df_detalhado),
+        "relatorio_preco_medio.xlsx",
+        "application/vnd.ms-excel",
+        key="download_preco_medio"
+    )
+
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
     st.header("🏆 Rankings")
@@ -1243,8 +1519,3 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
-
-
-
-
-
