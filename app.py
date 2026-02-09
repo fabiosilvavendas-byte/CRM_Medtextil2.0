@@ -148,6 +148,51 @@ def check_password():
         return True
 
 # ====================== PROCESSAMENTO DE DADOS ======================
+def calcular_prazo_historico(data_emissao, data_vencimento_str):
+    """
+    Calcula o prazo histórico em dias entre a data de emissão e cada data de vencimento.
+    
+    Exemplo:
+    - Data Emissão: 01/01/2026
+    - Datas Vencimento: "29/01/2026; 05/02/2026"
+    - Resultado: "28/35"
+    """
+    try:
+        if pd.isna(data_vencimento_str) or data_vencimento_str == '':
+            return ''
+        
+        if pd.isna(data_emissao):
+            return ''
+        
+        # Converter string para garantir que é texto
+        data_vencimento_str = str(data_vencimento_str)
+        
+        # Separar as datas por ponto e vírgula
+        datas_vencimento = data_vencimento_str.split(';')
+        
+        prazos = []
+        for data_venc_str in datas_vencimento:
+            data_venc_str = data_venc_str.strip()
+            if data_venc_str:
+                try:
+                    # Tentar converter para datetime
+                    data_venc = pd.to_datetime(data_venc_str, errors='coerce')
+                    if pd.notna(data_venc):
+                        # Calcular diferença em dias
+                        diferenca = (data_venc - data_emissao).days
+                        if diferenca >= 0:  # Apenas prazos positivos
+                            prazos.append(str(diferenca))
+                except:
+                    continue
+        
+        # Retornar prazos separados por "/"
+        if prazos:
+            return '/'.join(prazos)
+        else:
+            return ''
+    except:
+        return ''
+
 @st.cache_data
 def processar_dados(df):
     """Aplica as regras de negócio nos dados"""
@@ -159,6 +204,16 @@ def processar_dados(df):
     df['Mes'] = df['DataEmissao'].dt.month
     df['Ano'] = df['DataEmissao'].dt.year
     df['MesAno'] = df['DataEmissao'].dt.to_period('M').astype(str)
+    
+    # Calcular prazo histórico se a coluna DataVencimento existir
+    if 'DataVencimento' in df.columns:
+        df['PrazoHistorico'] = df.apply(
+            lambda row: calcular_prazo_historico(row['DataEmissao'], row['DataVencimento']),
+            axis=1
+        )
+    else:
+        df['PrazoHistorico'] = ''
+    
     return df
 
 def obter_notas_unicas(df):
@@ -1054,14 +1109,20 @@ elif menu == "Histórico":
                 
                 st.subheader("📋 Detalhamento de Produtos")
                 
-                historico_display = historico[['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']].copy()
+                # Verificar se PrazoHistorico existe no dataframe
+                colunas_display = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
+                if 'PrazoHistorico' in historico.columns:
+                    colunas_display.append('PrazoHistorico')
+                
+                historico_display = historico[colunas_display].copy()
                 historico_display['DataEmissao'] = historico_display['DataEmissao'].dt.strftime('%d/%m/%Y')
                 
                 # Formatar valores monetários
                 historico_display['PrecoUnit'] = historico_display['PrecoUnit'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
                 historico_display['TotalProduto'] = historico_display['TotalProduto'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
                 
-                historico_display = historico_display.rename(columns={
+                # Renomear colunas
+                colunas_rename = {
                     'DataEmissao': 'Data',
                     'TipoMov': 'Tipo',
                     'Numero_NF': 'Nota Fiscal',
@@ -1070,7 +1131,11 @@ elif menu == "Histórico":
                     'Quantidade': 'Qtd',
                     'PrecoUnit': 'Preço Unit.',
                     'TotalProduto': 'Total'
-                })
+                }
+                if 'PrazoHistorico' in historico_display.columns:
+                    colunas_rename['PrazoHistorico'] = 'Prazo (dias)'
+                
+                historico_display = historico_display.rename(columns=colunas_rename)
                 
                 st.dataframe(historico_display, use_container_width=True, height=400)
                 
@@ -1127,7 +1192,11 @@ elif menu == "Histórico":
             notas_vendedor = obter_notas_unicas(df_hist_vendedor)
             
             # Preparar dados para exibição
-            historico_vendedor = notas_vendedor[['DataEmissao', 'RazaoSocial', 'Numero_NF', 'TotalProduto', 'Vendedor']].copy()
+            colunas_vendedor = ['DataEmissao', 'RazaoSocial', 'Numero_NF', 'TotalProduto', 'Vendedor']
+            if 'PrazoHistorico' in notas_vendedor.columns:
+                colunas_vendedor.append('PrazoHistorico')
+            
+            historico_vendedor = notas_vendedor[colunas_vendedor].copy()
             historico_vendedor = historico_vendedor.sort_values('DataEmissao', ascending=False)
             
             # Métricas resumidas
@@ -1152,13 +1221,17 @@ elif menu == "Histórico":
             )
             
             # Renomear colunas
-            historico_vendedor_display = historico_vendedor_display.rename(columns={
+            colunas_rename_vendedor = {
                 'DataEmissao': 'Data',
                 'RazaoSocial': 'Cliente',
                 'Numero_NF': 'Nota Fiscal',
                 'TotalProduto': 'Valor Total',
                 'Vendedor': 'Vendedor'
-            })
+            }
+            if 'PrazoHistorico' in historico_vendedor_display.columns:
+                colunas_rename_vendedor['PrazoHistorico'] = 'Prazo (dias)'
+            
+            historico_vendedor_display = historico_vendedor_display.rename(columns=colunas_rename_vendedor)
             
             st.dataframe(historico_vendedor_display, use_container_width=True, height=400)
             
