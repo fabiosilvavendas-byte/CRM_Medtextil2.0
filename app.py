@@ -151,20 +151,16 @@ def check_password():
 def calcular_prazo_historico(data_emissao, data_vencimento_str):
     """
     Calcula o prazo histórico CUMULATIVO em dias.
-    O cálculo é feito entre datas consecutivas:
-    - Data Emissão até 1º Vencimento
-    - Data Emissão até 2º Vencimento
-    - Data Emissão até 3º Vencimento
-    - E assim por diante...
+    NÃO conta o dia da emissão (começa a contar do dia seguinte).
     
     Exemplo:
-    - Data Emissão: 18/12/2025
+    - Data Emissão: 18/12/2025 (não conta este dia)
     - Vencimentos: "15/01/2026; 22/01/2026; 29/01/2026; 05/02/2026"
     - Cálculo:
-      * 18/12 até 15/01 = 28 dias
-      * 18/12 até 22/01 = 35 dias (28 + 7)
-      * 18/12 até 29/01 = 42 dias (35 + 7)
-      * 18/12 até 05/02 = 49 dias (42 + 7)
+      * De 19/12 até 15/01 = 28 dias
+      * De 19/12 até 22/01 = 35 dias
+      * De 19/12 até 29/01 = 42 dias
+      * De 19/12 até 05/02 = 49 dias
     - Resultado: "28/35/42/49"
     """
     try:
@@ -194,11 +190,12 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
                 if pd.notna(data_venc):
                     # Verificar se a data está dentro de um intervalo razoável (ano entre 2020 e 2030)
                     if 2020 <= data_venc.year <= 2030:
-                        # Calcular dias SEMPRE a partir da data de emissão (cumulativo)
+                        # Calcular dias a partir do DIA SEGUINTE à emissão
+                        # O Python já calcula correto: não conta o dia da emissão
                         diferenca = (data_venc - data_emissao).days
                         
-                        # Validar prazo razoável (entre 0 e 365 dias)
-                        if 0 < diferenca <= 365:
+                        # Validar prazo razoável (entre 1 e 365 dias)
+                        if 1 <= diferenca <= 365:
                             prazos.append(str(diferenca))
             except:
                 # Ignorar datas inválidas silenciosamente
