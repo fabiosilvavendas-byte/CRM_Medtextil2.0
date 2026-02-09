@@ -151,11 +151,17 @@ def check_password():
 def calcular_prazo_historico(data_emissao, data_vencimento_str):
     """
     Calcula o prazo histórico em dias entre a data de emissão e cada data de vencimento.
+    O cálculo considera: dias corridos do dia seguinte à emissão até o vencimento + 1.
     
     Exemplo:
-    - Data Emissão: 01/01/2026
-    - Datas Vencimento: "29/01/2026; 05/02/2026"
-    - Resultado: "28/35"
+    - Data Emissão: 18/12/2025
+    - Datas Vencimento: "15/01/2026; 22/01/2026; 29/01/2026; 05/02/2026"
+    - Cálculo:
+      * 15/01/2026: de 19/12/2025 até 15/01/2026 = 28 dias
+      * 22/01/2026: de 19/12/2025 até 22/01/2026 = 35 dias
+      * 29/01/2026: de 19/12/2025 até 29/01/2026 = 42 dias
+      * 05/02/2026: de 19/12/2025 até 05/02/2026 = 49 dias
+    - Resultado: "28/35/42/49"
     """
     try:
         if pd.isna(data_vencimento_str) or data_vencimento_str == '':
@@ -179,8 +185,9 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
                     data_venc = pd.to_datetime(data_venc_str, errors='coerce')
                     if pd.notna(data_venc):
                         # Calcular diferença em dias
-                        diferenca = (data_venc - data_emissao).days
-                        if diferenca >= 0:  # Apenas prazos positivos
+                        # Fórmula corrigida: (data_vencimento - data_emissao).days + 1
+                        diferenca = (data_venc - data_emissao).days + 1
+                        if diferenca > 0:  # Apenas prazos positivos
                             prazos.append(str(diferenca))
                 except:
                     continue
