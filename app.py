@@ -118,18 +118,36 @@ def carregar_planilha_github(url):
 
 # ====================== AUTENTICAÇÃO ======================
 def check_password():
-    """Sistema de autenticação - ALTERE A SENHA AQUI"""
+    """Sistema de autenticação com níveis de acesso"""
     
-    # 🔐 ALTERE A SENHA AQUI (linha abaixo)
-    SENHA_CORRETA = "admin123"  # ⬅️ MUDE AQUI PARA SUA SENHA
+    # 🔐 CONFIGURAÇÃO DE USUÁRIOS E SENHAS
+    USUARIOS = {
+        "admin123": {
+            "tipo": "administrador",
+            "nome": "Administrador",
+            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Rankings"]
+        },
+        "colaborador123": {  # ⬅️ MUDE ESTA SENHA
+            "tipo": "colaborador",
+            "nome": "Colaborador",
+            "modulos": ["Inadimplência", "Histórico"]
+        }
+    }
     
     def password_entered():
-        if st.session_state.get("password_input", "") == SENHA_CORRETA:
+        senha = st.session_state.get("password_input", "")
+        
+        if senha in USUARIOS:
             st.session_state["password_correct"] = True
+            st.session_state["usuario"] = USUARIOS[senha]
+            st.session_state["senha_usada"] = senha
         else:
             st.session_state["password_correct"] = False
             st.session_state["show_error"] = True
+            if "usuario" in st.session_state:
+                del st.session_state["usuario"]
 
+    # Tela de login
     if "password_correct" not in st.session_state:
         st.markdown("### 🔐 Login - Dashboard BI Medtextil")
         st.text_input("Senha", type="password", key="password_input")
@@ -306,7 +324,26 @@ def processar_inadimplencia(df):
 if not check_password():
     st.stop()
 
-st.title("📊 Dashboard BI Medtextil 2.0")
+# Obter informações do usuário logado
+usuario = st.session_state.get("usuario", {})
+tipo_usuario = usuario.get("tipo", "")
+nome_usuario = usuario.get("nome", "Usuário")
+modulos_permitidos = usuario.get("modulos", [])
+
+# Header com informação do usuário
+col_titulo, col_usuario = st.columns([3, 1])
+
+with col_titulo:
+    st.title("📊 Dashboard BI Medtextil 2.0")
+
+with col_usuario:
+    st.markdown(f"**👤 {nome_usuario}**")
+    if st.button("🚪 Sair", use_container_width=True):
+        # Limpar sessão e fazer logout
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
 st.markdown("---")
 
 col_header1, col_header2 = st.columns([3, 1])
@@ -394,11 +431,26 @@ if ano_filtro != 'Todos':
 notas_unicas = obter_notas_unicas(df_filtrado)
 
 st.sidebar.markdown("---")
+
+# Mostrar apenas módulos permitidos para o usuário
+modulos_visiveis = modulos_permitidos if modulos_permitidos else ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Rankings"]
+
+# Definir índice padrão baseado nas permissões
+indice_padrao = 0
+if "Dashboard" not in modulos_visiveis and len(modulos_visiveis) > 0:
+    indice_padrao = 0  # Sempre começa no primeiro disponível
+
 menu = st.sidebar.radio(
     "📑 Navegação",
-    ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Rankings"],
-    index=0
+    modulos_visiveis,
+    index=indice_padrao
 )
+
+# Verificar se o usuário tem permissão para acessar o módulo
+if menu not in modulos_permitidos:
+    st.error("🚫 Você não tem permissão para acessar este módulo")
+    st.info(f"📋 Módulos disponíveis: {', '.join(modulos_permitidos)}")
+    st.stop()
 
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
