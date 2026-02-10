@@ -186,6 +186,10 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
                 # Tentar converter para datetime com dayfirst=True (padrão brasileiro)
                 data_venc = pd.to_datetime(data_venc_str, errors='coerce', dayfirst=True)
                 
+                # Normalizar para meia-noite (remove qualquer componente de hora)
+                if pd.notna(data_venc):
+                    data_venc = data_venc.normalize() if hasattr(data_venc, 'normalize') else data_venc.replace(hour=0, minute=0, second=0, microsecond=0)
+                
                 # Validar se a data é válida e razoável
                 if pd.notna(data_venc):
                     # Verificar se a data está dentro de um intervalo razoável (ano entre 2020 e 2030)
@@ -216,7 +220,11 @@ def processar_dados(df):
         lambda row: row['TotalProduto'] if row['TipoMov'] == 'NF Venda' else -row['TotalProduto'],
         axis=1
     )
-    df['DataEmissao'] = pd.to_datetime(df['DataEmissao'], errors='coerce')
+    # Converter DataEmissao com formato brasileiro e normalizar para meia-noite
+    df['DataEmissao'] = pd.to_datetime(df['DataEmissao'], errors='coerce', dayfirst=True)
+    # Normalizar para meia-noite (remove hora) para cálculos corretos de dias
+    df['DataEmissao'] = df['DataEmissao'].dt.normalize()
+    
     df['Mes'] = df['DataEmissao'].dt.month
     df['Ano'] = df['DataEmissao'].dt.year
     df['MesAno'] = df['DataEmissao'].dt.to_period('M').astype(str)
