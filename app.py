@@ -231,6 +231,37 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
     except:
         return ''
 
+def calcular_comissao(preco_unit, preco_ref):
+    """
+    Calcula o percentual de comissão com base no desvio do PrecoUnit em relação ao preço de referência.
+    
+    Regras:
+    - PrecoUnit >= 6% ACIMA  do preço ref → 4%
+    - PrecoUnit == preço ref (0% desconto) → 3%
+    - PrecoUnit até 3% ABAIXO do preço ref → 2,5%
+    - PrecoUnit mais de 3% ABAIXO do preço ref → 2%
+    """
+    try:
+        if pd.isna(preco_unit) or pd.isna(preco_ref) or preco_ref == 0:
+            return ''
+        
+        preco_unit = float(preco_unit)
+        preco_ref = float(preco_ref)
+        
+        # Calcular variação percentual: positivo = acima, negativo = abaixo
+        variacao = ((preco_unit - preco_ref) / preco_ref) * 100
+        
+        if variacao >= 6:
+            return '4%'
+        elif variacao >= 0:
+            return '3%'
+        elif variacao >= -3:
+            return '2,5%'
+        else:
+            return '2%'
+    except:
+        return ''
+
 @st.cache_data
 def processar_dados(df):
     """Aplica as regras de negócio nos dados"""
@@ -379,6 +410,41 @@ if df is None:
 
 df = processar_dados(df)
 st.success(f"✅ Dados de vendas carregados: ({len(df):,} registros)")
+
+# Carregar planilha de produtos para cálculo de comissão
+if planilhas_disponiveis.get('produtos_agrupados'):
+    with st.spinner("📥 Carregando tabela de preços de referência..."):
+        df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+    
+    if df_ref_preco is not None:
+        df_ref_preco.columns = df_ref_preco.columns.str.upper()
+        
+        # Verificar se as colunas necessárias existem
+        if 'ID_COD' in df_ref_preco.columns and 'PRECO' in df_ref_preco.columns:
+            # Manter apenas código e preço de referência
+            df_ref_preco = df_ref_preco[['ID_COD', 'PRECO']].rename(
+                columns={'ID_COD': 'CodigoProduto', 'PRECO': 'PrecoRef'}
+            )
+            # Garantir tipos compatíveis para o merge
+            df['CodigoProduto'] = df['CodigoProduto'].astype(str).str.strip()
+            df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].astype(str).str.strip()
+            # Remover duplicatas (manter primeiro preço por produto)
+            df_ref_preco = df_ref_preco.drop_duplicates(subset=['CodigoProduto'], keep='first')
+            # Fazer join com o df principal
+            df = df.merge(df_ref_preco, on='CodigoProduto', how='left')
+            # Calcular comissão para cada linha
+            df['Comissao'] = df.apply(
+                lambda row: calcular_comissao(row['PrecoUnit'], row['PrecoRef']),
+                axis=1
+            )
+        else:
+            df['PrecoRef'] = None
+            df['Comissao'] = ''
+            colunas_encontradas = df_ref_preco.columns.tolist()
+            st.warning(f"⚠️ Coluna 'PRECO' ou 'ID_COD' não encontrada na planilha de produtos. Colunas disponíveis: {colunas_encontradas}")
+else:
+    df['PrecoRef'] = None
+    df['Comissao'] = ''
 
 # ====================== SIDEBAR - FILTROS GLOBAIS ======================
 st.sidebar.header("🔍 Filtros Globais")
@@ -1185,10 +1251,12 @@ elif menu == "Histórico":
                 
                 st.subheader("📋 Detalhamento de Produtos")
                 
-                # Verificar se PrazoHistorico existe no dataframe
+                # Verificar se PrazoHistorico e Comissao existem no dataframe
                 colunas_display = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
                 if 'PrazoHistorico' in historico.columns:
                     colunas_display.append('PrazoHistorico')
+                if 'Comissao' in historico.columns:
+                    colunas_display.append('Comissao')
                 
                 historico_display = historico[colunas_display].copy()
                 historico_display['DataEmissao'] = historico_display['DataEmissao'].dt.strftime('%d/%m/%Y')
@@ -1210,6 +1278,8 @@ elif menu == "Histórico":
                 }
                 if 'PrazoHistorico' in historico_display.columns:
                     colunas_rename['PrazoHistorico'] = 'Prazo (dias)'
+                if 'Comissao' in historico_display.columns:
+                    colunas_rename['Comissao'] = 'Comissão%'
                 
                 historico_display = historico_display.rename(columns=colunas_rename)
                 
