@@ -251,9 +251,9 @@ def calcular_comissao(preco_unit, preco_ref):
         # Calcular variação percentual: positivo = acima, negativo = abaixo
         variacao = ((preco_unit - preco_ref) / preco_ref) * 100
         
-        if variacao >= 5.99:    # Aceita 6% com margem de erro
+        if variacao >= 5.99:    # Garante os 4% mesmo com arredondamento
             return '4%'
-        elif variacao >= -0.01:  # Aceita valores iguais ou minimamente abaixo de 0
+        elif variacao >= -0.01:  # Garante os 3% (aceita variação zero ou quase zero)
             return '3%'
         elif variacao >= -3:
             return '2,5%'
@@ -428,6 +428,7 @@ if planilhas_disponiveis.get('produtos_agrupados'):
             # Garantir tipos compatíveis para o merge
             # --- NOVA NORMALIZAÇÃO PARA CORRIGIR O MATCH ---
             # Converte para string e remove o ".0" do final (ex: '3.0' vira '3')
+            # Limpeza robusta: remove ".0" do final e espaços em branco
             df['CodigoProduto'] = df['CodigoProduto'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             # -----------------------------------------------
@@ -1797,5 +1798,6 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
 
