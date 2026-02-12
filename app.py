@@ -419,6 +419,9 @@ if planilhas_disponiveis.get('produtos_agrupados'):
     if df_ref_preco is not None:
         df_ref_preco.columns = df_ref_preco.columns.str.upper()
         
+        # DIAGNÓSTICO - mostrar colunas encontradas
+        st.info(f"🔍 Colunas na planilha de produtos: {list(df_ref_preco.columns)}")
+        
         # Verificar se as colunas necessárias existem
         if 'ID_COD' in df_ref_preco.columns and 'PRECO' in df_ref_preco.columns:
             # Manter apenas código e preço de referência
@@ -428,20 +431,40 @@ if planilhas_disponiveis.get('produtos_agrupados'):
             # Garantir tipos compatíveis para o merge
             df['CodigoProduto'] = df['CodigoProduto'].astype(str).str.strip()
             df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].astype(str).str.strip()
+            
+            # DIAGNÓSTICO - mostrar exemplos dos códigos de cada planilha
+            st.info(f"🔍 Exemplos CodigoProduto em VENDAS: {df['CodigoProduto'].dropna().unique()[:5].tolist()}")
+            st.info(f"🔍 Exemplos CodigoProduto em PRODUTOS: {df_ref_preco['CodigoProduto'].dropna().unique()[:5].tolist()}")
+            
             # Remover duplicatas (manter primeiro preço por produto)
             df_ref_preco = df_ref_preco.drop_duplicates(subset=['CodigoProduto'], keep='first')
             # Fazer join com o df principal
             df = df.merge(df_ref_preco, on='CodigoProduto', how='left')
+            
+            # DIAGNÓSTICO - quantos matches ocorreram
+            matches = df['PrecoRef'].notna().sum()
+            total = len(df)
+            st.info(f"🔍 Match após merge: {matches}/{total} linhas com PrecoRef preenchido")
+            
             # Calcular comissão para cada linha
             df['Comissao'] = df.apply(
                 lambda row: calcular_comissao(row['PrecoUnit'], row['PrecoRef']),
                 axis=1
             )
+            
+            # DIAGNÓSTICO - quantas comissões foram calculadas
+            comissoes = df['Comissao'].replace('', None).notna().sum()
+            st.info(f"🔍 Comissões calculadas: {comissoes}/{total} linhas")
+            
+            # DIAGNÓSTICO - amostra dos valores
+            if 'PrecoUnit' in df.columns:
+                amostra = df[['CodigoProduto', 'PrecoUnit', 'PrecoRef', 'Comissao']].dropna(subset=['PrecoRef']).head(3)
+                st.info(f"🔍 Amostra:\n{amostra.to_string()}")
         else:
             df['PrecoRef'] = None
             df['Comissao'] = ''
             colunas_encontradas = df_ref_preco.columns.tolist()
-            st.warning(f"⚠️ Coluna 'PRECO' ou 'ID_COD' não encontrada na planilha de produtos. Colunas disponíveis: {colunas_encontradas}")
+            st.warning(f"⚠️ Coluna 'PRECO' ou 'ID_COD' não encontrada. Colunas disponíveis: {colunas_encontradas}")
 else:
     df['PrecoRef'] = None
     df['Comissao'] = ''
