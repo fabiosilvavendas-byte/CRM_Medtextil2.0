@@ -429,8 +429,11 @@ if planilhas_disponiveis.get('produtos_agrupados'):
                 columns={'ID_COD': 'CodigoProduto', 'PRECO': 'PrecoRef'}
             )
             # Garantir tipos compatíveis para o merge
-            df['CodigoProduto'] = df['CodigoProduto'].astype(str).str.strip()
-            df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].astype(str).str.strip()
+            # --- NOVA NORMALIZAÇÃO PARA CORRIGIR O MATCH ---
+            # Converte para string e remove o ".0" do final (ex: '3.0' vira '3')
+            df['CodigoProduto'] = df['CodigoProduto'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            # -----------------------------------------------
             
             # DIAGNÓSTICO - mostrar exemplos dos códigos de cada planilha
             st.info(f"🔍 Exemplos CodigoProduto em VENDAS: {df['CodigoProduto'].dropna().unique()[:5].tolist()}")
@@ -1817,3 +1820,4 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
