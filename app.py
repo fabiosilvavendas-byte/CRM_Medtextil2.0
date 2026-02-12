@@ -251,9 +251,9 @@ def calcular_comissao(preco_unit, preco_ref):
         # Calcular variação percentual: positivo = acima, negativo = abaixo
         variacao = ((preco_unit - preco_ref) / preco_ref) * 100
         
-        if variacao >= 5.99: # Tolerância para os 6%
+        if variacao >= 5.99:    # Aceita 6% com margem de erro
             return '4%'
-        elif variacao >= -0.01: # Tolerância para o "igual" (0%)
+        elif variacao >= -0.01:  # Aceita valores iguais ou minimamente abaixo de 0
             return '3%'
         elif variacao >= -3:
             return '2,5%'
@@ -1797,4 +1797,5 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+
 
