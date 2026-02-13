@@ -1263,6 +1263,15 @@ elif menu == "Histórico":
                 
                 st.subheader("📋 Detalhamento de Produtos")
                 
+                # DIAGNÓSTICO TEMPORÁRIO
+                if 'Comissao' in historico.columns:
+                    amostra = historico[['CodigoProduto', 'PrecoUnit', 'PrecoRef', 'Comissao']].head(5)
+                    st.info(f"🔍 DEBUG Comissão:\n{amostra.to_string()}")
+                    st.info(f"🔍 Tipo PrecoUnit: {historico['PrecoUnit'].dtype} | Tipo PrecoRef: {historico['PrecoRef'].dtype if 'PrecoRef' in historico.columns else 'SEM COLUNA'}")
+                    st.info(f"🔍 Comissões vazias: {(historico['Comissao'] == '').sum()} de {len(historico)}")
+                else:
+                    st.warning("🔍 Coluna Comissao NÃO existe no historico")
+                
                 # Verificar se PrazoHistorico e Comissao existem no dataframe
                 colunas_display = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
                 if 'PrazoHistorico' in historico.columns:
