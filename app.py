@@ -251,9 +251,9 @@ def calcular_comissao(preco_unit, preco_ref):
         # Calcular variação percentual: positivo = acima, negativo = abaixo
         variacao = ((preco_unit - preco_ref) / preco_ref) * 100
         
-        if variacao >= 5.99:    # Aceita 6% com margem de erro
+        if variacao >= 6:
             return '4%'
-        elif variacao >= -0.01:  # Aceita igualdade (0%) com margem de erro
+        elif variacao >= 0:
             return '3%'
         elif variacao >= -3:
             return '2,5%'
@@ -425,13 +425,17 @@ if planilhas_disponiveis.get('produtos_agrupados'):
             df_ref_preco = df_ref_preco[['ID_COD', 'PRECO']].rename(
                 columns={'ID_COD': 'CodigoProduto', 'PRECO': 'PrecoRef'}
             )
-            # Garantir tipos compatíveis para o merge
-            # --- NOVA NORMALIZAÇÃO PARA CORRIGIR O MATCH ---
-            # Converte para string e remove o ".0" do final (ex: '3.0' vira '3')
-            # Limpeza que remove o ".0" e garante que o cruzamento ocorra
-            df['CodigoProduto'] = df['CodigoProduto'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-            df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-            # -----------------------------------------------
+            # Normalizar código para inteiro em ambas as planilhas
+            # Vendas tem '3.0' e Produtos tem '3' — converter os dois para int como string
+            def normalizar_codigo(val):
+                try:
+                    return str(int(float(str(val).strip())))
+                except:
+                    return str(val).strip()
+            
+            df['CodigoProduto'] = df['CodigoProduto'].apply(normalizar_codigo)
+            df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].apply(normalizar_codigo)
+            
             # Remover duplicatas (manter primeiro preço por produto)
             df_ref_preco = df_ref_preco.drop_duplicates(subset=['CodigoProduto'], keep='first')
             # Fazer join com o df principal
@@ -445,7 +449,7 @@ if planilhas_disponiveis.get('produtos_agrupados'):
             df['PrecoRef'] = None
             df['Comissao'] = ''
             colunas_encontradas = df_ref_preco.columns.tolist()
-            st.warning(f"⚠️ Coluna 'PRECO' ou 'ID_COD' não encontrada na planilha de produtos. Colunas disponíveis: {colunas_encontradas}")
+            st.warning(f"⚠️ Coluna 'PRECO' ou 'ID_COD' não encontrada. Colunas disponíveis: {colunas_encontradas}")
 else:
     df['PrecoRef'] = None
     df['Comissao'] = ''
@@ -1798,7 +1802,3 @@ elif menu == "Rankings":
 
 st.markdown("---")
 st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
-
-
-
-
