@@ -237,27 +237,31 @@ def calcular_comissao(preco_unit, preco_ref):
     
     Regras:
     - PrecoUnit >= 6% ACIMA  do preço ref → 4%
-    - PrecoUnit == preço ref (0% desconto) → 3%
+    - PrecoUnit igual ao preço ref (0% desconto) → 3%
     - PrecoUnit até 3% ABAIXO do preço ref → 2,5%
-    - PrecoUnit mais de 3% ABAIXO do preço ref → 2%
+    - PrecoUnit 3% ou mais ABAIXO do preço ref → 2%
     """
     try:
         if pd.isna(preco_unit) or pd.isna(preco_ref) or preco_ref == 0:
             return ''
         
         preco_unit = float(preco_unit)
-        preco_ref = float(preco_ref)
+        preco_ref  = float(preco_ref)
         
-        # Calcular variação percentual: positivo = acima, negativo = abaixo
-        variacao = ((preco_unit - preco_ref) / preco_ref) * 100
+        # Arredondar para 2 casas decimais (centavos) antes de comparar
+        # Elimina ruído de ponto flutuante sem distorcer valores reais
+        preco_unit = round(preco_unit, 2)
+        preco_ref  = round(preco_ref,  2)
         
-        if variacao >= 6:
+        variacao = round(((preco_unit - preco_ref) / preco_ref) * 100, 4)
+        
+        if variacao >= 6:     # >= 6% acima → 4%
             return '4%'
-        elif variacao >= 0:
+        elif variacao >= 0:   # >= 0% (igual ou acima) → 3%
             return '3%'
-        elif variacao >= -3:
+        elif variacao > -3:   # Entre 0% e -3% → 2,5%
             return '2,5%'
-        else:
+        else:                 # -3% ou mais abaixo → 2%
             return '2%'
     except:
         return ''
