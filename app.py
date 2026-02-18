@@ -61,6 +61,7 @@ def listar_planilhas_github():
             'inadimplencia': None,
             'vendas_produto': None,
             'produtos_agrupados': None,
+            'pedidos_pendentes': None,
             'todas': []
         }
         
@@ -88,6 +89,10 @@ def listar_planilhas_github():
                 # Identificar planilha de produtos agrupados
                 if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in content.name.upper():
                     planilhas['produtos_agrupados'] = info
+                
+                # Identificar planilha de pedidos pendentes
+                if 'PEDIDOSPENDENTES' in content.name.upper().replace(' ', '').replace('_', ''):
+                    planilhas['pedidos_pendentes'] = info
         
         if not planilhas['todas']:
             st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
@@ -96,7 +101,7 @@ def listar_planilhas_github():
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
-        return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'todas': []}
+        return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
@@ -125,7 +130,7 @@ def check_password():
         "admin123": {
             "tipo": "administrador",
             "nome": "Administrador",
-            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Rankings"]
+            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
         },
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
@@ -523,7 +528,7 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 st.sidebar.markdown("---")
 
 # Mostrar apenas módulos permitidos para o usuário
-modulos_visiveis = modulos_permitidos if modulos_permitidos else ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Rankings"]
+modulos_visiveis = modulos_permitidos if modulos_permitidos else ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
 
 # Definir índice padrão baseado nas permissões
 indice_padrao = 0
@@ -1747,6 +1752,276 @@ elif menu == "Preço Médio":
         "relatorio_preco_medio.xlsx",
         "application/vnd.ms-excel",
         key="download_preco_medio"
+    )
+
+# ====================== PEDIDOS PENDENTES ======================
+elif menu == "Pedidos Pendentes":
+    st.header("📦 Pedidos Pendentes de Faturamento")
+    
+    # Verificar se a planilha existe
+    if not planilhas_disponiveis.get('pedidos_pendentes'):
+        st.error("❌ Planilha 'PEDIDOSPENDENTES.xlsx' não encontrada")
+        st.info("💡 Adicione no GitHub um arquivo com 'PEDIDOSPENDENTES' no nome")
+        st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
+        st.stop()
+    
+    # Carregar planilha
+    with st.spinner("📥 Carregando pedidos pendentes..."):
+        try:
+            import zipfile
+            import xml.etree.ElementTree as ET
+            from io import BytesIO
+            
+            # Baixar arquivo
+            response = requests.get(planilhas_disponiveis['pedidos_pendentes']['url'])
+            excel_file = BytesIO(response.content)
+            
+            # Extrair shared strings
+            with zipfile.ZipFile(excel_file) as z:
+                with z.open('xl/sharedStrings.xml') as f:
+                    strings_tree = ET.parse(f)
+                    ns_str = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                    shared_strings = [si.text if si.text else '' for si in strings_tree.findall('.//ss:t', ns_str)]
+                
+                # Extrair sheet
+                with z.open('xl/worksheets/sheet1.xml') as f:
+                    sheet_tree = ET.parse(f)
+                    ns = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                    
+                    # Parsear dados
+                    data = []
+                    current_client = None
+                    current_pedido = None
+                    
+                    for row in sheet_tree.findall('.//ss:row', ns):
+                        row_data = {}
+                        for cell in row.findall('.//ss:c', ns):
+                            ref = cell.get('r', '')
+                            col = ''.join([c for c in ref if c.isalpha()])
+                            v_elem = cell.find('.//ss:v', ns)
+                            if v_elem is not None and v_elem.text:
+                                val_type = cell.get('t', 'n')
+                                if val_type == 's':
+                                    idx = int(v_elem.text)
+                                    value = shared_strings[idx] if idx < len(shared_strings) else v_elem.text
+                                else:
+                                    value = v_elem.text
+                                row_data[col] = value
+                        
+                        if not row_data:
+                            continue
+                        
+                        # Detectar tipo de linha
+                        col_a = row_data.get('A', '')
+                        col_b = row_data.get('B', '')
+                        
+                        # Linha de cliente (apenas coluna A preenchida com nome)
+                        if col_a and not col_b and 'N° do pedido' not in col_a and 'Valor Total' not in col_a and col_a != 'Subgrupo:':
+                            current_client = col_a
+                        
+                        # Linha de pedido (tem "N° do pedido:")
+                        elif 'N° do pedido' in col_a:
+                            current_pedido = col_b
+                            
+                            # Extrair dados do produto
+                            descricao = row_data.get('C', '')
+                            if descricao and ' - ' in descricao:
+                                # Extrair código do produto (ex: "476 - ATADURA...")
+                                codigo_produto = descricao.split(' - ')[0].strip()
+                                
+                                try:
+                                    qtd_contratada = float(row_data.get('D', 0))
+                                    valor_unit = float(row_data.get('E', 0))  # Corrigido: E é o valor unitário
+                                    qtd_entregue = float(row_data.get('H', 0))  # Corrigido: H é qtd entregue
+                                    qtd_pendente = qtd_contratada - qtd_entregue
+                                    valor_pendente = qtd_pendente * valor_unit
+                                    
+                                    # Converter data de emissão (coluna G)
+                                    dt_emissao_val = row_data.get('G', '')
+                                    if dt_emissao_val:
+                                        try:
+                                            # Data vem como número (days since 1900)
+                                            dt_emissao = pd.Timestamp('1899-12-30') + pd.Timedelta(days=float(dt_emissao_val))
+                                        except:
+                                            dt_emissao = None
+                                    else:
+                                        dt_emissao = None
+                                    
+                                    data.append({
+                                        'Cliente': current_client,
+                                        'NumeroPedido': current_pedido,
+                                        'CodigoProduto': codigo_produto,
+                                        'Descricao': descricao,
+                                        'QtdContratada': qtd_contratada,
+                                        'QtdEntregue': qtd_entregue,
+                                        'QtdPendente': qtd_pendente,
+                                        'ValorUnit': valor_unit,
+                                        'ValorPendente': valor_pendente,
+                                        'DataEmissao': dt_emissao,
+                                        'Vendedor': row_data.get('J', ''),  # Corrigido: J é o vendedor
+                                        'PercEntregue': float(row_data.get('I', 0))  # Corrigido: I é % entregue
+                                    })
+                                except:
+                                    continue
+            
+            df_pendentes = pd.DataFrame(data)
+            
+            if len(df_pendentes) == 0:
+                st.warning("⚠️ Nenhum pedido pendente encontrado na planilha")
+                st.stop()
+            
+            st.success(f"✅ {len(df_pendentes):,} itens pendentes carregados")
+            
+        except Exception as e:
+            st.error(f"❌ Erro ao processar planilha: {str(e)}")
+            st.stop()
+    
+    st.markdown("---")
+    
+    # Filtros
+    st.subheader("🔍 Filtros")
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    
+    with col_f1:
+        clientes_pend = ['Todos'] + sorted(df_pendentes['Cliente'].dropna().unique().tolist())
+        cliente_pend_filtro = st.selectbox("Cliente", clientes_pend, key="cli_pend")
+    
+    with col_f2:
+        vendedores_pend = ['Todos'] + sorted(df_pendentes['Vendedor'].dropna().unique().tolist())
+        vendedor_pend_filtro = st.selectbox("Vendedor", vendedores_pend, key="vend_pend")
+    
+    with col_f3:
+        busca_produto = st.text_input("🔍 Buscar Produto", placeholder="Digite código ou descrição", key="busca_prod_pend")
+    
+    with col_f4:
+        apenas_pendentes = st.checkbox("Apenas com pendência", value=True, key="apenas_pend")
+    
+    # Aplicar filtros
+    df_pend_filtrado = df_pendentes.copy()
+    
+    if cliente_pend_filtro != 'Todos':
+        df_pend_filtrado = df_pend_filtrado[df_pend_filtrado['Cliente'] == cliente_pend_filtro]
+    if vendedor_pend_filtro != 'Todos':
+        df_pend_filtrado = df_pend_filtrado[df_pend_filtrado['Vendedor'] == vendedor_pend_filtro]
+    if busca_produto:
+        df_pend_filtrado = df_pend_filtrado[
+            df_pend_filtrado['CodigoProduto'].str.contains(busca_produto, case=False, na=False) |
+            df_pend_filtrado['Descricao'].str.contains(busca_produto, case=False, na=False)
+        ]
+    if apenas_pendentes:
+        df_pend_filtrado = df_pend_filtrado[df_pend_filtrado['QtdPendente'] > 0]
+    
+    st.markdown("---")
+    
+    # Métricas
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_pendente = df_pend_filtrado['ValorPendente'].sum()
+        st.metric("💰 Valor Total Pendente", f"R$ {total_pendente:,.2f}")
+    
+    with col2:
+        qtd_pendente = df_pend_filtrado['QtdPendente'].sum()
+        st.metric("📦 Qtd Total Pendente", f"{qtd_pendente:,.0f}")
+    
+    with col3:
+        pedidos_unicos = df_pend_filtrado['NumeroPedido'].nunique()
+        st.metric("📋 Pedidos Únicos", f"{pedidos_unicos:,}")
+    
+    with col4:
+        perc_medio = df_pend_filtrado['PercEntregue'].mean() if len(df_pend_filtrado) > 0 else 0
+        st.metric("📊 % Médio Entregue", f"{perc_medio:.1f}%")
+    
+    st.markdown("---")
+    
+    # Gráficos
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        st.subheader("🏢 Top 10 Clientes - Valor Pendente")
+        top_clientes = df_pend_filtrado.groupby('Cliente')['ValorPendente'].sum().reset_index()
+        top_clientes = top_clientes.sort_values('ValorPendente', ascending=False).head(10)
+        
+        fig_cli = px.bar(
+            top_clientes,
+            x='ValorPendente',
+            y='Cliente',
+            orientation='h',
+            labels={'Cliente': 'Cliente', 'ValorPendente': 'Valor Pendente (R$)'},
+            template='plotly_white',
+            color='ValorPendente',
+            color_continuous_scale='Reds'
+        )
+        st.plotly_chart(fig_cli, use_container_width=True)
+    
+    with col6:
+        st.subheader("👤 Top 10 Vendedores - Valor Pendente")
+        top_vend = df_pend_filtrado.groupby('Vendedor')['ValorPendente'].sum().reset_index()
+        top_vend = top_vend.sort_values('ValorPendente', ascending=False).head(10)
+        
+        fig_vend = px.bar(
+            top_vend,
+            x='ValorPendente',
+            y='Vendedor',
+            orientation='h',
+            labels={'Vendedor': 'Vendedor', 'ValorPendente': 'Valor Pendente (R$)'},
+            template='plotly_white',
+            color='ValorPendente',
+            color_continuous_scale='Oranges'
+        )
+        st.plotly_chart(fig_vend, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Tabela detalhada
+    st.subheader("📋 Detalhamento de Pedidos Pendentes")
+    
+    # Preparar dados para exibição
+    df_pend_display = df_pend_filtrado[[
+        'Cliente', 'NumeroPedido', 'CodigoProduto', 'Descricao', 
+        'QtdContratada', 'QtdEntregue', 'QtdPendente',
+        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor'
+    ]].copy()
+    
+    # Formatar valores
+    df_pend_display['ValorUnit'] = df_pend_display['ValorUnit'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    df_pend_display['ValorPendente'] = df_pend_display['ValorPendente'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    df_pend_display['DataEmissao'] = df_pend_display['DataEmissao'].apply(
+        lambda x: x.strftime('%d/%m/%Y') if pd.notnull(x) else ''
+    )
+    df_pend_display['PercEntregue'] = df_pend_display['PercEntregue'].apply(
+        lambda x: f"{x:.1f}%" if pd.notnull(x) else "0%"
+    )
+    
+    # Renomear colunas
+    df_pend_display = df_pend_display.rename(columns={
+        'Cliente': 'Cliente',
+        'NumeroPedido': 'N° Pedido',
+        'CodigoProduto': 'Código',
+        'Descricao': 'Descrição',
+        'QtdContratada': 'Qtd Contratada',
+        'QtdEntregue': 'Qtd Entregue',
+        'QtdPendente': 'Qtd Pendente',
+        'ValorUnit': 'Valor Unit.',
+        'ValorPendente': 'Valor Pendente',
+        'PercEntregue': '% Entregue',
+        'DataEmissao': 'Data Emissão',
+        'Vendedor': 'Vendedor'
+    })
+    
+    st.dataframe(df_pend_display, use_container_width=True, height=400)
+    
+    # Botão de download
+    st.download_button(
+        "📥 Exportar Pedidos Pendentes",
+        to_excel(df_pend_filtrado),
+        "pedidos_pendentes.xlsx",
+        "application/vnd.ms-excel",
+        key="download_pendentes"
     )
 
 # ====================== RANKINGS ======================
