@@ -320,15 +320,27 @@ def formatar_dataframe_moeda(df, colunas_moeda):
 def processar_inadimplencia(df):
     """Processa dados de inadimplência"""
     # Padronizar nomes das colunas
-    df = df.rename(columns={
+    # Tentar várias variações de nomes de colunas
+    rename_map = {
         'Funcionário': 'Vendedor',
         'Razão Social': 'Cliente',
         'N_Doc': 'NumeroDoc',
+        'N Doc': 'NumeroDoc',
+        'NDoc': 'NumeroDoc',
+        'Numero Doc': 'NumeroDoc',
         'Dt.Vencimento': 'DataVencimento',
+        'Dt Vencimento': 'DataVencimento',
+        'Data Vencimento': 'DataVencimento',
         'Vr.Líquido': 'ValorLiquido',
+        'Vr Líquido': 'ValorLiquido',
+        'Valor Líquido': 'ValorLiquido',
+        'Valor Liquido': 'ValorLiquido',
         'Conta/Caixa': 'Banco',
+        'Conta Caixa': 'Banco',
         'UF': 'Estado'
-    })
+    }
+    
+    df = df.rename(columns=rename_map)
     
     # Converter data de vencimento
     df['DataVencimento'] = pd.to_datetime(df['DataVencimento'], errors='coerce')
@@ -983,6 +995,17 @@ elif menu == "Inadimplência":
         
         with col7:
             st.subheader("👤 Top 10 Vendedores - Inadimplência")
+            
+            # Verificar se as colunas necessárias existem
+            if 'NumeroDoc' not in df_inad_filtrado.columns:
+                # Tentar encontrar coluna alternativa
+                possiveis_nomes = [col for col in df_inad_filtrado.columns if 'DOC' in col.upper() or 'NUMERO' in col.upper()]
+                if possiveis_nomes:
+                    df_inad_filtrado['NumeroDoc'] = df_inad_filtrado[possiveis_nomes[0]]
+                else:
+                    # Criar coluna fake apenas para não quebrar
+                    df_inad_filtrado['NumeroDoc'] = 1
+            
             inad_por_vendedor = df_inad_filtrado.groupby('Vendedor').agg({
                 'ValorLiquido': 'sum',
                 'NumeroDoc': 'count'
