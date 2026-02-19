@@ -135,7 +135,7 @@ def check_password():
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
             "nome": "Colaborador",
-            "modulos": ["Inadimplência", "Histórico"]
+            "modulos": ["Inadimplência", "Histórico", "Pedidos Pendentes"]
         }
     }
     
@@ -307,6 +307,47 @@ def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Dados')
+    return output.getvalue()
+
+def to_excel_pedidos_pendentes(df):
+    """Converte DataFrame de pedidos pendentes para Excel com abas por tipo de produto"""
+    output = io.BytesIO()
+    
+    # Função para identificar tipo de produto pela descrição
+    def identificar_tipo(descricao):
+        if pd.isna(descricao):
+            return 'OUTROS'
+        
+        descricao_upper = str(descricao).upper()
+        
+        if 'ATADURA' in descricao_upper:
+            return 'ATADURAS'
+        elif 'CAMPO' in descricao_upper:
+            return 'CAMPO'
+        elif 'GAZE' in descricao_upper and 'ROLO' in descricao_upper:
+            return 'GAZE EM ROLO'
+        elif 'NAO ESTERIL' in descricao_upper or 'NÃO ESTERIL' in descricao_upper or 'NÃO ESTÉRIL' in descricao_upper or 'NAO ESTÉRIL' in descricao_upper:
+            return 'NÃO ESTERIL'
+        elif 'ESTERIL' in descricao_upper or 'ESTÉRIL' in descricao_upper:
+            return 'ESTERIL'
+        else:
+            return 'OUTROS'
+    
+    # Adicionar coluna de tipo
+    df_export = df.copy()
+    df_export['TipoProduto'] = df_export['Descricao'].apply(identificar_tipo)
+    
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        # Definir ordem das abas
+        tipos_ordem = ['ATADURAS', 'CAMPO', 'ESTERIL', 'NÃO ESTERIL', 'GAZE EM ROLO', 'OUTROS']
+        
+        for tipo in tipos_ordem:
+            df_tipo = df_export[df_export['TipoProduto'] == tipo].copy()
+            if len(df_tipo) > 0:
+                # Remover coluna TipoProduto antes de exportar
+                df_tipo = df_tipo.drop(columns=['TipoProduto'])
+                df_tipo.to_excel(writer, index=False, sheet_name=tipo)
+    
     return output.getvalue()
 
 def formatar_moeda(valor):
@@ -2017,8 +2058,8 @@ elif menu == "Pedidos Pendentes":
     
     # Botão de download
     st.download_button(
-        "📥 Exportar Pedidos Pendentes",
-        to_excel(df_pend_filtrado),
+        "📥 Exportar Pedidos Pendentes (Separado por Tipo)",
+        to_excel_pedidos_pendentes(df_pend_filtrado),
         "pedidos_pendentes.xlsx",
         "application/vnd.ms-excel",
         key="download_pendentes"
