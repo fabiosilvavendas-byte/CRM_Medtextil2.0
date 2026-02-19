@@ -333,16 +333,21 @@ def to_excel_pedidos_pendentes(df):
         else:
             return 'OUTROS'
     
+    # Função para identificar se é HOSPITALAR ou FARMA (apenas para ATADURAS)
+    def identificar_categoria(descricao, tipo):
+        if tipo == 'ATADURAS':
+            if pd.notna(descricao) and 'HOSP' in str(descricao).upper():
+                return 'HOSPITALAR'
+            else:
+                return 'FARMA'
+        return ''
+    
     # Adicionar coluna de tipo
     df_export = df.copy()
     df_export['TipoProduto'] = df_export['Descricao'].apply(identificar_tipo)
+    df_export['Categoria'] = df_export.apply(lambda row: identificar_categoria(row['Descricao'], row['TipoProduto']), axis=1)
     
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        
-        # Formatar para negrito (título de seções)
-        bold_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3'})
-        
         # Definir ordem das abas
         tipos_ordem = ['ATADURAS', 'CAMPO', 'ESTERIL', 'NÃO ESTERIL', 'GAZE EM ROLO', 'OUTROS']
         
@@ -350,54 +355,19 @@ def to_excel_pedidos_pendentes(df):
             df_tipo = df_export[df_export['TipoProduto'] == tipo].copy()
             
             if len(df_tipo) > 0:
-                # Remover coluna TipoProduto antes de exportar
-                df_tipo = df_tipo.drop(columns=['TipoProduto'])
-                
-                # Para ATADURAS, separar por HOSPITALAR e FARMA
+                # Para ATADURAS, ordenar por Categoria (HOSPITALAR primeiro)
                 if tipo == 'ATADURAS':
-                    # Separar em grupos
-                    df_hospitalar = df_tipo[df_tipo['Descricao'].str.contains('HOSP', case=False, na=False)]
-                    df_farma = df_tipo[~df_tipo['Descricao'].str.contains('HOSP', case=False, na=False)]
-                    
-                    # Criar sheet
-                    df_tipo.to_excel(writer, index=False, sheet_name=tipo, startrow=0)
-                    worksheet = writer.sheets[tipo]
-                    
-                    # Reorganizar: primeiro HOSPITALAR, depois linha vazia, depois FARMA
-                    row = 0
-                    
-                    # Cabeçalho geral
-                    for col_num, value in enumerate(df_tipo.columns.values):
-                        worksheet.write(row, col_num, value, bold_format)
-                    row += 1
-                    
-                    if len(df_hospitalar) > 0:
-                        # Título HOSPITALAR
-                        worksheet.write(row, 0, '=== HOSPITALAR ===', bold_format)
-                        row += 1
-                        
-                        # Dados HOSPITALAR
-                        for _, data_row in df_hospitalar.iterrows():
-                            for col_num, value in enumerate(data_row):
-                                worksheet.write(row, col_num, value)
-                            row += 1
-                        
-                        # Linha vazia
-                        row += 1
-                    
-                    if len(df_farma) > 0:
-                        # Título FARMA
-                        worksheet.write(row, 0, '=== FARMA ===', bold_format)
-                        row += 1
-                        
-                        # Dados FARMA
-                        for _, data_row in df_farma.iterrows():
-                            for col_num, value in enumerate(data_row):
-                                worksheet.write(row, col_num, value)
-                            row += 1
-                else:
-                    # Para outros tipos, exportar normalmente
-                    df_tipo.to_excel(writer, index=False, sheet_name=tipo)
+                    df_tipo = df_tipo.sort_values('Categoria')
+                
+                # Remover colunas auxiliares antes de exportar
+                colunas_para_remover = ['TipoProduto']
+                # Manter coluna Categoria apenas para ATADURAS
+                if tipo != 'ATADURAS':
+                    colunas_para_remover.append('Categoria')
+                
+                df_tipo = df_tipo.drop(columns=[col for col in colunas_para_remover if col in df_tipo.columns])
+                
+                df_tipo.to_excel(writer, index=False, sheet_name=tipo)
     
     return output.getvalue()
 
