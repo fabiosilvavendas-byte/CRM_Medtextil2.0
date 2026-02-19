@@ -324,7 +324,7 @@ def to_excel_pedidos_pendentes(df):
             return 'ATADURAS'
         elif 'CAMPO' in descricao_upper:
             return 'CAMPO'
-        elif 'GAZE' in descricao_upper and 'ROLO' in descricao_upper:
+        elif ('GAZE' in descricao_upper and 'ROLO' in descricao_upper) or ('GAZE' in descricao_upper and 'CIRCULAR' in descricao_upper):
             return 'GAZE EM ROLO'
         elif 'NAO ESTERIL' in descricao_upper or 'NÃO ESTERIL' in descricao_upper or 'NÃO ESTÉRIL' in descricao_upper or 'NAO ESTÉRIL' in descricao_upper:
             return 'NÃO ESTERIL'
