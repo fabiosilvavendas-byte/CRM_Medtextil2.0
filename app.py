@@ -236,6 +236,204 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
     except:
         return ''
 
+def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
+    """Gera PDF do pedido no formato da Medtextil"""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Estilo customizado
+    style_title = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#1f4788'),
+        spaceAfter=12,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    style_normal = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=9,
+        fontName='Helvetica'
+    )
+    
+    style_small = ParagraphStyle(
+        'CustomSmall',
+        parent=styles['Normal'],
+        fontSize=8,
+        fontName='Helvetica'
+    )
+    
+    # CABEÇALHO COM LOGO DO GITHUB
+    try:
+        # Buscar logo do GitHub
+        logo_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_FOLDER}/logo.png"
+        response = requests.get(logo_url)
+        if response.status_code == 200:
+            logo_buffer = io.BytesIO(response.content)
+            logo_img = Image(logo_buffer, width=50*mm, height=20*mm)
+            logo_img.hAlign = 'CENTER'
+            elements.append(logo_img)
+            elements.append(Spacer(1, 3*mm))
+        else:
+            # Fallback para texto se logo não encontrado
+            elements.append(Paragraph("<b>MEDTEXTIL</b><br/>produto têxtil hospitalar", style_title))
+    except:
+        # Fallback para texto em caso de erro
+        elements.append(Paragraph("<b>MEDTEXTIL</b><br/>produto têxtil hospitalar", style_title))
+    
+    elements.append(Paragraph("CNPJ: 40.357.820/0001-50 | Inscrição Estadual: 16.390.286-0", style_small))
+    elements.append(Spacer(1, 10*mm))
+    
+    # REPRESENTANTE
+    data_repr = [[Paragraph("<b>Representante</b>", style_normal), dados_cliente.get('representante', '')]]
+    table_repr = Table(data_repr, colWidths=[40*mm, 150*mm])
+    table_repr.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(table_repr)
+    elements.append(Spacer(1, 3*mm))
+    
+    # INFORMAÇÕES DO CLIENTE
+    data_cliente = [
+        [Paragraph("<b>Informações sobre o Cliente</b>", style_normal), '', '', ''],
+        ['Cliente', dados_cliente.get('razao_social', ''), 'Nome Fantasia:', dados_cliente.get('nome_fantasia', '')],
+        ['CNPJ:', dados_cliente.get('cnpj', ''), 'Inscr. Estadual:', dados_cliente.get('ie', '')],
+        ['Telefone:', dados_cliente.get('telefone', ''), 'Email NF-e:', dados_cliente.get('email', '')],
+        ['Endereço:', dados_cliente.get('endereco', ''), '', ''],
+        ['Observação:', dados_cliente.get('obs_cliente', ''), '', '']
+    ]
+    
+    table_cliente = Table(data_cliente, colWidths=[30*mm, 70*mm, 30*mm, 60*mm])
+    table_cliente.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('INNERGRID', (0, 1), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('SPAN', (0, 0), (-1, 0)),
+        ('SPAN', (1, 4), (-1, 4)),
+        ('SPAN', (1, 5), (-1, 5)),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+    ]))
+    elements.append(table_cliente)
+    elements.append(Spacer(1, 3*mm))
+    
+    # INFORMAÇÕES DO PEDIDO
+    data_pedido_info = [
+        [Paragraph("<b>Informações sobre Pedido Nº</b>", style_normal), dados_pedido.get('numero', ''), 'Tabela de Preço:', dados_pedido.get('tabela_preco', '')],
+        ['Condições de Pagto:', dados_pedido.get('condicoes_pagto', ''), 'Tipo de Frete:', dados_pedido.get('tipo_frete', 'CIF')],
+        ['Data da Venda:', dados_pedido.get('data_venda', ''), '', '']
+    ]
+    
+    table_pedido = Table(data_pedido_info, colWidths=[50*mm, 50*mm, 40*mm, 50*mm])
+    table_pedido.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey),
+        ('SPAN', (0, 0), (0, 0)),
+        ('SPAN', (1, 2), (-1, 2)),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
+    ]))
+    elements.append(table_pedido)
+    elements.append(Spacer(1, 5*mm))
+    
+    # DETALHE DO PEDIDO
+    elements.append(Paragraph("<b>Detalhe do Pedido</b>", style_normal))
+    elements.append(Spacer(1, 2*mm))
+    
+    # Cabeçalho da tabela de itens
+    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA EMB', 'QTDE', 'VALOR', 'TOTAL', 'COMISSÃO%']
+    data_itens = [header_itens]
+    
+    # Adicionar itens
+    for item in itens_pedido:
+        data_itens.append([
+            str(item.get('codigo', '')),
+            str(item.get('descricao', ''))[:50],  # Limitar tamanho
+            str(item.get('peso', '')),
+            str(item.get('cx_embarque', '')),
+            f"{item.get('quantidade', 0):.0f}",
+            f"R$ {item.get('valor_unit', 0):.2f}",
+            f"R$ {item.get('total', 0):.2f}",
+            str(item.get('comissao', ''))
+        ])
+    
+    # Calcular totais
+    total_qtde = sum([item.get('quantidade', 0) for item in itens_pedido])
+    total_valor = sum([item.get('total', 0) for item in itens_pedido])
+    
+    # Linha de total
+    data_itens.append(['', '', '', '', f"{total_qtde:.0f}", '', f"R$ {total_valor:,.2f}", ''])
+    
+    col_widths = [15*mm, 65*mm, 15*mm, 20*mm, 15*mm, 20*mm, 25*mm, 20*mm]
+    table_itens = Table(data_itens, colWidths=col_widths)
+    
+    # Estilo da tabela de itens
+    style_itens = [
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]
+    
+    table_itens.setStyle(TableStyle(style_itens))
+    elements.append(table_itens)
+    elements.append(Spacer(1, 5*mm))
+    
+    # RESUMO FINAL
+    data_resumo = [
+        ['Qtde Itens', 'Frete', 'Total Final'],
+        [f"{total_qtde:.0f}", dados_pedido.get('tipo_frete', 'CIF'), f"R$ {total_valor:,.2f}"]
+    ]
+    
+    table_resumo = Table(data_resumo, colWidths=[60*mm, 60*mm, 70*mm])
+    table_resumo.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(table_resumo)
+    elements.append(Spacer(1, 3*mm))
+    
+    # OBSERVAÇÃO
+    if observacao:
+        elements.append(Paragraph("<b>Observação</b>", style_normal))
+        elements.append(Paragraph(observacao, style_small))
+    
+    # Construir PDF
+    doc.build(elements)
+    
+    buffer.seek(0)
+    return buffer.getvalue()
+
 def calcular_comissao(preco_unit, preco_ref):
     """
     Calcula o percentual de comissão com base no desvio do PrecoUnit em relação ao preço de referência.
@@ -1262,7 +1460,7 @@ elif menu == "Clientes sem Compra":
 elif menu == "Histórico":
     st.header("📜 Histórico de Vendas")
     
-    tab1, tab2 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor"])
+    tab1, tab2, tab3 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor", "📝 Pedidos"])
     
     # ========== ABA: POR CLIENTE ==========
     with tab1:
@@ -1493,6 +1691,264 @@ elif menu == "Histórico":
             )
         else:
             st.info("Nenhuma venda encontrada com os filtros selecionados")
+
+    
+    # ========== ABA: PEDIDOS ==========
+    with tab3:
+        st.subheader("📝 Gerar Pedido/Proposta")
+        
+        # Inicializar session_state para os itens do pedido
+        if 'itens_pedido' not in st.session_state:
+            st.session_state.itens_pedido = []
+        
+        # Carregar dados de produtos se disponível
+        df_produtos_pedido = None
+        if planilhas_disponiveis.get('produtos_agrupados'):
+            with st.spinner("📥 Carregando catálogo de produtos..."):
+                df_produtos_pedido = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                if df_produtos_pedido is not None:
+                    df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
+        
+        # SEÇÃO 1: DADOS DO CLIENTE
+        st.markdown("### 👤 Informações do Cliente")
+        
+        col_cli1, col_cli2 = st.columns(2)
+        
+        with col_cli1:
+            # Buscar cliente
+            clientes_lista = sorted(df['RazaoSocial'].dropna().unique().tolist())
+            cliente_selecionado = st.selectbox("Selecione o Cliente", [''] + clientes_lista, key="cliente_pedido")
+        
+        # Buscar dados do cliente
+        dados_cliente = {}
+        if cliente_selecionado:
+            df_cliente = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
+            dados_cliente = {
+                'razao_social': df_cliente.get('RazaoSocial', ''),
+                'cpf_cnpj': df_cliente.get('CPF_CNPJ', ''),
+                'cidade': df_cliente.get('Cidade', ''),
+                'estado': df_cliente.get('Estado', ''),
+                'vendedor': df_cliente.get('Vendedor', '')
+            }
+        
+        with col_cli2:
+            representante = st.text_input("Representante", value=dados_cliente.get('vendedor', ''), key="representante_pedido")
+        
+        col_cli3, col_cli4, col_cli5 = st.columns(3)
+        
+        with col_cli3:
+            nome_fantasia = st.text_input("Nome Fantasia", value=dados_cliente.get('razao_social', ''), key="fantasia_pedido")
+        
+        with col_cli4:
+            cnpj_pedido = st.text_input("CNPJ", value=dados_cliente.get('cpf_cnpj', ''), key="cnpj_pedido")
+        
+        with col_cli5:
+            insc_estadual = st.text_input("Inscrição Estadual", key="ie_pedido")
+        
+        col_cli6, col_cli7 = st.columns(2)
+        
+        with col_cli6:
+            telefone_pedido = st.text_input("Telefone", key="tel_pedido")
+        
+        with col_cli7:
+            email_pedido = st.text_input("Email NF-e", key="email_pedido")
+        
+        endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade', '')}/{dados_cliente.get('estado', '')}" if dados_cliente else "", key="end_pedido")
+        
+        obs_cliente = st.text_area("Observação (Cliente)", key="obs_cli_pedido", height=80)
+        
+        st.markdown("---")
+        
+        # SEÇÃO 2: DADOS DO PEDIDO
+        st.markdown("### 📋 Informações do Pedido")
+        
+        col_ped1, col_ped2, col_ped3, col_ped4 = st.columns(4)
+        
+        with col_ped1:
+            num_pedido = st.text_input("Nº do Pedido", key="num_pedido")
+        
+        with col_ped2:
+            tabela_preco = st.text_input("Tabela de Preço", key="tab_preco")
+        
+        with col_ped3:
+            tipo_frete = st.selectbox("Tipo de Frete", ["CIF", "FOB"], key="tipo_frete")
+        
+        with col_ped4:
+            data_venda = st.date_input("Data da Venda", value=pd.Timestamp.now(), key="data_venda")
+        
+        condicoes_pagto = st.text_input("Condições de Pagamento", key="cond_pagto")
+        
+        st.markdown("---")
+        
+        # SEÇÃO 3: ADICIONAR PRODUTOS
+        st.markdown("### 🛒 Adicionar Produtos ao Pedido")
+        
+        col_prod1, col_prod2, col_prod3, col_prod4 = st.columns([2, 1, 1, 1])
+        
+        with col_prod1:
+            # Buscar por código ou descrição
+            tipo_busca_prod = st.radio("Buscar por:", ["Código", "Descrição"], horizontal=True, key="tipo_busca_prod")
+            
+            if tipo_busca_prod == "Código":
+                if df_produtos_pedido is not None:
+                    codigos = [''] + sorted(df_produtos_pedido['ID_COD'].dropna().astype(str).unique().tolist())
+                    codigo_selecionado = st.selectbox("Código do Produto", codigos, key="cod_prod_pedido")
+                else:
+                    codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido")
+            else:
+                busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido")
+                codigo_selecionado = None
+        
+        # Buscar informações do produto
+        produto_info = {}
+        if df_produtos_pedido is not None and codigo_selecionado:
+            prod = df_produtos_pedido[df_produtos_pedido['ID_COD'].astype(str) == str(codigo_selecionado)]
+            if len(prod) > 0:
+                prod = prod.iloc[0]
+                # Montar descrição completa
+                descricao_completa = f"{prod.get('GRUPO', '')} {prod.get('DESCRIÇÃO', '') or prod.get('DESCRICAO', '')} {prod.get('LINHA', '') or prod.get('LINHAS', '')}".strip()
+                
+                produto_info = {
+                    'codigo': str(prod.get('ID_COD', '')),
+                    'descricao': descricao_completa,
+                    'peso': prod.get('GRAMATURA', ''),
+                    'cx_embarque': prod.get('CX_EMB', ''),
+                    'preco_ref': prod.get('PRECO', 0)
+                }
+                
+                # Buscar último preço que o cliente comprou
+                if cliente_selecionado:
+                    hist_cliente = df[(df['RazaoSocial'] == cliente_selecionado) & 
+                                     (df['CodigoProduto'].astype(str) == str(codigo_selecionado))]
+                    if len(hist_cliente) > 0:
+                        hist_cliente = hist_cliente.sort_values('DataEmissao', ascending=False)
+                        produto_info['preco_sugerido'] = hist_cliente.iloc[0]['PrecoUnit']
+                    else:
+                        produto_info['preco_sugerido'] = prod.get('PRECO', 0)
+                else:
+                    produto_info['preco_sugerido'] = prod.get('PRECO', 0)
+        
+        with col_prod2:
+            qtde_item = st.number_input("Quantidade", min_value=0, value=0, key="qtde_item_pedido")
+        
+        with col_prod3:
+            valor_item = st.number_input("Valor Unit.", min_value=0.0, value=float(produto_info.get('preco_sugerido', 0)), format="%.2f", key="valor_item_pedido")
+        
+        with col_prod4:
+            st.write("")
+            st.write("")
+            if st.button("➕ Adicionar Item", use_container_width=True, key="add_item_pedido"):
+                if produto_info and qtde_item > 0:
+                    # Calcular comissão
+                    comissao = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
+                    
+                    item = {
+                        'codigo': produto_info['codigo'],
+                        'descricao': produto_info['descricao'],
+                        'peso': produto_info.get('peso', ''),
+                        'cx_embarque': produto_info.get('cx_embarque', ''),
+                        'quantidade': qtde_item,
+                        'valor_unit': valor_item,
+                        'total': qtde_item * valor_item,
+                        'comissao': comissao
+                    }
+                    st.session_state.itens_pedido.append(item)
+                    st.success(f"✅ Item adicionado: {produto_info['descricao']}")
+                    st.rerun()
+        
+        # Mostrar produtos adicionados
+        if st.session_state.itens_pedido:
+            st.markdown("---")
+            st.markdown("### 📦 Itens do Pedido")
+            
+            # Criar DataFrame dos itens
+            df_itens = pd.DataFrame(st.session_state.itens_pedido)
+            
+            # Formatar para exibição
+            df_itens_display = df_itens.copy()
+            df_itens_display['valor_unit'] = df_itens_display['valor_unit'].apply(lambda x: f"R$ {x:,.2f}")
+            df_itens_display['total'] = df_itens_display['total'].apply(lambda x: f"R$ {x:,.2f}")
+            
+            df_itens_display = df_itens_display.rename(columns={
+                'codigo': 'COD.',
+                'descricao': 'PRODUTO',
+                'peso': 'PESO',
+                'cx_embarque': 'CAIXA EMBARQUE',
+                'quantidade': 'QTDE',
+                'valor_unit': 'VALOR',
+                'total': 'TOTAL',
+                'comissao': 'COMISSÃO%'
+            })
+            
+            st.dataframe(df_itens_display, use_container_width=True, height=300)
+            
+            # Métricas do pedido
+            col_met1, col_met2, col_met3 = st.columns(3)
+            
+            with col_met1:
+                total_itens = df_itens['quantidade'].sum()
+                st.metric("Qtde Total de Itens", f"{total_itens:,.0f}")
+            
+            with col_met2:
+                st.metric("Frete", tipo_frete)
+            
+            with col_met3:
+                total_pedido = df_itens['total'].sum()
+                st.metric("Total Final", f"R$ {total_pedido:,.2f}")
+            
+            # Observação final
+            obs_pedido = st.text_area("Observação (Pedido)", key="obs_pedido", height=100)
+            
+            col_btn1, col_btn2 = st.columns(2)
+            
+            with col_btn1:
+                if st.button("🗑️ Limpar Pedido", use_container_width=True, key="limpar_pedido"):
+                    st.session_state.itens_pedido = []
+                    st.rerun()
+            
+            with col_btn2:
+                if st.button("📄 Gerar PDF do Pedido", use_container_width=True, key="gerar_pdf_pedido", type="primary"):
+                    try:
+                        # Preparar dados para o PDF
+                        dados_cliente_pdf = {
+                            'representante': representante,
+                            'razao_social': cliente_selecionado,
+                            'nome_fantasia': nome_fantasia,
+                            'cnpj': cnpj_pedido,
+                            'ie': insc_estadual,
+                            'telefone': telefone_pedido,
+                            'email': email_pedido,
+                            'endereco': endereco_pedido,
+                            'obs_cliente': obs_cliente
+                        }
+                        
+                        dados_pedido_pdf = {
+                            'numero': num_pedido,
+                            'tabela_preco': tabela_preco,
+                            'tipo_frete': tipo_frete,
+                            'data_venda': data_venda.strftime('%d/%m/%Y'),
+                            'condicoes_pagto': condicoes_pagto
+                        }
+                        
+                        # Gerar PDF
+                        pdf_bytes = gerar_pdf_pedido(dados_cliente_pdf, dados_pedido_pdf, st.session_state.itens_pedido, obs_pedido)
+                        
+                        # Botão de download
+                        st.download_button(
+                            label="📥 Baixar PDF do Pedido",
+                            data=pdf_bytes,
+                            file_name=f"Pedido_{num_pedido or 'SN'}_{cliente_selecionado.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            key="download_pdf_pedido"
+                        )
+                        
+                        st.success("✅ PDF gerado com sucesso!")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Erro ao gerar PDF: {str(e)}")
+                        st.info("💡 Certifique-se de que a biblioteca ReportLab está instalada")
+        else:
+            st.info("ℹ️ Nenhum item adicionado ao pedido ainda. Use o formulário acima para adicionar produtos.")
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
