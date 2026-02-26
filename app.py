@@ -277,23 +277,32 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     )
     
     # CABEÇALHO COM LOGO DO GITHUB
+    # Criar tabela para posicionar logo à direita
+    logo_adicionado = False
     try:
         # Buscar logo do GitHub
         logo_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_FOLDER}/logo.png"
         response = requests.get(logo_url)
         if response.status_code == 200:
             logo_buffer = io.BytesIO(response.content)
-            # Manter proporção do logo - altura fixa, largura proporcional
-            logo_img = Image(logo_buffer, height=15*mm)  # Altura fixa de 15mm
-            logo_img.hAlign = 'LEFT'  # Alinhar à esquerda como no modelo
-            elements.append(logo_img)
-            elements.append(Spacer(1, 5*mm))
-        else:
-            # Fallback para texto se logo não encontrado
-            elements.append(Paragraph("<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b>", style_title))
+            # Logo com proporção mantida - largura fixa
+            logo_img = Image(logo_buffer, width=60*mm, height=None)  # Largura fixa, altura proporcional
+            
+            # Criar tabela para alinhar logo à direita
+            logo_table_data = [['', logo_img]]
+            logo_table = Table(logo_table_data, colWidths=[130*mm, 60*mm])
+            logo_table.setStyle(TableStyle([
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            elements.append(logo_table)
             elements.append(Spacer(1, 3*mm))
-    except:
-        # Fallback para texto em caso de erro
+            logo_adicionado = True
+    except Exception as e:
+        pass
+    
+    if not logo_adicionado:
+        # Fallback para texto se logo não encontrado
         elements.append(Paragraph("<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b>", style_title))
         elements.append(Spacer(1, 3*mm))
     
