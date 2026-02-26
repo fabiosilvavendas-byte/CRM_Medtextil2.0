@@ -283,16 +283,19 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         response = requests.get(logo_url)
         if response.status_code == 200:
             logo_buffer = io.BytesIO(response.content)
-            logo_img = Image(logo_buffer, width=50*mm, height=20*mm)
-            logo_img.hAlign = 'CENTER'
+            # Manter proporção do logo - altura fixa, largura proporcional
+            logo_img = Image(logo_buffer, height=15*mm)  # Altura fixa de 15mm
+            logo_img.hAlign = 'LEFT'  # Alinhar à esquerda como no modelo
             elements.append(logo_img)
-            elements.append(Spacer(1, 3*mm))
+            elements.append(Spacer(1, 5*mm))
         else:
             # Fallback para texto se logo não encontrado
-            elements.append(Paragraph("<b>MEDTEXTIL</b><br/>produto têxtil hospitalar", style_title))
+            elements.append(Paragraph("<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b>", style_title))
+            elements.append(Spacer(1, 3*mm))
     except:
         # Fallback para texto em caso de erro
-        elements.append(Paragraph("<b>MEDTEXTIL</b><br/>produto têxtil hospitalar", style_title))
+        elements.append(Paragraph("<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b>", style_title))
+        elements.append(Spacer(1, 3*mm))
     
     elements.append(Paragraph("CNPJ: 40.357.820/0001-50 | Inscrição Estadual: 16.390.286-0", style_small))
     elements.append(Spacer(1, 10*mm))
