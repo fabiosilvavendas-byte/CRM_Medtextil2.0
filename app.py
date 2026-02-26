@@ -276,8 +276,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         fontName='Helvetica'
     )
     
-    # CABEÇALHO COM LOGO DO GITHUB
-    # Criar tabela para posicionar logo à direita
+    # CABEÇALHO - LOGO + INFORMAÇÕES DA EMPRESA (modelo exato)
     logo_adicionado = False
     try:
         # Buscar logo do GitHub
@@ -285,101 +284,116 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         response = requests.get(logo_url)
         if response.status_code == 200:
             logo_buffer = io.BytesIO(response.content)
-            # Logo com proporção mantida - largura fixa
-            logo_img = Image(logo_buffer, width=60*mm, height=None)  # Largura fixa, altura proporcional
+            # Logo pequeno - 30mm de largura, altura proporcional
+            logo_img = Image(logo_buffer, width=30*mm, height=None)
             
-            # Criar tabela para alinhar logo à direita
-            logo_table_data = [['', logo_img]]
-            logo_table = Table(logo_table_data, colWidths=[130*mm, 60*mm])
-            logo_table.setStyle(TableStyle([
-                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            # Texto ao lado do logo (como no modelo)
+            texto_empresa = Paragraph(
+                "<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b><br/>"
+                "<font size=8>CNPJ: 40.357.820/0001-50  Inscrição Estadual: 16.390.286-0</font>",
+                style_normal
+            )
+            
+            # Criar tabela: Logo à esquerda | Texto à direita
+            cabecalho_data = [[logo_img, texto_empresa]]
+            cabecalho_table = Table(cabecalho_data, colWidths=[35*mm, 155*mm])
+            cabecalho_table.setStyle(TableStyle([
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (0, 0), 0),
+                ('RIGHTPADDING', (1, 0), (1, 0), 0),
             ]))
-            elements.append(logo_table)
-            elements.append(Spacer(1, 3*mm))
+            elements.append(cabecalho_table)
+            elements.append(Spacer(1, 5*mm))
             logo_adicionado = True
     except Exception as e:
         pass
     
     if not logo_adicionado:
         # Fallback para texto se logo não encontrado
-        elements.append(Paragraph("<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b>", style_title))
-        elements.append(Spacer(1, 3*mm))
+        elements.append(Paragraph("<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b><br/>"
+                                 "CNPJ: 40.357.820/0001-50 | Inscrição Estadual: 16.390.286-0", style_title))
+        elements.append(Spacer(1, 5*mm))
     
-    elements.append(Paragraph("CNPJ: 40.357.820/0001-50 | Inscrição Estadual: 16.390.286-0", style_small))
-    elements.append(Spacer(1, 10*mm))
-    
-    # REPRESENTANTE
-    data_repr = [[Paragraph("<b>Representante</b>", style_normal), dados_cliente.get('representante', '')]]
+    # REPRESENTANTE (tabela simples como no modelo)
+    data_repr = [
+        ['Representante', dados_cliente.get('representante', '')],
+        ['CNPJ', dados_cliente.get('cnpj', '')]
+    ]
     table_repr = Table(data_repr, colWidths=[40*mm, 150*mm])
     table_repr.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
-        ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.black),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
     ]))
     elements.append(table_repr)
-    elements.append(Spacer(1, 3*mm))
+    elements.append(Spacer(1, 2*mm))
     
-    # INFORMAÇÕES DO CLIENTE
+    # INFORMAÇÕES DO CLIENTE (layout simplificado)
     data_cliente = [
         [Paragraph("<b>Informações sobre o Cliente</b>", style_normal), '', '', ''],
-        ['Cliente', dados_cliente.get('razao_social', ''), 'Nome Fantasia:', dados_cliente.get('nome_fantasia', '')],
-        ['CNPJ:', dados_cliente.get('cnpj', ''), 'Inscr. Estadual:', dados_cliente.get('ie', '')],
+        ['Cliente', dados_cliente.get('razao_social', ''), '', Paragraph("<b>Nome</b><br/>Fantasia:<br/>Inscr.<br/>Estadual:", style_small)],
+        ['CNPJ:', dados_cliente.get('cnpj', ''), '', dados_cliente.get('nome_fantasia', '')],
         ['Telefone:', dados_cliente.get('telefone', ''), 'Email NF-e:', dados_cliente.get('email', '')],
-        ['Endereço:', dados_cliente.get('endereco', ''), '', ''],
+        ['Endereço:', dados_cliente.get('endereco', ''), '', dados_cliente.get('ie', '')],
         ['Observação:', dados_cliente.get('obs_cliente', ''), '', '']
     ]
     
-    table_cliente = Table(data_cliente, colWidths=[30*mm, 70*mm, 30*mm, 60*mm])
+    table_cliente = Table(data_cliente, colWidths=[25*mm, 85*mm, 25*mm, 55*mm])
     table_cliente.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.black),
         ('INNERGRID', (0, 1), (-1, -1), 0.5, colors.grey),
         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
         ('SPAN', (0, 0), (-1, 0)),
-        ('SPAN', (1, 4), (-1, 4)),
+        ('SPAN', (1, 1), (2, 1)),
         ('SPAN', (1, 5), (-1, 5)),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 5),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
     ]))
     elements.append(table_cliente)
-    elements.append(Spacer(1, 3*mm))
+    elements.append(Spacer(1, 2*mm))
     
-    # INFORMAÇÕES DO PEDIDO
+    # INFORMAÇÕES DO PEDIDO (layout compacto)
     data_pedido_info = [
-        [Paragraph("<b>Informações sobre Pedido Nº</b>", style_normal), dados_pedido.get('numero', ''), 'Tabela de Preço:', dados_pedido.get('tabela_preco', '')],
-        ['Condições de Pagto:', dados_pedido.get('condicoes_pagto', ''), 'Tipo de Frete:', dados_pedido.get('tipo_frete', 'CIF')],
-        ['Data da Venda:', dados_pedido.get('data_venda', ''), '', '']
+        ['Informações sobre Pedido Nº', dados_pedido.get('numero', ''), '', Paragraph("<b>Tabela de<br/>Preço:</b>", style_small)],
+        ['Condições de Pagto:', dados_pedido.get('condicoes_pagto', ''), '', dados_pedido.get('tabela_preco', '')],
+        ['Data da Venda:', dados_pedido.get('data_venda', ''), 'Tipo de<br/>Frete:', dados_pedido.get('tipo_frete', 'CIF')]
     ]
     
-    table_pedido = Table(data_pedido_info, colWidths=[50*mm, 50*mm, 40*mm, 50*mm])
+    table_pedido = Table(data_pedido_info, colWidths=[45*mm, 90*mm, 20*mm, 35*mm])
     table_pedido.setStyle(TableStyle([
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.black),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey),
-        ('SPAN', (0, 0), (0, 0)),
-        ('SPAN', (1, 2), (-1, 2)),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
     ]))
     elements.append(table_pedido)
-    elements.append(Spacer(1, 5*mm))
+    elements.append(Spacer(1, 3*mm))
     
     # DETALHE DO PEDIDO
     elements.append(Paragraph("<b>Detalhe do Pedido</b>", style_normal))
-    elements.append(Spacer(1, 2*mm))
+    elements.append(Spacer(1, 1*mm))
     
-    # Cabeçalho da tabela de itens
-    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA EMB', 'QTDE', 'VALOR', 'TOTAL', 'COMISSÃO%']
+    # Cabeçalho da tabela de itens (cor azul igual ao modelo)
+    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA DE\nEMBARQUE', 'QTDE', 'VALOR', 'TOTAL', 'COMISSÃO%']
     data_itens = [header_itens]
     
     # Adicionar itens
     for item in itens_pedido:
+        descricao = str(item.get('descricao', ''))
+        # Quebrar descrição se muito longa
+        if len(descricao) > 45:
+            descricao = descricao[:45] + '...'
+        
         data_itens.append([
             str(item.get('codigo', '')),
-            str(item.get('descricao', ''))[:50],  # Limitar tamanho
+            descricao,
             str(item.get('peso', '')),
             str(item.get('cx_embarque', '')),
             f"{item.get('quantidade', 0):.0f}",
@@ -392,30 +406,34 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     total_qtde = sum([item.get('quantidade', 0) for item in itens_pedido])
     total_valor = sum([item.get('total', 0) for item in itens_pedido])
     
-    # Linha de total
+    # Linha de total (sem bordas superiores, fundo cinza)
     data_itens.append(['', '', '', '', f"{total_qtde:.0f}", '', f"R$ {total_valor:,.2f}", ''])
     
-    col_widths = [15*mm, 65*mm, 15*mm, 20*mm, 15*mm, 20*mm, 25*mm, 20*mm]
+    col_widths = [12*mm, 70*mm, 15*mm, 18*mm, 12*mm, 20*mm, 25*mm, 18*mm]
     table_itens = Table(data_itens, colWidths=col_widths)
     
-    # Estilo da tabela de itens
+    # Estilo da tabela de itens (azul igual ao modelo)
+    num_rows = len(data_itens)
     style_itens = [
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.black),
+        ('INNERGRID', (0, 0), (-1, -2), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#003366')),  # Azul escuro
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('ALIGN', (4, 1), (4, -1), 'CENTER'),  # Centralizar QTDE
+        ('ALIGN', (5, 1), (7, -1), 'RIGHT'),   # Alinhar valores à direita
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
         ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 9),
     ]
     
     table_itens.setStyle(TableStyle(style_itens))
     elements.append(table_itens)
-    elements.append(Spacer(1, 5*mm))
+    elements.append(Spacer(1, 3*mm))
     
     # RESUMO FINAL
     data_resumo = [
