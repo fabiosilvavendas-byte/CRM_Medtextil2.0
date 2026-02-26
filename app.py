@@ -284,8 +284,8 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         response = requests.get(logo_url)
         if response.status_code == 200:
             logo_buffer = io.BytesIO(response.content)
-            # Logo pequeno - 30mm de largura, altura proporcional
-            logo_img = Image(logo_buffer, width=30*mm, height=None)
+            # Logo pequeno - altura fixa, largura proporcional automática
+            logo_img = Image(logo_buffer, height=18*mm, width=None)
             
             # Texto ao lado do logo (como no modelo)
             texto_empresa = Paragraph(
