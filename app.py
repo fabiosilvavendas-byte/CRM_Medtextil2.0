@@ -295,12 +295,15 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
             )
             
             # Criar tabela: Logo à esquerda | Texto à direita
+            # Aumentar espaço do logo para evitar sobreposição
             cabecalho_data = [[logo_img, texto_empresa]]
-            cabecalho_table = Table(cabecalho_data, colWidths=[35*mm, 155*mm])
+            cabecalho_table = Table(cabecalho_data, colWidths=[45*mm, 145*mm])
             cabecalho_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+                ('VALIGN', (1, 0), (1, 0), 'MIDDLE'),
                 ('LEFTPADDING', (0, 0), (0, 0), 0),
                 ('RIGHTPADDING', (1, 0), (1, 0), 0),
+                ('LEFTPADDING', (1, 0), (1, 0), 5),  # Espaço entre logo e texto
             ]))
             elements.append(cabecalho_table)
             elements.append(Spacer(1, 5*mm))
