@@ -276,7 +276,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         fontName='Helvetica'
     )
     
-    # CABEÇALHO - LOGO + INFORMAÇÕES DA EMPRESA (modelo exato)
+    # CABEÇALHO - LOGO E TEXTO (ESTRUTURA CORRIGIDA)
     logo_adicionado = False
     try:
         # Buscar logo do GitHub
@@ -284,28 +284,21 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         response = requests.get(logo_url)
         if response.status_code == 200:
             logo_buffer = io.BytesIO(response.content)
-            # Logo pequeno - altura fixa, largura proporcional automática
+            # Logo com tamanho fixo para não distorcer
             logo_img = Image(logo_buffer, height=18*mm, width=None)
+            logo_img.hAlign = 'LEFT'
             
-            # Texto ao lado do logo (como no modelo)
-            texto_empresa = Paragraph(
+            # Adicionar logo primeiro
+            elements.append(logo_img)
+            elements.append(Spacer(1, 2*mm))
+            
+            # Texto da empresa abaixo do logo
+            texto_cabecalho = Paragraph(
                 "<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b><br/>"
-                "<font size=8>CNPJ: 40.357.820/0001-50  Inscrição Estadual: 16.390.286-0</font>",
-                style_normal
+                "CNPJ: 40.357.820/0001-50  Inscrição Estadual: 16.390.286-0",
+                style_small
             )
-            
-            # Criar tabela: Logo à esquerda | Texto à direita
-            # Aumentar espaço do logo para evitar sobreposição
-            cabecalho_data = [[logo_img, texto_empresa]]
-            cabecalho_table = Table(cabecalho_data, colWidths=[45*mm, 145*mm])
-            cabecalho_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
-                ('VALIGN', (1, 0), (1, 0), 'MIDDLE'),
-                ('LEFTPADDING', (0, 0), (0, 0), 0),
-                ('RIGHTPADDING', (1, 0), (1, 0), 0),
-                ('LEFTPADDING', (1, 0), (1, 0), 5),  # Espaço entre logo e texto
-            ]))
-            elements.append(cabecalho_table)
+            elements.append(texto_cabecalho)
             elements.append(Spacer(1, 5*mm))
             logo_adicionado = True
     except Exception as e:
