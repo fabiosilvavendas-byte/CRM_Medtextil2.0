@@ -276,36 +276,85 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         fontName='Helvetica'
     )
     
-    # CABEÇALHO - LOGO E TEXTO (ESTRUTURA CORRIGIDA)
+    # CABEÇALHO - SOLUÇÃO COM CONTROLE TOTAL DE TAMANHO
     logo_adicionado = False
     try:
         # Buscar logo do GitHub
         logo_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_FOLDER}/logo.png"
         response = requests.get(logo_url)
         if response.status_code == 200:
+            from PIL import Image as PILImage
+            
+            # Carregar imagem com PIL para ter controle total
             logo_buffer = io.BytesIO(response.content)
-            # Logo com tamanho fixo para não distorcer
-            logo_img = Image(logo_buffer, height=18*mm, width=None)
-            logo_img.hAlign = 'LEFT'
+            pil_img = PILImage.open(logo_buffer)
             
-            # Adicionar logo primeiro
-            elements.append(logo_img)
-            elements.append(Spacer(1, 2*mm))
+            # Obter dimensões originais
+            largura_original, altura_original = pil_img.size
+            proporcao = largura_original / altura_original
             
-            # Texto da empresa abaixo do logo
-            texto_cabecalho = Paragraph(
+            # DIMENSÕES FIXAS DO LOGO NO PDF
+            altura_desejada_mm = 15  # Altura em milímetros
+            largura_desejada_mm = altura_desejada_mm * proporcao
+            
+            # Criar Image do ReportLab com dimensões exatas
+            logo_buffer.seek(0)  # Voltar ao início do buffer
+            logo_img = Image(logo_buffer, width=largura_desejada_mm*mm, height=altura_desejada_mm*mm)
+            
+            # Texto ao lado - com width definido para não vazar
+            texto_empresa = Paragraph(
                 "<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b><br/>"
-                "CNPJ: 40.357.820/0001-50  Inscrição Estadual: 16.390.286-0",
+                "<font size=8>CNPJ: 40.357.820/0001-50  Inscrição Estadual: 16.390.286-0</font>",
                 style_small
             )
-            elements.append(texto_cabecalho)
+            
+            # Calcular colWidths baseado no logo real
+            espaco_logo = largura_desejada_mm + 5  # Logo + margem de 5mm
+            espaco_texto = 190 - espaco_logo  # Resto da página
+            
+            # Criar tabela com dimensões calculadas
+            cabecalho_data = [[logo_img, texto_empresa]]
+            cabecalho_table = Table(cabecalho_data, colWidths=[espaco_logo*mm, espaco_texto*mm])
+            cabecalho_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (0, 0), 'TOP'),
+                ('VALIGN', (1, 0), (1, 0), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(cabecalho_table)
             elements.append(Spacer(1, 5*mm))
             logo_adicionado = True
+            
     except Exception as e:
-        pass
+        # Se PIL não disponível ou erro, fallback simples
+        try:
+            logo_buffer = io.BytesIO(response.content)
+            # Fallback: tamanho fixo conservador
+            logo_img = Image(logo_buffer, width=30*mm, height=15*mm)
+            
+            texto_empresa = Paragraph(
+                "<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b><br/>"
+                "<font size=8>CNPJ: 40.357.820/0001-50  Inscrição Estadual: 16.390.286-0</font>",
+                style_small
+            )
+            
+            cabecalho_data = [[logo_img, texto_empresa]]
+            cabecalho_table = Table(cabecalho_data, colWidths=[35*mm, 155*mm])
+            cabecalho_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(cabecalho_table)
+            elements.append(Spacer(1, 5*mm))
+            logo_adicionado = True
+        except:
+            pass
     
     if not logo_adicionado:
-        # Fallback para texto se logo não encontrado
+        # Fallback final para texto
         elements.append(Paragraph("<b>MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES</b><br/>"
                                  "CNPJ: 40.357.820/0001-50 | Inscrição Estadual: 16.390.286-0", style_title))
         elements.append(Spacer(1, 5*mm))
