@@ -1026,10 +1026,13 @@ if st.session_state.tela_atual == 'home':
     col_foot1, col_foot2, col_foot3 = st.columns(3)
     
     with col_foot1:
-        st.info(f"👤 **Usuário:** {st.session_state.usuario_nome}")
+        usuario_info = st.session_state.get("usuario", {})
+        nome_usuario = usuario_info.get("nome", "Usuário")
+        st.info(f"👤 **Usuário:** {nome_usuario}")
     
     with col_foot2:
-        st.info(f"🔐 **Perfil:** {st.session_state.tipo_usuario.title()}")
+        tipo_usuario = usuario_info.get("tipo", "visitante")
+        st.info(f"🔐 **Perfil:** {tipo_usuario.title()}")
     
     with col_foot3:
         st.info(f"📅 **Hoje:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
