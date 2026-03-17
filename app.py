@@ -862,19 +862,203 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 
 st.sidebar.markdown("---")
 
+# ====================== SISTEMA DE NAVEGAÇÃO COM BOTÕES ======================
+
+# Inicializar session_state para navegação
+if 'tela_atual' not in st.session_state:
+    st.session_state.tela_atual = 'home'
+if 'modulo_selecionado' not in st.session_state:
+    st.session_state.modulo_selecionado = None
+
 # Mostrar apenas módulos permitidos para o usuário
 modulos_visiveis = modulos_permitidos if modulos_permitidos else ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
 
-# Definir índice padrão baseado nas permissões
-indice_padrao = 0
-if "Dashboard" not in modulos_visiveis and len(modulos_visiveis) > 0:
-    indice_padrao = 0  # Sempre começa no primeiro disponível
+# Funções de navegação
+def ir_para_modulo(modulo):
+    st.session_state.tela_atual = 'modulo'
+    st.session_state.modulo_selecionado = modulo
 
-menu = st.sidebar.radio(
-    "📑 Navegação",
-    modulos_visiveis,
-    index=indice_padrao
-)
+def voltar_home():
+    st.session_state.tela_atual = 'home'
+    st.session_state.modulo_selecionado = None
+
+# ====================== TELA HOME (BOTÕES GRANDES) ======================
+if st.session_state.tela_atual == 'home':
+    st.title("🏠 Medtextil - Sistema de Gestão")
+    st.markdown("### Bem-vindo! Selecione um módulo:")
+    
+    # Calcular previews de dados
+    try:
+        # Vendas do mês atual
+        vendas_mes = notas_unicas[
+            (notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) &
+            (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)
+        ]['Valor_Real'].sum()
+    except:
+        vendas_mes = 0
+    
+    try:
+        # Total de clientes
+        total_clientes = len(df['RazaoSocial'].unique())
+    except:
+        total_clientes = 0
+    
+    st.markdown("---")
+    
+    # Configuração dos botões com ícones, descrições e previews
+    botoes_config = [
+        {
+            'nome': 'Dashboard',
+            'icone': '📊',
+            'descricao': 'Visão geral e métricas principais',
+            'preview': f'Vendas mês: R$ {vendas_mes:,.2f}',
+            'cor': '#1f77b4'
+        },
+        {
+            'nome': 'Positivação',
+            'icone': '✅',
+            'descricao': 'Clientes ativos e positivação',
+            'preview': f'{total_clientes} clientes ativos',
+            'cor': '#2ca02c'
+        },
+        {
+            'nome': 'Inadimplência',
+            'icone': '⚠️',
+            'descricao': 'Títulos vencidos e a vencer',
+            'preview': 'Gestão de recebíveis',
+            'cor': '#d62728'
+        },
+        {
+            'nome': 'Clientes sem Compra',
+            'icone': '😴',
+            'descricao': 'Clientes inativos para reativação',
+            'preview': 'Análise de inatividade',
+            'cor': '#ff7f0e'
+        },
+        {
+            'nome': 'Histórico',
+            'icone': '📜',
+            'descricao': 'Histórico de vendas e pedidos',
+            'preview': 'Consultas e propostas',
+            'cor': '#9467bd'
+        },
+        {
+            'nome': 'Preço Médio',
+            'icone': '💰',
+            'descricao': 'Análise de preços por produto',
+            'preview': 'Comparativo de valores',
+            'cor': '#8c564b'
+        },
+        {
+            'nome': 'Pedidos Pendentes',
+            'icone': '📦',
+            'descricao': 'Pedidos aguardando faturamento',
+            'preview': 'Controle de pendências',
+            'cor': '#e377c2'
+        },
+        {
+            'nome': 'Rankings',
+            'icone': '🏆',
+            'descricao': 'Rankings de vendedores e produtos',
+            'preview': 'Top performers',
+            'cor': '#17becf'
+        }
+    ]
+    
+    # Filtrar apenas módulos visíveis para o usuário
+    botoes_visiveis = [b for b in botoes_config if b['nome'] in modulos_visiveis]
+    
+    # Criar grid de botões - 3 colunas
+    num_colunas = 3
+    num_botoes = len(botoes_visiveis)
+    
+    for idx in range(0, num_botoes, num_colunas):
+        cols = st.columns(num_colunas)
+        
+        for col_idx in range(num_colunas):
+            botao_idx = idx + col_idx
+            if botao_idx < num_botoes:
+                botao = botoes_visiveis[botao_idx]
+                
+                with cols[col_idx]:
+                    # Card estilizado com CSS
+                    st.markdown(f"""
+                    <div style="
+                        padding: 25px;
+                        border-radius: 12px;
+                        border: 2px solid {botao['cor']};
+                        background: linear-gradient(135deg, {botao['cor']}20 0%, {botao['cor']}08 100%);
+                        margin-bottom: 15px;
+                        min-height: 180px;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        transition: transform 0.2s;
+                    ">
+                        <div style="font-size: 48px; margin-bottom: 10px;">{botao['icone']}</div>
+                        <h3 style="margin: 10px 0; color: {botao['cor']}; font-weight: bold;">{botao['nome']}</h3>
+                        <p style="color: #666; font-size: 14px; margin: 8px 0; line-height: 1.4;">
+                            {botao['descricao']}
+                        </p>
+                        <p style="
+                            color: {botao['cor']}; 
+                            font-weight: bold; 
+                            font-size: 13px; 
+                            margin: 15px 0 0 0;
+                            padding-top: 10px;
+                            border-top: 1px solid {botao['cor']}40;
+                        ">
+                            {botao['preview']}
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Botão de acesso
+                    if st.button(
+                        f"Acessar →", 
+                        key=f"btn_{botao['nome']}", 
+                        use_container_width=True,
+                        type="primary"
+                    ):
+                        ir_para_modulo(botao['nome'])
+                        st.rerun()
+    
+    # Informações do rodapé
+    st.markdown("---")
+    col_foot1, col_foot2, col_foot3 = st.columns(3)
+    
+    with col_foot1:
+        st.info(f"👤 **Usuário:** {st.session_state.usuario_nome}")
+    
+    with col_foot2:
+        st.info(f"🔐 **Perfil:** {st.session_state.tipo_usuario.title()}")
+    
+    with col_foot3:
+        st.info(f"📅 **Hoje:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
+    
+    st.stop()  # Não processar o resto enquanto estiver no home
+
+# ====================== NAVEGAÇÃO EM MÓDULO ======================
+if st.session_state.tela_atual == 'modulo' and st.session_state.modulo_selecionado:
+    # Botão voltar no topo da sidebar
+    with st.sidebar:
+        st.markdown("### 🧭 Navegação")
+        if st.button("🏠 Voltar ao Início", use_container_width=True, type="secondary"):
+            voltar_home()
+            st.rerun()
+        
+        st.markdown("---")
+        st.markdown(f"**Módulo Atual:**")
+        st.markdown(f"**{st.session_state.modulo_selecionado}**")
+        st.markdown("---")
+    
+    # Definir menu como o módulo selecionado
+    menu = st.session_state.modulo_selecionado
+else:
+    # Fallback: usar menu lateral tradicional se algo der errado
+    menu = st.sidebar.radio(
+        "📑 Navegação",
+        modulos_visiveis,
+        index=0
+    )
 
 # Verificar se o usuário tem permissão para acessar o módulo
 if menu not in modulos_permitidos:
