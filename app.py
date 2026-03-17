@@ -1898,10 +1898,13 @@ elif menu == "Histórico":
                     if len(hist_cliente) > 0:
                         hist_cliente = hist_cliente.sort_values('DataEmissao', ascending=False)
                         produto_info['preco_sugerido'] = hist_cliente.iloc[0]['PrecoUnit']
+                        produto_info['preco_historico'] = hist_cliente.iloc[0]['PrecoUnit']  # Para mostrar na tabela
                     else:
                         produto_info['preco_sugerido'] = prod.get('PRECO', 0)
+                        produto_info['preco_historico'] = prod.get('PRECO', 0)
                 else:
                     produto_info['preco_sugerido'] = prod.get('PRECO', 0)
+                    produto_info['preco_historico'] = prod.get('PRECO', 0)
         
         with col_prod2:
             qtde_item = st.number_input("Quantidade", min_value=0, value=0, key="qtde_item_pedido")
@@ -1924,12 +1927,51 @@ elif menu == "Histórico":
                         'cx_embarque': produto_info.get('cx_embarque', ''),
                         'quantidade': qtde_item,
                         'valor_unit': valor_item,
+                        'preco_historico': produto_info.get('preco_historico', 0),
                         'total': qtde_item * valor_item,
                         'comissao': comissao
                     }
                     st.session_state.itens_pedido.append(item)
                     st.success(f"✅ Item adicionado: {produto_info['descricao']}")
                     st.rerun()
+        
+        # PREVIEW EM TEMPO REAL - Mostrar antes de adicionar
+        if produto_info and qtde_item > 0 and valor_item > 0:
+            st.markdown("---")
+            st.markdown("### 👁️ Preview do Item")
+            
+            # Calcular valores preview
+            total_preview = qtde_item * valor_item
+            comissao_preview = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
+            preco_hist_preview = produto_info.get('preco_historico', 0)
+            
+            # Mostrar em tabela estilizada
+            preview_data = {
+                'Código': [produto_info['codigo']],
+                'Produto': [produto_info['descricao'][:50]],
+                'Peso': [produto_info.get('peso', '')],
+                'Cx Embarque': [produto_info.get('cx_embarque', '')],
+                'Qtde': [f"{qtde_item:,.0f}"],
+                'Preço Histórico': [f"R$ {preco_hist_preview:,.2f}"],
+                'Valor Unit.': [f"R$ {valor_item:,.2f}"],
+                'Total': [f"R$ {total_preview:,.2f}"],
+                'Comissão%': [comissao_preview]
+            }
+            
+            df_preview = pd.DataFrame(preview_data)
+            st.dataframe(df_preview, use_container_width=True, hide_index=True)
+            
+            # Comparação com preço histórico
+            if preco_hist_preview > 0:
+                variacao = ((valor_item - preco_hist_preview) / preco_hist_preview) * 100
+                if variacao > 0:
+                    st.info(f"📈 Valor {variacao:.1f}% **acima** do histórico (R$ {preco_hist_preview:,.2f})")
+                elif variacao < 0:
+                    st.warning(f"📉 Valor {abs(variacao):.1f}% **abaixo** do histórico (R$ {preco_hist_preview:,.2f})")
+                else:
+                    st.success(f"✅ Valor **igual** ao histórico (R$ {preco_hist_preview:,.2f})")
+            
+            st.markdown("---")
         
         # Mostrar produtos adicionados
         if st.session_state.itens_pedido:
@@ -1941,6 +1983,7 @@ elif menu == "Histórico":
             
             # Formatar para exibição
             df_itens_display = df_itens.copy()
+            df_itens_display['preco_historico'] = df_itens_display['preco_historico'].apply(lambda x: f"R$ {x:,.2f}")
             df_itens_display['valor_unit'] = df_itens_display['valor_unit'].apply(lambda x: f"R$ {x:,.2f}")
             df_itens_display['total'] = df_itens_display['total'].apply(lambda x: f"R$ {x:,.2f}")
             
@@ -1950,6 +1993,7 @@ elif menu == "Histórico":
                 'peso': 'PESO',
                 'cx_embarque': 'CAIXA EMBARQUE',
                 'quantidade': 'QTDE',
+                'preco_historico': 'PREÇO HISTÓRICO',
                 'valor_unit': 'VALOR',
                 'total': 'TOTAL',
                 'comissao': 'COMISSÃO%'
@@ -2211,7 +2255,11 @@ elif menu == "Preço Médio":
         st.metric("📦 Qtd Total Vendida", f"{qtd_total:,.0f}")
     
     with col3:
-        preco_medio_geral = df_preco_filtrado['PRECOUNITMEDIO'].mean() if len(df_preco_filtrado) > 0 else 0
+        # CORREÇÃO: Média ponderada = Total Vendido / Quantidade Total
+        if df_preco_filtrado['TOTQTD'].sum() > 0:
+            preco_medio_geral = df_preco_filtrado['TOTLIQUIDO'].sum() / df_preco_filtrado['TOTQTD'].sum()
+        else:
+            preco_medio_geral = 0
         st.metric("💵 Preço Médio Geral", f"R$ {preco_medio_geral:,.2f}")
     
     with col4:
