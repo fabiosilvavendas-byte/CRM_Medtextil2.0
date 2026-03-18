@@ -993,8 +993,21 @@ if st.session_state.tela_atual == 'home':
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
-    # Gerar ID único para cada linha/coluna
-    button_index = 0
+    # CSS global para cada botão com classe específica
+    css_cores = "<style>"
+    for i, botao in enumerate(botoes_visiveis):
+        css_cores += f"""
+        .btn-card-{i} button {{
+            border: 2px solid {botao['cor']} !important;
+            background: linear-gradient(135deg, {botao['cor']}80 0%, {botao['cor']}30 100%) !important;
+        }}
+        .btn-card-{i} button:hover {{
+            background: linear-gradient(135deg, {botao['cor']}95 0%, {botao['cor']}50 100%) !important;
+            border-color: {botao['cor']} !important;
+        }}
+        """
+    css_cores += "</style>"
+    st.markdown(css_cores, unsafe_allow_html=True)
     
     for idx in range(0, num_botoes, num_colunas):
         cols = st.columns(num_colunas)
@@ -1005,19 +1018,8 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
-                    # CSS específico para ESTE botão usando índice único
-                    st.markdown(f"""
-                    <style>
-                    /* Botão {botao['nome']} - índice {button_index} */
-                    div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div:nth-child({idx + 1}) div[data-testid="column"]:nth-child({col_idx + 1}) button {{
-                        border: 2px solid {botao['cor']} !important;
-                        background: linear-gradient(135deg, {botao['cor']}60 0%, {botao['cor']}20 100%) !important;
-                    }}
-                    div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div:nth-child({idx + 1}) div[data-testid="column"]:nth-child({col_idx + 1}) button:hover {{
-                        background: linear-gradient(135deg, {botao['cor']}80 0%, {botao['cor']}40 100%) !important;
-                    }}
-                    </style>
-                    """, unsafe_allow_html=True)
+                    # Wrapper com classe única
+                    st.markdown(f'<div class="btn-card-{botao_idx}">', unsafe_allow_html=True)
                     
                     # Label com título maior usando markdown
                     botao_label = f"**{botao['nome'].upper()}**\n\n{botao['descricao']}\n\n{botao['preview']}"
@@ -1031,7 +1033,7 @@ if st.session_state.tela_atual == 'home':
                         ir_para_modulo(botao['nome'])
                         st.rerun()
                     
-                    button_index += 1
+                    st.markdown('</div>', unsafe_allow_html=True)
     
     # Informações do rodapé
     st.markdown("---")
