@@ -912,56 +912,56 @@ if st.session_state.tela_atual == 'home':
             'icone': '📊',
             'descricao': 'Visão geral e métricas principais',
             'preview': f'Vendas mês: R$ {vendas_mes:,.2f}',
-            'cor': '#1f77b4'
+            'cor': '#0066CC'  # Azul royal
         },
         {
             'nome': 'Positivação',
             'icone': '✅',
             'descricao': 'Clientes ativos e positivação',
             'preview': f'{total_clientes} clientes ativos',
-            'cor': '#2ca02c'
+            'cor': '#10B981'  # Verde esmeralda
         },
         {
             'nome': 'Inadimplência',
             'icone': '⚠️',
             'descricao': 'Títulos vencidos e a vencer',
             'preview': 'Gestão de recebíveis',
-            'cor': '#d62728'
+            'cor': '#0EA5E9'  # Azul céu
         },
         {
             'nome': 'Clientes sem Compra',
             'icone': '😴',
             'descricao': 'Clientes inativos para reativação',
             'preview': 'Análise de inatividade',
-            'cor': '#ff7f0e'
+            'cor': '#22C55E'  # Verde lima
         },
         {
             'nome': 'Histórico',
             'icone': '📜',
             'descricao': 'Histórico de vendas e pedidos',
             'preview': 'Consultas e propostas',
-            'cor': '#9467bd'
+            'cor': '#3B82F6'  # Azul médio
         },
         {
             'nome': 'Preço Médio',
             'icone': '💰',
             'descricao': 'Análise de preços por produto',
             'preview': 'Comparativo de valores',
-            'cor': '#8c564b'
+            'cor': '#059669'  # Verde escuro
         },
         {
             'nome': 'Pedidos Pendentes',
             'icone': '📦',
             'descricao': 'Pedidos aguardando faturamento',
             'preview': 'Controle de pendências',
-            'cor': '#e377c2'
+            'cor': '#06B6D4'  # Azul ciano
         },
         {
             'nome': 'Rankings',
             'icone': '🏆',
             'descricao': 'Rankings de vendedores e produtos',
             'preview': 'Top performers',
-            'cor': '#17becf'
+            'cor': '#14B8A6'  # Verde água
         }
     ]
     
@@ -1012,6 +1012,27 @@ if st.session_state.tela_atual == 'home':
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
+    # CSS com cores específicas para cada módulo
+    cores_css = ""
+    for botao in botoes_visiveis:
+        cores_css += f"""
+        /* Estilo para {botao['nome']} */
+        button:has(p:contains("{botao['nome'].upper()}")) {{
+            border: 2px solid {botao['cor']} !important;
+            background: linear-gradient(135deg, {botao['cor']}40 0%, {botao['cor']}15 100%) !important;
+        }}
+        button:has(p:contains("{botao['nome'].upper()}")):hover {{
+            border-color: {botao['cor']} !important;
+            background: linear-gradient(135deg, {botao['cor']}55 0%, {botao['cor']}25 100%) !important;
+        }}
+        """
+    
+    st.markdown(f"""
+    <style>
+    {cores_css}
+    </style>
+    """, unsafe_allow_html=True)
+    
     for idx in range(0, num_botoes, num_colunas):
         cols = st.columns(num_colunas)
         
@@ -1021,21 +1042,6 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
-                    # CSS inline específico para cor do módulo
-                    st.markdown(f"""
-                    <style>
-                    /* Cor específica para {botao['nome']} */
-                    button[key="btn_{botao['nome']}"] {{
-                        border: 2px solid {botao['cor']} !important;
-                        background: linear-gradient(135deg, {botao['cor']}28 0%, {botao['cor']}10 100%) !important;
-                    }}
-                    button[key="btn_{botao['nome']}"]:hover {{
-                        border-color: {botao['cor']}DD !important;
-                        background: linear-gradient(135deg, {botao['cor']}35 0%, {botao['cor']}18 100%) !important;
-                    }}
-                    </style>
-                    """, unsafe_allow_html=True)
-                    
                     # Label com título maior usando markdown
                     botao_label = f"**{botao['nome'].upper()}**\n\n{botao['descricao']}\n\n{botao['preview']}"
                     
