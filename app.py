@@ -12,30 +12,64 @@ st.set_page_config(
     page_title="Dashboard BI Medtextil", 
     layout="wide", 
     initial_sidebar_state="expanded",
-    page_icon="📊"
+    page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 )
 
-# ====================== ÍCONE PERSONALIZADO PARA PWA/IPHONE ======================
-# IMPORTANTE: Substitua a URL abaixo pelo link DIRETO da sua imagem
-# Para pegar o link correto do Imgur:
-# 1. Abra a imagem
-# 2. Clique com botão direito na imagem
-# 3. "Copiar endereço da imagem"
-# 4. Deve ser algo como: https://i.imgur.com/XXXXX.png
-
+# ====================== ÍCONE E PWA PARA CHROME/ANDROID ======================
 LOGO_URL = "https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 
+# Criar manifest.json virtual para PWA
+manifest_json = f"""
+{{
+    "name": "Medtextil BI Dashboard",
+    "short_name": "Medtextil BI",
+    "description": "Dashboard de Business Intelligence",
+    "start_url": ".",
+    "display": "standalone",
+    "theme_color": "#0066CC",
+    "background_color": "#ffffff",
+    "icons": [
+        {{
+            "src": "{LOGO_URL}",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }},
+        {{
+            "src": "{LOGO_URL}",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }}
+    ]
+}}
+"""
+
+# Meta tags e links para PWA funcionar no Chrome/Android e iOS
 st.markdown(f"""
-    <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
-    <link rel="apple-touch-icon" sizes="152x152" href="{LOGO_URL}">
-    <link rel="apple-touch-icon" sizes="120x120" href="{LOGO_URL}">
-    <link rel="icon" type="image/png" sizes="192x192" href="{LOGO_URL}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{LOGO_URL}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{LOGO_URL}">
-    <meta name="apple-mobile-web-app-title" content="Medtextil BI">
-    <meta name="application-name" content="Medtextil BI">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <head>
+        <!-- PWA Manifest -->
+        <link rel="manifest" href="data:application/json;base64,{__import__('base64').b64encode(manifest_json.encode()).decode()}">
+        
+        <!-- Meta tags PWA -->
+        <meta name="theme-color" content="#0066CC">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="application-name" content="Medtextil BI">
+        
+        <!-- Ícones para Chrome/Android -->
+        <link rel="icon" type="image/png" sizes="192x192" href="{LOGO_URL}">
+        <link rel="icon" type="image/png" sizes="512x512" href="{LOGO_URL}">
+        <link rel="icon" type="image/png" sizes="32x32" href="{LOGO_URL}">
+        <link rel="icon" type="image/png" sizes="16x16" href="{LOGO_URL}">
+        
+        <!-- Ícones para iOS/Safari -->
+        <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
+        <link rel="apple-touch-icon" sizes="152x152" href="{LOGO_URL}">
+        <link rel="apple-touch-icon" sizes="120x120" href="{LOGO_URL}">
+        <meta name="apple-mobile-web-app-title" content="Medtextil BI">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    </head>
 """, unsafe_allow_html=True)
 
 # ====================== CONFIGURAÇÕES GITHUB ======================
@@ -1012,24 +1046,80 @@ if st.session_state.tela_atual == 'home':
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
-    # CSS com cores específicas para cada módulo
-    cores_css = ""
-    for botao in botoes_visiveis:
-        cores_css += f"""
-        /* Estilo para {botao['nome']} */
-        button:has(p:contains("{botao['nome'].upper()}")) {{
-            border: 2px solid {botao['cor']} !important;
-            background: linear-gradient(135deg, {botao['cor']}40 0%, {botao['cor']}15 100%) !important;
-        }}
-        button:has(p:contains("{botao['nome'].upper()}")):hover {{
-            border-color: {botao['cor']} !important;
-            background: linear-gradient(135deg, {botao['cor']}55 0%, {botao['cor']}25 100%) !important;
-        }}
-        """
-    
-    st.markdown(f"""
+    # Gerar CSS único para cada botão por posição
+    st.markdown("""
     <style>
-    {cores_css}
+    /* Dashboard - Azul Royal */
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(1) button {
+        border: 2px solid #0066CC !important;
+        background: linear-gradient(135deg, #0066CC40 0%, #0066CC15 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(1) button:hover {
+        background: linear-gradient(135deg, #0066CC55 0%, #0066CC25 100%) !important;
+    }
+    
+    /* Positivação - Verde Esmeralda */
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(1) button {
+        border: 2px solid #10B981 !important;
+        background: linear-gradient(135deg, #10B98140 0%, #10B98115 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(1) button:hover {
+        background: linear-gradient(135deg, #10B98155 0%, #10B98125 100%) !important;
+    }
+    
+    /* Inadimplência - Azul Céu */
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(2) button {
+        border: 2px solid #0EA5E9 !important;
+        background: linear-gradient(135deg, #0EA5E940 0%, #0EA5E915 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(2) button:hover {
+        background: linear-gradient(135deg, #0EA5E955 0%, #0EA5E925 100%) !important;
+    }
+    
+    /* Clientes sem Compra - Verde Lima */
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(2) button {
+        border: 2px solid #22C55E !important;
+        background: linear-gradient(135deg, #22C55E40 0%, #22C55E15 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(2) button:hover {
+        background: linear-gradient(135deg, #22C55E55 0%, #22C55E25 100%) !important;
+    }
+    
+    /* Histórico - Azul Médio */
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(3) button {
+        border: 2px solid #3B82F6 !important;
+        background: linear-gradient(135deg, #3B82F640 0%, #3B82F615 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(3) button:hover {
+        background: linear-gradient(135deg, #3B82F655 0%, #3B82F625 100%) !important;
+    }
+    
+    /* Preço Médio - Verde Escuro */
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(3) button {
+        border: 2px solid #059669 !important;
+        background: linear-gradient(135deg, #05966940 0%, #05966915 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(3) button:hover {
+        background: linear-gradient(135deg, #05966955 0%, #05966925 100%) !important;
+    }
+    
+    /* Pedidos Pendentes - Azul Ciano */
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(4) button {
+        border: 2px solid #06B6D4 !important;
+        background: linear-gradient(135deg, #06B6D440 0%, #06B6D415 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(4) button:hover {
+        background: linear-gradient(135deg, #06B6D455 0%, #06B6D425 100%) !important;
+    }
+    
+    /* Rankings - Verde Água */
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(4) button {
+        border: 2px solid #14B8A6 !important;
+        background: linear-gradient(135deg, #14B8A640 0%, #14B8A615 100%) !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(4) button:hover {
+        background: linear-gradient(135deg, #14B8A655 0%, #14B8A625 100%) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     
