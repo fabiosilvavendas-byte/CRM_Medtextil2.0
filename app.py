@@ -23,7 +23,7 @@ st.set_page_config(
 # 3. "Copiar endereço da imagem"
 # 4. Deve ser algo como: https://i.imgur.com/XXXXX.png
 
-LOGO_URL = "https://i.imgur.com/gt3rgyL.png"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
+LOGO_URL = "https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 
 st.markdown(f"""
     <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
@@ -968,13 +968,13 @@ if st.session_state.tela_atual == 'home':
     # Filtrar apenas módulos visíveis para o usuário
     botoes_visiveis = [b for b in botoes_config if b['nome'] in modulos_visiveis]
     
-    # CSS para estilizar os botões como cards elegantes
+    # CSS para estilizar os botões como cards elegantes (APENAS NA HOME)
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap');
     
-    /* Estilo geral dos botões-card */
-    div[data-testid="stButton"] button {
+    /* Estilo APENAS para botões da tela home */
+    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
         height: 160px !important;
         border-radius: 12px !important;
         padding: 20px !important;
@@ -985,32 +985,25 @@ if st.session_state.tela_atual == 'home':
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         position: relative !important;
         overflow: hidden !important;
+        font-size: 13px !important;
+        color: #4a5568 !important;
     }
     
-    div[data-testid="stButton"] button:hover {
+    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:hover {
         transform: translateY(-4px) !important;
         box-shadow: 0 8px 20px rgba(0,0,0,0.12) !important;
     }
     
-    div[data-testid="stButton"] button:active {
+    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:active {
         transform: translateY(-2px) !important;
     }
     
-    div[data-testid="stButton"] button p {
+    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button p {
         margin: 0 !important;
         padding: 0 !important;
         text-align: left !important;
         white-space: pre-line !important;
-        font-size: 14px !important;
-        color: #2c3e50 !important;
         font-weight: 500 !important;
-    }
-    
-    /* Primeira linha (título) maior e bold */
-    div[data-testid="stButton"] button p::first-line {
-        font-size: 18px !important;
-        font-weight: 700 !important;
-        letter-spacing: -0.02em !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1028,23 +1021,23 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
-                    # CSS inline específico para cada cor de módulo
+                    # CSS inline específico para cor do módulo
                     st.markdown(f"""
                     <style>
-                    /* Estilização específica para botão do módulo {botao['nome']} */
-                    div[data-testid="column"]:nth-child({col_idx + 1}) div[data-testid="stButton"] button {{
+                    /* Cor específica para {botao['nome']} */
+                    button[key="btn_{botao['nome']}"] {{
                         border: 2px solid {botao['cor']} !important;
-                        background: linear-gradient(135deg, {botao['cor']}15 0%, {botao['cor']}05 100%) !important;
+                        background: linear-gradient(135deg, {botao['cor']}28 0%, {botao['cor']}10 100%) !important;
                     }}
-                    div[data-testid="column"]:nth-child({col_idx + 1}) div[data-testid="stButton"] button:hover {{
+                    button[key="btn_{botao['nome']}"]:hover {{
                         border-color: {botao['cor']}DD !important;
-                        background: linear-gradient(135deg, {botao['cor']}22 0%, {botao['cor']}10 100%) !important;
+                        background: linear-gradient(135deg, {botao['cor']}35 0%, {botao['cor']}18 100%) !important;
                     }}
                     </style>
                     """, unsafe_allow_html=True)
                     
-                    # Label formatado sem emojis - apenas texto limpo
-                    botao_label = f"{botao['nome']}\n━━━━━━━━━━━━\n{botao['descricao']}\n\n{botao['preview']}"
+                    # Label com título maior usando markdown
+                    botao_label = f"**{botao['nome'].upper()}**\n\n{botao['descricao']}\n\n{botao['preview']}"
                     
                     if st.button(
                         botao_label,
