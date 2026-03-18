@@ -968,20 +968,30 @@ if st.session_state.tela_atual == 'home':
     # Filtrar apenas módulos visíveis para o usuário
     botoes_visiveis = [b for b in botoes_config if b['nome'] in modulos_visiveis]
     
-    # CSS para fazer botão parecer parte do card
+    # CSS para estilizar os botões como cards completos
     st.markdown("""
     <style>
-    /* Remover espaço entre card e botão */
-    div[data-testid="stButton"] {
-        margin-top: -15px !important;
-    }
-    /* Estilizar botão para combinar com card */
+    /* Fazer botão parecer um card grande */
     div[data-testid="stButton"] button {
-        border-radius: 0 0 8px 8px !important;
-        border-top: none !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        padding: 10px !important;
+        height: 140px !important;
+        border: 2px solid #1f77b4 !important;
+        border-radius: 10px !important;
+        background: linear-gradient(135deg, rgba(31, 119, 180, 0.12) 0%, rgba(31, 119, 180, 0.05) 100%) !important;
+        padding: 15px !important;
+        text-align: left !important;
+        font-size: 14px !important;
+        line-height: 1.4 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transition: all 0.2s !important;
+    }
+    div[data-testid="stButton"] button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        border-color: rgba(31, 119, 180, 0.8) !important;
+    }
+    div[data-testid="stButton"] button p {
+        margin: 0 !important;
+        text-align: left !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -999,42 +1009,19 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
-                    # Card com borda arredondada apenas no topo
-                    st.markdown(f"""
-                    <div style="
-                        padding: 15px;
-                        border-radius: 10px 10px 0 0;
-                        border: 2px solid {botao['cor']};
-                        border-bottom: 1px solid {botao['cor']};
-                        background: linear-gradient(135deg, {botao['cor']}20 0%, {botao['cor']}08 100%);
-                        min-height: 110px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        margin-bottom: 0px;
-                    ">
-                        <div style="font-size: 28px; margin-bottom: 5px;">{botao['icone']}</div>
-                        <h4 style="margin: 5px 0; color: {botao['cor']}; font-weight: bold; font-size: 15px;">{botao['nome']}</h4>
-                        <p style="color: #666; font-size: 11px; margin: 4px 0; line-height: 1.3;">
-                            {botao['descricao']}
-                        </p>
-                        <p style="
-                            color: {botao['cor']}; 
-                            font-weight: bold; 
-                            font-size: 10px; 
-                            margin: 6px 0 0 0;
-                            padding-top: 5px;
-                            border-top: 1px solid {botao['cor']}40;
-                        ">
-                            📊 {botao['preview']}
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Botão com todo o conteúdo do card
+                    botao_label = f"""
+{botao['icone']}  **{botao['nome']}**
+
+{botao['descricao']}
+
+📊 {botao['preview']}
+"""
                     
-                    # Botão integrado (parece parte do card)
                     if st.button(
-                        f"▶️  Acessar", 
+                        botao_label,
                         key=f"btn_{botao['nome']}", 
-                        use_container_width=True,
-                        type="primary"
+                        use_container_width=True
                     ):
                         ir_para_modulo(botao['nome'])
                         st.rerun()
