@@ -993,22 +993,6 @@ if st.session_state.tela_atual == 'home':
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
-    # CSS global para cada botão com classe específica
-    css_cores = "<style>"
-    for i, botao in enumerate(botoes_visiveis):
-        css_cores += f"""
-        .btn-card-{i} button {{
-            border: 2px solid {botao['cor']} !important;
-            background: linear-gradient(135deg, {botao['cor']}80 0%, {botao['cor']}30 100%) !important;
-        }}
-        .btn-card-{i} button:hover {{
-            background: linear-gradient(135deg, {botao['cor']}95 0%, {botao['cor']}50 100%) !important;
-            border-color: {botao['cor']} !important;
-        }}
-        """
-    css_cores += "</style>"
-    st.markdown(css_cores, unsafe_allow_html=True)
-    
     for idx in range(0, num_botoes, num_colunas):
         cols = st.columns(num_colunas)
         
@@ -1018,10 +1002,7 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
-                    # Wrapper com classe única
-                    st.markdown(f'<div class="btn-card-{botao_idx}">', unsafe_allow_html=True)
-                    
-                    # Label com título maior usando markdown
+                    # Label com título maior
                     botao_label = f"**{botao['nome'].upper()}**\n\n{botao['descricao']}\n\n{botao['preview']}"
                     
                     if st.button(
@@ -1033,7 +1014,20 @@ if st.session_state.tela_atual == 'home':
                         ir_para_modulo(botao['nome'])
                         st.rerun()
                     
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    # CSS INLINE aplicado DEPOIS do botão para colorir especificamente ele
+                    st.markdown(f"""
+                    <style>
+                    button[kind="secondary"][aria-label*="{botao['nome'].upper()}"] {{
+                        border: 2px solid {botao['cor']} !important;
+                        background: linear-gradient(135deg, {botao['cor']}50 0%, {botao['cor']}20 100%) !important;
+                        color: #1a202c !important;
+                    }}
+                    button[kind="secondary"][aria-label*="{botao['nome'].upper()}"]:hover {{
+                        background: linear-gradient(135deg, {botao['cor']}70 0%, {botao['cor']}35 100%) !important;
+                        border-color: {botao['cor']} !important;
+                    }}
+                    </style>
+                    """, unsafe_allow_html=True)
     
     # Informações do rodapé
     st.markdown("---")
