@@ -968,8 +968,8 @@ if st.session_state.tela_atual == 'home':
     # Filtrar apenas módulos visíveis para o usuário
     botoes_visiveis = [b for b in botoes_config if b['nome'] in modulos_visiveis]
     
-    # Criar grid de botões - 3 colunas
-    num_colunas = 3
+    # Criar grid de botões - 2 colunas (melhor para mobile)
+    num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
     for idx in range(0, num_botoes, num_colunas):
@@ -981,42 +981,52 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
-                    # Card estilizado com CSS
+                    # Card clicável menor - metade do tamanho anterior
                     st.markdown(f"""
-                    <div style="
-                        padding: 25px;
-                        border-radius: 12px;
-                        border: 2px solid {botao['cor']};
-                        background: linear-gradient(135deg, {botao['cor']}20 0%, {botao['cor']}08 100%);
-                        margin-bottom: 15px;
-                        min-height: 180px;
-                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                        transition: transform 0.2s;
-                    ">
-                        <div style="font-size: 48px; margin-bottom: 10px;">{botao['icone']}</div>
-                        <h3 style="margin: 10px 0; color: {botao['cor']}; font-weight: bold;">{botao['nome']}</h3>
-                        <p style="color: #666; font-size: 14px; margin: 8px 0; line-height: 1.4;">
+                    <style>
+                        .card-{botao_idx} {{
+                            padding: 15px;
+                            border-radius: 10px;
+                            border: 2px solid {botao['cor']};
+                            background: linear-gradient(135deg, {botao['cor']}20 0%, {botao['cor']}08 100%);
+                            margin-bottom: 10px;
+                            min-height: 110px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                            cursor: pointer;
+                            transition: all 0.2s;
+                        }}
+                        .card-{botao_idx}:hover {{
+                            transform: translateY(-2px);
+                            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+                            border-color: {botao['cor']}DD;
+                        }}
+                    </style>
+                    <div class="card-{botao_idx}">
+                        <div style="font-size: 28px; margin-bottom: 5px;">{botao['icone']}</div>
+                        <h4 style="margin: 5px 0; color: {botao['cor']}; font-weight: bold; font-size: 15px;">{botao['nome']}</h4>
+                        <p style="color: #666; font-size: 11px; margin: 4px 0; line-height: 1.3;">
                             {botao['descricao']}
                         </p>
                         <p style="
                             color: {botao['cor']}; 
                             font-weight: bold; 
-                            font-size: 13px; 
-                            margin: 15px 0 0 0;
-                            padding-top: 10px;
+                            font-size: 10px; 
+                            margin: 6px 0 0 0;
+                            padding-top: 5px;
                             border-top: 1px solid {botao['cor']}40;
                         ">
-                            {botao['preview']}
+                            📊 {botao['preview']}
                         </p>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Botão de acesso
+                    # Botão invisível que ocupa o espaço do card
                     if st.button(
-                        f"Acessar →", 
+                        "‎",  # Espaço invisível
                         key=f"btn_{botao['nome']}", 
                         use_container_width=True,
-                        type="primary"
+                        type="secondary",
+                        help=f"Acessar {botao['nome']}"
                     ):
                         ir_para_modulo(botao['nome'])
                         st.rerun()
