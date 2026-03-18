@@ -968,6 +968,24 @@ if st.session_state.tela_atual == 'home':
     # Filtrar apenas módulos visíveis para o usuário
     botoes_visiveis = [b for b in botoes_config if b['nome'] in modulos_visiveis]
     
+    # CSS para fazer botão parecer parte do card
+    st.markdown("""
+    <style>
+    /* Remover espaço entre card e botão */
+    div[data-testid="stButton"] {
+        margin-top: -15px !important;
+    }
+    /* Estilizar botão para combinar com card */
+    div[data-testid="stButton"] button {
+        border-radius: 0 0 8px 8px !important;
+        border-top: none !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        padding: 10px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Criar grid de botões - 2 colunas (melhor para mobile)
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
@@ -981,47 +999,45 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
-                    # Usar container clicável
-                    container = st.container()
-                    
-                    with container:
-                        # Card visual
-                        st.markdown(f"""
-                        <div style="
-                            padding: 15px;
-                            border-radius: 10px;
-                            border: 2px solid {botao['cor']};
-                            background: linear-gradient(135deg, {botao['cor']}20 0%, {botao['cor']}08 100%);
-                            min-height: 110px;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                            margin-bottom: 5px;
+                    # Card com borda arredondada apenas no topo
+                    st.markdown(f"""
+                    <div style="
+                        padding: 15px;
+                        border-radius: 10px 10px 0 0;
+                        border: 2px solid {botao['cor']};
+                        border-bottom: 1px solid {botao['cor']};
+                        background: linear-gradient(135deg, {botao['cor']}20 0%, {botao['cor']}08 100%);
+                        min-height: 110px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        margin-bottom: 0px;
+                    ">
+                        <div style="font-size: 28px; margin-bottom: 5px;">{botao['icone']}</div>
+                        <h4 style="margin: 5px 0; color: {botao['cor']}; font-weight: bold; font-size: 15px;">{botao['nome']}</h4>
+                        <p style="color: #666; font-size: 11px; margin: 4px 0; line-height: 1.3;">
+                            {botao['descricao']}
+                        </p>
+                        <p style="
+                            color: {botao['cor']}; 
+                            font-weight: bold; 
+                            font-size: 10px; 
+                            margin: 6px 0 0 0;
+                            padding-top: 5px;
+                            border-top: 1px solid {botao['cor']}40;
                         ">
-                            <div style="font-size: 28px; margin-bottom: 5px;">{botao['icone']}</div>
-                            <h4 style="margin: 5px 0; color: {botao['cor']}; font-weight: bold; font-size: 15px;">{botao['nome']}</h4>
-                            <p style="color: #666; font-size: 11px; margin: 4px 0; line-height: 1.3;">
-                                {botao['descricao']}
-                            </p>
-                            <p style="
-                                color: {botao['cor']}; 
-                                font-weight: bold; 
-                                font-size: 10px; 
-                                margin: 6px 0 0 0;
-                                padding-top: 5px;
-                                border-top: 1px solid {botao['cor']}40;
-                            ">
-                                📊 {botao['preview']}
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Botão para acessar (agora como texto simples)
-                        if st.button(
-                            f"▶️ Acessar", 
-                            key=f"btn_{botao['nome']}", 
-                            use_container_width=True
-                        ):
-                            ir_para_modulo(botao['nome'])
-                            st.rerun()
+                            📊 {botao['preview']}
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Botão integrado (parece parte do card)
+                    if st.button(
+                        f"▶️  Acessar", 
+                        key=f"btn_{botao['nome']}", 
+                        use_container_width=True,
+                        type="primary"
+                    ):
+                        ir_para_modulo(botao['nome'])
+                        st.rerun()
     
     # Informações do rodapé
     st.markdown("---")
