@@ -15,62 +15,9 @@ st.set_page_config(
     page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 )
 
-# ====================== ÍCONE E PWA PARA CHROME/ANDROID ======================
-LOGO_URL = "https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
-
-# Criar manifest.json virtual para PWA
-manifest_json = f"""
-{{
-    "name": "Medtextil BI Dashboard",
-    "short_name": "Medtextil BI",
-    "description": "Dashboard de Business Intelligence",
-    "start_url": ".",
-    "display": "standalone",
-    "theme_color": "#0066CC",
-    "background_color": "#ffffff",
-    "icons": [
-        {{
-            "src": "{LOGO_URL}",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any maskable"
-        }},
-        {{
-            "src": "{LOGO_URL}",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
-        }}
-    ]
-}}
-"""
-
-# Meta tags e links para PWA funcionar no Chrome/Android e iOS
-st.markdown(f"""
-    <head>
-        <!-- PWA Manifest -->
-        <link rel="manifest" href="data:application/json;base64,{__import__('base64').b64encode(manifest_json.encode()).decode()}">
-        
-        <!-- Meta tags PWA -->
-        <meta name="theme-color" content="#0066CC">
-        <meta name="mobile-web-app-capable" content="yes">
-        <meta name="application-name" content="Medtextil BI">
-        
-        <!-- Ícones para Chrome/Android -->
-        <link rel="icon" type="image/png" sizes="192x192" href="{LOGO_URL}">
-        <link rel="icon" type="image/png" sizes="512x512" href="{LOGO_URL}">
-        <link rel="icon" type="image/png" sizes="32x32" href="{LOGO_URL}">
-        <link rel="icon" type="image/png" sizes="16x16" href="{LOGO_URL}">
-        
-        <!-- Ícones para iOS/Safari -->
-        <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
-        <link rel="apple-touch-icon" sizes="152x152" href="{LOGO_URL}">
-        <link rel="apple-touch-icon" sizes="120x120" href="{LOGO_URL}">
-        <meta name="apple-mobile-web-app-title" content="Medtextil BI">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    </head>
-""", unsafe_allow_html=True)
+# ====================== CONFIGURAÇÃO DO ÍCONE ======================
+# O Streamlit gerencia automaticamente o ícone via page_icon
+# Nenhuma configuração adicional é necessária
 
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
