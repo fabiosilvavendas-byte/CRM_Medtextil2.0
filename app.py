@@ -993,82 +993,8 @@ if st.session_state.tela_atual == 'home':
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
-    # Gerar CSS único para cada botão por posição
-    st.markdown("""
-    <style>
-    /* Dashboard - Azul Royal */
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(1) button {
-        border: 2px solid #0066CC !important;
-        background: linear-gradient(135deg, #0066CC40 0%, #0066CC15 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(1) button:hover {
-        background: linear-gradient(135deg, #0066CC55 0%, #0066CC25 100%) !important;
-    }
-    
-    /* Positivação - Verde Esmeralda */
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(1) button {
-        border: 2px solid #10B981 !important;
-        background: linear-gradient(135deg, #10B98140 0%, #10B98115 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(1) button:hover {
-        background: linear-gradient(135deg, #10B98155 0%, #10B98125 100%) !important;
-    }
-    
-    /* Inadimplência - Azul Céu */
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(2) button {
-        border: 2px solid #0EA5E9 !important;
-        background: linear-gradient(135deg, #0EA5E940 0%, #0EA5E915 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(2) button:hover {
-        background: linear-gradient(135deg, #0EA5E955 0%, #0EA5E925 100%) !important;
-    }
-    
-    /* Clientes sem Compra - Verde Lima */
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(2) button {
-        border: 2px solid #22C55E !important;
-        background: linear-gradient(135deg, #22C55E40 0%, #22C55E15 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(2) button:hover {
-        background: linear-gradient(135deg, #22C55E55 0%, #22C55E25 100%) !important;
-    }
-    
-    /* Histórico - Azul Médio */
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(3) button {
-        border: 2px solid #3B82F6 !important;
-        background: linear-gradient(135deg, #3B82F640 0%, #3B82F615 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(3) button:hover {
-        background: linear-gradient(135deg, #3B82F655 0%, #3B82F625 100%) !important;
-    }
-    
-    /* Preço Médio - Verde Escuro */
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(3) button {
-        border: 2px solid #059669 !important;
-        background: linear-gradient(135deg, #05966940 0%, #05966915 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(3) button:hover {
-        background: linear-gradient(135deg, #05966955 0%, #05966925 100%) !important;
-    }
-    
-    /* Pedidos Pendentes - Azul Ciano */
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(4) button {
-        border: 2px solid #06B6D4 !important;
-        background: linear-gradient(135deg, #06B6D440 0%, #06B6D415 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(1) > div:nth-of-type(4) button:hover {
-        background: linear-gradient(135deg, #06B6D455 0%, #06B6D425 100%) !important;
-    }
-    
-    /* Rankings - Verde Água */
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(4) button {
-        border: 2px solid #14B8A6 !important;
-        background: linear-gradient(135deg, #14B8A640 0%, #14B8A615 100%) !important;
-    }
-    div[data-testid="column"]:nth-of-type(2) > div:nth-of-type(4) button:hover {
-        background: linear-gradient(135deg, #14B8A655 0%, #14B8A625 100%) !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # Gerar ID único para cada linha/coluna
+    button_index = 0
     
     for idx in range(0, num_botoes, num_colunas):
         cols = st.columns(num_colunas)
@@ -1079,6 +1005,20 @@ if st.session_state.tela_atual == 'home':
                 botao = botoes_visiveis[botao_idx]
                 
                 with cols[col_idx]:
+                    # CSS específico para ESTE botão usando índice único
+                    st.markdown(f"""
+                    <style>
+                    /* Botão {botao['nome']} - índice {button_index} */
+                    div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div:nth-child({idx + 1}) div[data-testid="column"]:nth-child({col_idx + 1}) button {{
+                        border: 2px solid {botao['cor']} !important;
+                        background: linear-gradient(135deg, {botao['cor']}60 0%, {botao['cor']}20 100%) !important;
+                    }}
+                    div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div:nth-child({idx + 1}) div[data-testid="column"]:nth-child({col_idx + 1}) button:hover {{
+                        background: linear-gradient(135deg, {botao['cor']}80 0%, {botao['cor']}40 100%) !important;
+                    }}
+                    </style>
+                    """, unsafe_allow_html=True)
+                    
                     # Label com título maior usando markdown
                     botao_label = f"**{botao['nome'].upper()}**\n\n{botao['descricao']}\n\n{botao['preview']}"
                     
@@ -1090,6 +1030,8 @@ if st.session_state.tela_atual == 'home':
                     ):
                         ir_para_modulo(botao['nome'])
                         st.rerun()
+                    
+                    button_index += 1
     
     # Informações do rodapé
     st.markdown("---")
