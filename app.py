@@ -23,7 +23,7 @@ st.set_page_config(
 # 3. "Copiar endereço da imagem"
 # 4. Deve ser algo como: https://i.imgur.com/XXXXX.png
 
-LOGO_URL = "https://i.imgur.com/XXXXX.png"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
+LOGO_URL = "https://i.imgur.com/gt3rgyL.png"  # ⬅️ COLE AQUI O LINK DIRETO DA SUA LOGO
 
 st.markdown(f"""
     <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
