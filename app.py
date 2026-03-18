@@ -993,6 +993,24 @@ if st.session_state.tela_atual == 'home':
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
+    # CSS GLOBAL aplicado ANTES dos botões - usando nth-child direto
+    css_global = "<style>"
+    for i, botao in enumerate(botoes_visiveis):
+        # Cada botão é o (i+1)-ésimo botão secondary na página
+        css_global += f"""
+        button[kind="secondary"]:nth-of-type({i+1}) {{
+            border: 2px solid {botao['cor']} !important;
+            background: linear-gradient(135deg, {botao['cor']}60 0%, {botao['cor']}25 100%) !important;
+            color: #1a202c !important;
+        }}
+        button[kind="secondary"]:nth-of-type({i+1}):hover {{
+            background: linear-gradient(135deg, {botao['cor']}80 0%, {botao['cor']}40 100%) !important;
+            border-color: {botao['cor']}DD !important;
+        }}
+        """
+    css_global += "</style>"
+    st.markdown(css_global, unsafe_allow_html=True)
+    
     for idx in range(0, num_botoes, num_colunas):
         cols = st.columns(num_colunas)
         
@@ -1013,21 +1031,6 @@ if st.session_state.tela_atual == 'home':
                     ):
                         ir_para_modulo(botao['nome'])
                         st.rerun()
-                    
-                    # CSS INLINE aplicado DEPOIS do botão para colorir especificamente ele
-                    st.markdown(f"""
-                    <style>
-                    button[kind="secondary"][aria-label*="{botao['nome'].upper()}"] {{
-                        border: 2px solid {botao['cor']} !important;
-                        background: linear-gradient(135deg, {botao['cor']}50 0%, {botao['cor']}20 100%) !important;
-                        color: #1a202c !important;
-                    }}
-                    button[kind="secondary"][aria-label*="{botao['nome'].upper()}"]:hover {{
-                        background: linear-gradient(135deg, {botao['cor']}70 0%, {botao['cor']}35 100%) !important;
-                        border-color: {botao['cor']} !important;
-                    }}
-                    </style>
-                    """, unsafe_allow_html=True)
     
     # Informações do rodapé
     st.markdown("---")
