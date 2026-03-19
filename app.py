@@ -1666,19 +1666,18 @@ div.med-card:hover {
     transform: translateY(-3px);
 }
 
-/* Botão invisível que fica SOBRE o card */
-div[id^="container_"] + div[data-testid="stButton"] button {
-    position: absolute !important;
-    top: -148px !important;
-    left: 0 !important;
+/* ── HOME: botão overlay invisível sobre o card ── */
+div.med-card-col div[data-testid="stButton"] > button {
+    position: relative !important;
+    display: block !important;
     width: 100% !important;
     height: 138px !important;
+    margin-top: -148px !important;
     opacity: 0 !important;
-    background: transparent !important;
-    border: none !important;
     cursor: pointer !important;
-    z-index: 10 !important;
-    margin: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    z-index: 99 !important;
     padding: 0 !important;
 }
 
@@ -1767,19 +1766,23 @@ with st.sidebar:
         margin-bottom:5px;padding-left:4px;">Navegação</div>""",
         unsafe_allow_html=True)
 
-    _opcoes = ["🏠  Início"] + [
-        f"{_ICONES_NAV.get(m,'•')}  {m}" for m in modulos_visiveis
-    ]
-    _cur = st.session_state.menu_option
-    _idx = 0 if _cur == '__home__' else (
-        modulos_visiveis.index(_cur) + 1 if _cur in modulos_visiveis else 0
-    )
-    _escolha = st.radio("nav", _opcoes, index=_idx,
-                        key="sidebar_radio_v3", label_visibility="collapsed")
-    _novo = '__home__' if _escolha.startswith("🏠") else _escolha.split("  ", 1)[-1]
-    if _novo != st.session_state.menu_option:
-        st.session_state.menu_option = _novo
+    # Botão Início
+    if st.button("🏠  Início", key="nav_home", use_container_width=True, 
+                 type="primary" if st.session_state.menu_option == '__home__' else "secondary"):
+        st.session_state.menu_option = '__home__'
         st.rerun()
+    
+    # Botões dos módulos
+    for modulo in modulos_visiveis:
+        icone = _ICONES_NAV.get(modulo, '•')
+        is_selected = (st.session_state.menu_option == modulo)
+        
+        if st.button(f"{icone}  {modulo}", 
+                    key=f"nav_{modulo}", 
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary"):
+            st.session_state.menu_option = modulo
+            st.rerun()
 
 # ── Tela Home ─────────────────────────────────────────────────────────────
 if st.session_state.menu_option == '__home__':
@@ -1820,7 +1823,7 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — cards 100% clicáveis
+    # Grid 4 colunas — técnica de botão overlay que FUNCIONA
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4)
@@ -1831,27 +1834,26 @@ if st.session_state.menu_option == '__home__':
                 info = card['info']
                 ic   = _ICONES_CARD.get(nome, '•')
 
-                # Container para empilhar card + botão
-                container_id = f"container_{nome.replace(' ', '_')}"
-                
-                # Card visual
+                # 1) Abre wrapper + Card visual
                 st.markdown(f"""
-                <div id="{container_id}" style="position: relative;">
-                    <div class="med-card"
-                         onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
-                         onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
-                        <div class="mc-icon">{ic}</div>
-                        <div class="mc-title">{nome}</div>
-                        <div class="mc-desc">{desc}</div>
-                        <div class="mc-info">{info}</div>
-                    </div>
+                <div class="med-card-col">
+                <div class="med-card"
+                     onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
+                     onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
+                    <div class="mc-icon">{ic}</div>
+                    <div class="mc-title">{nome}</div>
+                    <div class="mc-desc">{desc}</div>
+                    <div class="mc-info">{info}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Botão clicável INVISÍVEL (label vazio)
-                if st.button("​", key=f"btn_{nome}", use_container_width=True):
+
+                # 2) Botão overlay (CSS vai subir ele sobre o card)
+                if st.button(nome, key=f"hc_{nome}", use_container_width=True):
                     st.session_state.menu_option = nome
                     st.rerun()
+
+                # 3) Fecha wrapper
+                st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     
