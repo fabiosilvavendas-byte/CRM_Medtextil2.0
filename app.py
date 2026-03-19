@@ -1736,7 +1736,7 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — card HTML + botão overlay imediatamente abaixo
+    # Grid 4 colunas — card HTML + botão overlay
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4)
@@ -1747,9 +1747,11 @@ if st.session_state.menu_option == '__home__':
                 info = card['info']
                 ic   = _ICONES_CARD.get(nome, '•')
 
-                # 1) Card visual HTML
+                # Wrapper container
+                st.markdown('<div class="med-card-col">', unsafe_allow_html=True)
+                
+                # Card visual HTML
                 st.markdown(f"""
-                <div class="med-card-col">
                 <div class="med-card"
                      onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
                      onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
@@ -1760,13 +1762,12 @@ if st.session_state.menu_option == '__home__':
                 </div>
                 """, unsafe_allow_html=True)
 
-                # 2) Botão overlay — renderizado logo após, na mesma coluna
-                #    CSS sobe ele via margin-top:-148px e opacity:0
+                # Botão overlay invisível
                 if st.button(nome, key=f"hc_{nome}", use_container_width=True):
                     st.session_state.menu_option = nome
                     st.rerun()
 
-                # Fecha div.med-card-col (necessário para o seletor CSS funcionar)
+                # Fecha wrapper
                 st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
