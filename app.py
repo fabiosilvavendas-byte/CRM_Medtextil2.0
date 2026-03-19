@@ -1647,74 +1647,48 @@ section[data-testid="stSidebar"] .stRadio div[data-testid="stMarkdownContainer"]
     padding: 0 !important; margin: 0 !important;
 }
 
-/* ── HOME: card visual (div.med-card) ── */
-div.med-card {
-    background: #FFFFFF;
-    border: 1px solid #E4E9F0;
-    border-radius: 14px;
-    padding: 20px 18px 16px;
-    min-height: 138px;
-    box-shadow: 0 1px 5px rgba(31,71,136,0.06);
-    transition: box-shadow 0.18s, transform 0.18s, border-color 0.18s;
-    cursor: pointer;
-    position: relative;
-    box-sizing: border-box;
+/* ── HOME: st.button estilizado como card — solução nativa Streamlit ──
+   O botão É o card. Sem HTML separado, sem overlay, sem posicionamento.
+   Identificado por div.home-grid que envolve cada linha de cards. ── */
+div.home-grid div[data-testid="stButton"] > button {
+    background: #FFFFFF !important;
+    border: 1px solid #E4E9F0 !important;
+    border-radius: 14px !important;
+    padding: 18px 16px 14px 18px !important;
+    min-height: 148px !important;
+    height: auto !important;
+    width: 100% !important;
+    text-align: left !important;
+    white-space: pre-wrap !important;
+    line-height: 1.55 !important;
+    font-size: 0.88rem !important;
+    font-weight: 400 !important;
+    color: #1A2F52 !important;
+    box-shadow: 0 1px 6px rgba(31,71,136,0.07) !important;
+    transition: all 0.18s ease !important;
+    cursor: pointer !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    letter-spacing: normal !important;
+    transform: translateY(0) !important;
 }
-div.med-card:hover {
+div.home-grid div[data-testid="stButton"] > button:hover {
     border-color: #B8CDF0 !important;
-    box-shadow: 0 7px 22px rgba(31,71,136,0.14) !important;
-    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(31,71,136,0.15) !important;
+    transform: translateY(-3px) !important;
+    background: #FAFBFF !important;
 }
-
-/* ── HOME: botão overlay invisível sobre o card ── */
-div.med-card-col div[data-testid="stButton"] > button {
-    position: relative !important;
-    display: block !important;
-    width: 100% !important;
-    height: 138px !important;
-    margin-top: -148px !important;
-    opacity: 0 !important;
-    cursor: pointer !important;
-    border: none !important;
-    background: transparent !important;
-    z-index: 99 !important;
-    padding: 0 !important;
+div.home-grid div[data-testid="stButton"] > button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 6px rgba(31,71,136,0.10) !important;
 }
-
-div.med-card .mc-icon {
-    width: 38px; height: 38px;
-    background: #EEF3FC; border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    margin-bottom: 11px; color: #1F4788; font-size: 16px;
-}
-div.med-card .mc-title {
-    font-size: 0.94rem; font-weight: 700;
-    color: #1A2F52; margin-bottom: 4px; letter-spacing: -0.01em;
-}
-div.med-card .mc-desc {
-    font-size: 0.75rem; color: #6C757D; line-height: 1.4; margin-bottom: 9px;
-}
-div.med-card .mc-info {
-    font-size: 0.70rem; color: #ADB5BD;
-    border-top: 1px solid #F0F2F5; padding-top: 7px;
-}
-
-/* ── HOME: botão overlay invisível sobre o card ──
-   O Streamlit renderiza o st.button logo após o st.markdown na mesma coluna.
-   Usamos margin-top negativo para "subir" o botão sobre o card,
-   e deixamos opacity:0 para ser invisível mas clicável. ── */
-div.med-card-col div[data-testid="stButton"] > button {
-    position: relative !important;
-    display: block !important;
-    width: 100% !important;
-    height: 138px !important;
-    margin-top: -148px !important;
-    opacity: 0 !important;
-    cursor: pointer !important;
-    border: none !important;
-    background: transparent !important;
-    z-index: 99 !important;
-    padding: 0 !important;
+div.home-grid div[data-testid="stButton"] > button p {
+    color: #1A2F52 !important;
+    white-space: pre-wrap !important;
+    text-align: left !important;
+    margin: 0 !important;
+    line-height: 1.55 !important;
+    font-size: 0.88rem !important;
 }
 
 /* ── Métricas ── */
@@ -1824,37 +1798,10 @@ if st.session_state.menu_option == '__home__':
     """, unsafe_allow_html=True)
 
     # Grid 4 colunas — técnica de botão overlay que FUNCIONA
-    # CSS: botão dentro do container fica position:absolute sobre o card
-    st.markdown("""
-    <style>
-    /* Cada container de card tem position:relative */
-    div[data-testid="stVerticalBlockBorderWrapper"],
-    div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
-        position: relative !important;
-    }
-    /* Botão dentro do container: absoluto, cobre 100% do card, invisível */
-    div.card-container div[data-testid="stButton"] > button {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        opacity: 0 !important;
-        z-index: 100 !important;
-        cursor: pointer !important;
-        background: transparent !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    div.card-container {
-        position: relative !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
+        # Wrapper que isola o CSS dos cards — não afeta outros botões do app
+        st.markdown('<div class="home-grid">', unsafe_allow_html=True)
         cols = st.columns(4)
         for j, card in enumerate(row):
             with cols[j]:
@@ -1862,28 +1809,13 @@ if st.session_state.menu_option == '__home__':
                 desc = _DESC.get(nome, '')
                 info = card['info']
                 ic   = _ICONES_CARD.get(nome, '•')
-
-                # Container relativo — card HTML + botão invisível dentro do mesmo espaço
-                with st.container():
-                    # Card visual HTML
-                    st.markdown(f"""
-                    <div class="card-container">
-                        <div class="med-card"
-                             onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
-                             onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
-                            <div class="mc-icon">{ic}</div>
-                            <div class="mc-title">{nome}</div>
-                            <div class="mc-desc">{desc}</div>
-                            <div class="mc-info">{info}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    # Botão invisível — position:absolute via CSS, cobre 100% do card
-                    if st.button(" ", key=f"hc_{nome}", use_container_width=True):
-                        st.session_state.menu_option = nome
-                        st.rerun()
-
+                # Label estruturado: ícone + título + desc + separador + info
+                # CSS (white-space: pre-wrap) preserva as quebras de linha
+                lbl = ic + "  " + nome + "\n" + desc + "\n\n" + info
+                if st.button(lbl, key=f"hc_{nome}", use_container_width=True):
+                    st.session_state.menu_option = nome
+                    st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     
 
