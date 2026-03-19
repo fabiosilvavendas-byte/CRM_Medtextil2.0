@@ -1665,6 +1665,23 @@ div.med-card:hover {
     box-shadow: 0 7px 22px rgba(31,71,136,0.14) !important;
     transform: translateY(-3px);
 }
+
+/* Botão invisível que fica SOBRE o card */
+div[id^="container_"] + div[data-testid="stButton"] button {
+    position: absolute !important;
+    top: -148px !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 138px !important;
+    opacity: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    cursor: pointer !important;
+    z-index: 10 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
 div.med-card .mc-icon {
     width: 38px; height: 38px;
     background: #EEF3FC; border-radius: 9px;
@@ -1803,7 +1820,7 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — cards clicáveis via form (SEM abrir nova aba)
+    # Grid 4 colunas — cards 100% clicáveis
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4)
@@ -1814,42 +1831,27 @@ if st.session_state.menu_option == '__home__':
                 info = card['info']
                 ic   = _ICONES_CARD.get(nome, '•')
 
-                # Card visual (mantém aparência)
+                # Container para empilhar card + botão
+                container_id = f"container_{nome.replace(' ', '_')}"
+                
+                # Card visual
                 st.markdown(f"""
-                <div class="med-card"
-                     onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
-                     onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
-                    <div class="mc-icon">{ic}</div>
-                    <div class="mc-title">{nome}</div>
-                    <div class="mc-desc">{desc}</div>
-                    <div class="mc-info">{info}</div>
+                <div id="{container_id}" style="position: relative;">
+                    <div class="med-card"
+                         onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
+                         onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
+                        <div class="mc-icon">{ic}</div>
+                        <div class="mc-title">{nome}</div>
+                        <div class="mc-desc">{desc}</div>
+                        <div class="mc-info">{info}</div>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Botão invisível SOBRE o card usando form
-                with st.form(key=f"form_{nome}"):
-                    submitted = st.form_submit_button("", use_container_width=True)
-                    if submitted:
-                        st.session_state.menu_option = nome
-                        st.rerun()
-                
-                # CSS para tornar o form button invisível e sobrepor o card
-                st.markdown(f"""
-                <style>
-                form[data-testid="stForm"][key="form_{nome}"] {{
-                    position: relative;
-                    margin-top: -158px;
-                    z-index: 99;
-                }}
-                form[data-testid="stForm"][key="form_{nome}"] button {{
-                    opacity: 0 !important;
-                    height: 138px !important;
-                    cursor: pointer !important;
-                    background: transparent !important;
-                    border: none !important;
-                }}
-                </style>
-                """, unsafe_allow_html=True)
+                # Botão clicável INVISÍVEL (label vazio)
+                if st.button("​", key=f"btn_{nome}", use_container_width=True):
+                    st.session_state.menu_option = nome
+                    st.rerun()
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     
