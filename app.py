@@ -7,42 +7,6 @@ import io
 import requests
 from github import Github
 
-# ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
-def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
-    """Renderiza um card KPI profissional com HTML/CSS"""
-    delta_html = ""
-    if delta:
-        delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
-        delta_html = f'<div style="color: {delta_color}; font-size: 0.875rem; font-weight: 600; margin-top: 0.5rem;">{delta}</div>'
-    
-    card_html = f"""
-    <div style="
-        background: white;
-        padding: 1.5rem;
-        border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        border-left: 4px solid {color};
-        height: 140px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    ">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="font-size: 0.8rem; color: #6B7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                {label}
-            </div>
-            <div style="font-size: 1.75rem;">{icon}</div>
-        </div>
-        <div>
-            <div style="font-size: 1.75rem; font-weight: 700; color: #1F2937;">
-                {value}
-            </div>
-            {delta_html}
-        </div>
-    </div>
-    """
-    st.markdown(card_html, unsafe_allow_html=True)
-
 # Configuração da página
 st.set_page_config(
     page_title="Dashboard BI Medtextil", 
@@ -51,95 +15,298 @@ st.set_page_config(
     page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 )
 
-# ====================== CSS PROFISSIONAL ======================
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    * { font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif !important; }
-    
-    .main { background-color: #F8F9FA !important; }
-    
-    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
-    
-    /* Sidebar profissional */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1F4788 0%, #2D5AA0 100%) !important;
-    }
-    [data-testid="stSidebar"] * { color: white !important; }
-    
-    /* Cards para métricas */
-    [data-testid="stMetric"] {
-        background-color: white !important;
-        padding: 1.5rem !important;
-        border-radius: 12px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-        border-left: 4px solid #1F4788 !important;
-        transition: transform 0.2s ease !important;
-    }
-    [data-testid="stMetric"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
-    }
-    
-    /* Cores diferentes por coluna */
-    [data-testid="column"]:nth-child(1) [data-testid="stMetric"] { border-left-color: #1F4788 !important; }
-    [data-testid="column"]:nth-child(2) [data-testid="stMetric"] { border-left-color: #10B981 !important; }
-    [data-testid="column"]:nth-child(3) [data-testid="stMetric"] { border-left-color: #F59E0B !important; }
-    [data-testid="column"]:nth-child(4) [data-testid="stMetric"] { border-left-color: #EF4444 !important; }
-    
-    /* Títulos */
-    h1 { color: #1F2937 !important; font-weight: 700 !important; }
-    h2 { color: #374151 !important; font-weight: 600 !important; margin-top: 2rem !important; }
-    h3 { color: #4B5563 !important; font-weight: 600 !important; }
-    
-    /* Botões modernos */
-    .stButton button {
-        background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 8px !important;
-        padding: 0.625rem 1.25rem !important;
-        font-weight: 600 !important;
-        box-shadow: 0 2px 4px rgba(31, 71, 136, 0.2) !important;
-        transition: all 0.3s ease !important;
-    }
-    .stButton button:hover {
-        box-shadow: 0 4px 8px rgba(31, 71, 136, 0.3) !important;
-        transform: translateY(-1px) !important;
-    }
-    
-    /* Inputs */
-    input, select, textarea {
-        border-radius: 8px !important;
-        border: 1px solid #E5E7EB !important;
-    }
-    input:focus, select:focus { border-color: #1F4788 !important; }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: white !important;
-        padding: 0.5rem !important;
-        border-radius: 8px !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1F4788 !important;
-        color: white !important;
-    }
-    
-    /* Gráficos */
-    .js-plotly-plot {
-        border-radius: 12px !important;
-        background-color: white !important;
-        padding: 1rem !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # ====================== CONFIGURAÇÃO DO ÍCONE ======================
 # O Streamlit gerencia automaticamente o ícone via page_icon
 # Nenhuma configuração adicional é necessária
+
+# ====================== CSS CUSTOMIZADO - UX/UI PROFISSIONAL ======================
+st.markdown("""
+<style>
+/* ── Importar fonte Inter ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ── Reset e fonte base ── */
+html, body, [class*="css"] {
+    font-family: 'Inter', 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* ── Fundo cinza muito claro ── */
+.stApp {
+    background-color: #F8F9FA !important;
+}
+
+/* ── Sidebar limpa e profissional ── */
+[data-testid="stSidebar"] {
+    background: #FFFFFF !important;
+    border-right: 1px solid #E9ECEF !important;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.04) !important;
+}
+[data-testid="stSidebar"] .stMarkdown h1,
+[data-testid="stSidebar"] .stMarkdown h2,
+[data-testid="stSidebar"] .stMarkdown h3 {
+    color: #1F4788 !important;
+}
+
+/* ── Cards de métricas (st.metric) ── */
+[data-testid="stMetric"] {
+    background: #FFFFFF !important;
+    border-radius: 12px !important;
+    padding: 18px 20px !important;
+    border-left: 4px solid #1F4788 !important;
+    box-shadow: 0 2px 8px rgba(31, 71, 136, 0.08), 0 1px 3px rgba(0,0,0,0.04) !important;
+    transition: box-shadow 0.2s ease, transform 0.2s ease !important;
+}
+[data-testid="stMetric"]:hover {
+    box-shadow: 0 6px 20px rgba(31, 71, 136, 0.14) !important;
+    transform: translateY(-2px) !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: #6C757D !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: #1F4788 !important;
+}
+
+/* ── Cor alternada para cards de destaque ── */
+div[data-testid="column"]:nth-child(2) [data-testid="stMetric"] {
+    border-left-color: #2E86AB !important;
+}
+div[data-testid="column"]:nth-child(3) [data-testid="stMetric"] {
+    border-left-color: #28A745 !important;
+}
+div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
+    border-left-color: #F4A261 !important;
+}
+
+/* ── Botões modernos ── */
+.stButton > button {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    padding: 0.5rem 1.25rem !important;
+    border: 1.5px solid #1F4788 !important;
+    color: #1F4788 !important;
+    background: #FFFFFF !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 4px rgba(31, 71, 136, 0.10) !important;
+    letter-spacing: 0.01em !important;
+}
+.stButton > button:hover {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+    border-color: #1F4788 !important;
+    box-shadow: 0 4px 12px rgba(31, 71, 136, 0.25) !important;
+    transform: translateY(-1px) !important;
+}
+.stButton > button[kind="primary"] {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+    border-color: #1F4788 !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: #163561 !important;
+    border-color: #163561 !important;
+}
+
+/* ── Botão de Download ── */
+[data-testid="stDownloadButton"] > button {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    background: #F0F4FF !important;
+    color: #1F4788 !important;
+    border: 1.5px solid #1F4788 !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+}
+
+/* ── Cards de navegação (Home) ── */
+.stButton > button p {
+    font-size: 0.9rem !important;
+}
+
+/* ── Títulos de página ── */
+.stApp h1 {
+    color: #1A2F52 !important;
+    font-weight: 700 !important;
+    font-size: 1.75rem !important;
+    letter-spacing: -0.02em !important;
+}
+.stApp h2 {
+    color: #1F4788 !important;
+    font-weight: 600 !important;
+    font-size: 1.3rem !important;
+}
+.stApp h3 {
+    color: #2E4A7A !important;
+    font-weight: 600 !important;
+}
+
+/* ── Selectbox e inputs ── */
+.stSelectbox > div > div,
+.stTextInput > div > div > input,
+.stDateInput > div > div > input,
+.stNumberInput > div > div > input {
+    border-radius: 8px !important;
+    border-color: #DEE2E6 !important;
+    font-size: 0.9rem !important;
+}
+.stSelectbox > div > div:focus-within,
+.stTextInput > div > div:focus-within {
+    border-color: #1F4788 !important;
+    box-shadow: 0 0 0 2px rgba(31, 71, 136, 0.15) !important;
+}
+
+/* ── Tabs ── */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: #F0F4FF !important;
+    border-radius: 10px !important;
+    padding: 4px !important;
+    border-bottom: none !important;
+    gap: 4px !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    color: #6C757D !important;
+    padding: 6px 16px !important;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+}
+
+/* ── Dataframes / tabelas ── */
+[data-testid="stDataFrame"] {
+    border-radius: 10px !important;
+    overflow: hidden !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+}
+
+/* ── Divisores ── */
+hr {
+    border-color: #E9ECEF !important;
+    margin: 1rem 0 !important;
+}
+
+/* ── Alertas e info boxes ── */
+[data-testid="stAlert"] {
+    border-radius: 10px !important;
+}
+
+/* ── Sidebar logo area ── */
+.sidebar-logo-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 8px 8px 8px;
+    border-bottom: 1px solid #E9ECEF;
+    margin-bottom: 12px;
+}
+.sidebar-user-badge {
+    background: #F0F4FF;
+    border: 1px solid #C5D5F0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    color: #1F4788;
+    font-weight: 600;
+    width: 100%;
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* ── Barra de filtros no topo ── */
+.filter-bar {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    border: 1px solid #E9ECEF;
+}
+
+/* ── Cabeçalho da página ── */
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+.page-subtitle {
+    color: #6C757D;
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    margin-top: -4px;
+}
+
+/* ── Radio buttons estilo pill ── */
+.stRadio > div {
+    flex-direction: row !important;
+    gap: 8px !important;
+}
+.stRadio > div label {
+    border-radius: 20px !important;
+    padding: 4px 14px !important;
+    border: 1.5px solid #DEE2E6 !important;
+    font-size: 0.875rem !important;
+    cursor: pointer !important;
+    transition: all 0.15s !important;
+}
+.stRadio > div label:has(input:checked) {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+    border-color: #1F4788 !important;
+}
+
+/* ── Spinner ── */
+.stSpinner > div {
+    border-top-color: #1F4788 !important;
+}
+
+/* ── Sidebar navigation radio ── */
+[data-testid="stSidebar"] .stRadio > div {
+    flex-direction: column !important;
+    gap: 4px !important;
+}
+[data-testid="stSidebar"] .stRadio > div label {
+    border-radius: 8px !important;
+    padding: 8px 12px !important;
+    border: none !important;
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    color: #495057 !important;
+    background: transparent !important;
+    width: 100% !important;
+}
+[data-testid="stSidebar"] .stRadio > div label:has(input:checked) {
+    background: #F0F4FF !important;
+    color: #1F4788 !important;
+    border-left: 3px solid #1F4788 !important;
+    border-radius: 0 8px 8px 0 !important;
+    font-weight: 600 !important;
+}
+[data-testid="stSidebar"] .stRadio > div label:hover {
+    background: #F8F9FA !important;
+    color: #1F4788 !important;
+}
+
+/* ── Success/warning/error messages ── */
+.stSuccess, .stInfo, .stWarning, .stError {
+    border-radius: 8px !important;
+    font-size: 0.875rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
@@ -255,20 +422,37 @@ def check_password():
             if "usuario" in st.session_state:
                 del st.session_state["usuario"]
 
-    # Tela de login
+    # Tela de login estilizada
+    def render_login(show_error=False):
+        st.markdown("""
+        <div style="max-width:420px;margin:60px auto 0 auto;background:#FFFFFF;border-radius:16px;
+                    padding:40px 36px;box-shadow:0 8px 32px rgba(31,71,136,0.12);border-top:4px solid #1F4788;">
+            <div style="text-align:center;margin-bottom:10px;">
+                <img src="https://i.imgur.com/gt3rgyL.png" height="52"
+                     style="border-radius:8px;" onerror="this.style.display='none'"/>
+            </div>
+            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
+                Medtextil BI
+            </div>
+            <div style="text-align:center;font-size:0.85rem;color:#6C757D;margin-bottom:8px;">
+                Dashboard Comercial 2.0
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        col_l, col_c, col_r = st.columns([1, 2, 1])
+        with col_c:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.text_input("🔑 Senha de acesso", type="password", key="password_input", placeholder="Digite sua senha...")
+            if st.button("Entrar →", use_container_width=True, type="primary"):
+                password_entered()
+            if show_error:
+                st.error("Senha incorreta. Verifique e tente novamente.")
+
     if "password_correct" not in st.session_state:
-        st.markdown("### 🔐 Login - Dashboard BI Medtextil")
-        st.text_input("Senha", type="password", key="password_input")
-        if st.button("🔓 Entrar", use_container_width=True):
-            password_entered()
+        render_login(show_error=False)
         return False
     elif not st.session_state["password_correct"]:
-        st.markdown("### 🔐 Login - Dashboard BI Medtextil")
-        st.text_input("Senha", type="password", key="password_input")
-        if st.button("🔓 Entrar", use_container_width=True):
-            password_entered()
-        if st.session_state.get("show_error", False):
-            st.error("😕 Senha incorreta")
+        render_login(show_error=st.session_state.get("show_error", False))
         return False
     else:
         return True
@@ -647,6 +831,29 @@ def calcular_comissao(preco_unit, preco_ref):
     except:
         return ''
 
+
+# ── Paleta institucional e helper de layout de gráficos ──────────────────
+CORES_INST = ['#1F4788', '#2E86AB', '#28A745', '#F4A261', '#6C757D',
+              '#163561', '#1B5E8A', '#1E7B34', '#C97A3A', '#495057']
+
+def aplicar_layout_grafico(fig, height=None):
+    """Aplica o estilo institucional Medtextil a qualquer figura Plotly."""
+    layout_kwargs = dict(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, Segoe UI, Roboto, sans-serif', color='#495057', size=12),
+        margin=dict(l=10, r=10, t=36, b=10),
+        xaxis=dict(showgrid=False, showline=True, linecolor='#E9ECEF', tickfont=dict(size=11)),
+        yaxis=dict(showgrid=True, gridcolor='#F0F0F0', showline=False, tickfont=dict(size=11)),
+        coloraxis_showscale=False,
+        hoverlabel=dict(bgcolor='#1F4788', font_color='white', font_size=12,
+                        bordercolor='#1F4788'),
+    )
+    if height:
+        layout_kwargs['height'] = height
+    fig.update_layout(**layout_kwargs)
+    return fig
+
 @st.cache_data
 def processar_dados(df):
     """Aplica as regras de negócio nos dados"""
@@ -820,21 +1027,38 @@ tipo_usuario = usuario.get("tipo", "")
 nome_usuario = usuario.get("nome", "Usuário")
 modulos_permitidos = usuario.get("modulos", [])
 
-# Header com informação do usuário
-col_titulo, col_usuario = st.columns([3, 1])
-
-with col_titulo:
-    st.title("📊 Dashboard BI Medtextil 2.0")
-
-with col_usuario:
-    st.markdown(f"**👤 {nome_usuario}**")
+# ── Sidebar: Logo + Usuário + Navegação (clean) ──────────────────────────
+with st.sidebar:
+    # Logo
+    st.markdown("""
+    <div style="text-align:center;padding:16px 0 12px 0;border-bottom:1px solid #E9ECEF;margin-bottom:12px;">
+        <img src="https://i.imgur.com/gt3rgyL.png" height="48"
+             style="border-radius:8px;" onerror="this.style.display='none'"/>
+        <div style="font-size:0.75rem;font-weight:700;color:#1F4788;letter-spacing:0.08em;
+                    text-transform:uppercase;margin-top:8px;">Medtextil BI 2.0</div>
+    </div>
+    """, unsafe_allow_html=True)
+    # Badge do usuário
+    st.markdown(f"""
+    <div style="background:#F0F4FF;border:1px solid #C5D5F0;border-radius:8px;
+                padding:8px 12px;font-size:0.82rem;color:#1F4788;font-weight:600;
+                text-align:center;margin-bottom:16px;">
+        👤 {nome_usuario}
+    </div>
+    """, unsafe_allow_html=True)
+    # Botão sair
     if st.button("🚪 Sair", use_container_width=True):
-        # Limpar sessão e fazer logout
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
+    st.markdown("<br>", unsafe_allow_html=True)
 
-st.markdown("---")
+# ── Cabeçalho principal ───────────────────────────────────────────────────
+col_titulo, col_actions = st.columns([4, 1])
+with col_titulo:
+    st.markdown("# 📊 Dashboard Comercial")
+    st.markdown('<p class="page-subtitle">Medtextil Produtos Textil Hospitalares — Análise de Vendas & BI</p>',
+                unsafe_allow_html=True)
 
 col_header1, col_header2 = st.columns([3, 1])
 
@@ -868,40 +1092,9 @@ if df is None:
     st.stop()
 
 df = processar_dados(df)
+st.success(f"✅ Dados de vendas carregados: ({len(df):,} registros)")
 
-# ====================== SIDEBAR PROFISSIONAL ======================
-with st.sidebar:
-    # Logo centralizado
-    col_logo = st.columns([1, 3, 1])
-    with col_logo[1]:
-        st.image("https://i.imgur.com/gt3rgyL.png", use_container_width=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Saudação ao usuário
-    st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 1.5rem;">
-        <p style="font-size: 0.875rem; margin: 0; opacity: 0.8;">Olá,</p>
-        <p style="font-size: 1.125rem; font-weight: 600; margin: 0;">Fábio</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Status do Sistema (logs técnicos escondidos)
-    with st.expander("🛠️ Status do Sistema"):
-        st.caption("**Planilhas GitHub:**")
-        for nome, info in planilhas_disponiveis.items():
-            if info and nome != 'todas':
-                st.success(f"✓ {nome.replace('_', ' ').title()}", icon="✅")
-        
-        st.caption(f"**Registros:** {len(df):,}")
-        st.caption(f"**Atualizado:** {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
-    
-    st.markdown("---")
-    
-    # Filtros na sidebar
-    st.header("🔍 Filtros Globais")
+# Carregar planilha de produtos para cálculo de comissão
 if planilhas_disponiveis.get('produtos_agrupados'):
     with st.spinner("📥 Carregando tabela de preços de referência..."):
         df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
@@ -944,38 +1137,33 @@ else:
     df['PrecoRef'] = None
     df['Comissao'] = ''
 
-# ====================== SIDEBAR - FILTROS GLOBAIS ======================
-st.sidebar.header("🔍 Filtros Globais")
+# ── Barra de Filtros Globais (horizontal, no topo da área principal) ──────
+st.markdown("""
+<div style="background:#FFFFFF;border-radius:12px;padding:16px 20px 8px 20px;
+            margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);
+            border:1px solid #E9ECEF;">
+    <div style="font-size:0.75rem;font-weight:700;color:#6C757D;letter-spacing:0.07em;
+                text-transform:uppercase;margin-bottom:12px;">🔍 Filtros Globais</div>
+</div>
+""", unsafe_allow_html=True)
 
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    data_inicial = st.date_input(
-        "Data Inicial", 
-        value=None, 
-        key="data_ini",
-        format="DD/MM/YYYY"
-    )
-with col2:
-    data_final = st.date_input(
-        "Data Final", 
-        value=None, 
-        key="data_fim",
-        format="DD/MM/YYYY"
-    )
-
-vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
-vendedor_filtro = st.sidebar.selectbox("Vendedor", vendedores, key="vend_global")
-
-estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
-estado_filtro = st.sidebar.selectbox("Estado", estados, key="est_global")
-
-col3, col4 = st.sidebar.columns(2)
-with col3:
+fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.2, 1.2, 1.5, 1.5, 1, 1])
+with fc1:
+    data_inicial = st.date_input("📅 Data Inicial", value=None, key="data_ini", format="DD/MM/YYYY")
+with fc2:
+    data_final = st.date_input("📅 Data Final", value=None, key="data_fim", format="DD/MM/YYYY")
+with fc3:
+    vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
+    vendedor_filtro = st.selectbox("👤 Vendedor", vendedores, key="vend_global")
+with fc4:
+    estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
+    estado_filtro = st.selectbox("🗺️ Estado", estados, key="est_global")
+with fc5:
     meses_opcoes = ['Todos'] + list(range(1, 13))
-    mes_filtro = st.selectbox("Mês", meses_opcoes, key="mes_global")
-with col4:
+    mes_filtro = st.selectbox("📆 Mês", meses_opcoes, key="mes_global")
+with fc6:
     anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
-    ano_filtro = st.selectbox("Ano", anos_opcoes, key="ano_global")
+    ano_filtro = st.selectbox("🗓️ Ano", anos_opcoes, key="ano_global")
 
 df_filtrado = df.copy()
 
@@ -1028,10 +1216,15 @@ if st.session_state.tela_atual == 'modulo':
 
 # ====================== TELA HOME ======================
 if st.session_state.tela_atual == 'home':
-    st.title("📊 Medtextil BI")
     usuario_info = st.session_state.get("usuario", {})
-    st.markdown(f"**Olá, {usuario_info.get('nome', 'Usuário')}!** Selecione um módulo:")
-    st.markdown("")
+    st.markdown(f"""
+    <div style="margin-bottom:24px;">
+        <div style="font-size:1.6rem;font-weight:700;color:#1A2F52;margin-bottom:4px;">
+            👋 Olá, {usuario_info.get('nome', 'Usuário')}!
+        </div>
+        <div style="color:#6C757D;font-size:0.95rem;">Selecione um módulo para começar a análise.</div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Dados para preview
     try:
@@ -1088,8 +1281,12 @@ if menu not in modulos_permitidos:
     menu = st.session_state.modulo_selecionado
 else:
     # Fallback: usar menu lateral tradicional se algo der errado
+    st.sidebar.markdown("""
+    <div style="font-size:0.72rem;font-weight:700;color:#6C757D;letter-spacing:0.08em;
+                text-transform:uppercase;padding:0 4px;margin-bottom:4px;">Módulos</div>
+    """, unsafe_allow_html=True)
     menu = st.sidebar.radio(
-        "📑 Navegação",
+        "",
         modulos_visiveis,
         index=0
     )
@@ -1102,70 +1299,54 @@ if menu not in modulos_permitidos:
 
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    # Header clean
-    st.title("📊 Dashboard Comercial")
-    
-    st.markdown("---")
-    
-    # KPIs Principais com cards customizados
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
+        # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-        render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
+        st.metric("💰 Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
     
     with col2:
+        # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
+        # Valor_Real já negativiza as devoluções automaticamente
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
-        render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
+        st.metric("💵 Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
     
     with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-        render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
+        st.metric("👥 Clientes Únicos", f"{clientes_unicos:,}")
     
     with col4:
         total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-        render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
+        st.metric("📄 Notas de Venda", f"{total_notas:,}")
     
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Segunda linha de KPIs
+    # Segunda linha de métricas - Detalhamento
     col1b, col2b, col3b, col4b = st.columns(4)
     
     with col1b:
+        # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
+        st.metric("↩️ Devoluções", f"R$ {total_devolucoes:,.2f}")
     
     with col2b:
         ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
+        st.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
     
     with col3b:
         qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
+        st.metric("📋 Notas Devolução", f"{qtd_notas_dev:,}")
     
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
+        st.metric("📊 Taxa Devolução", f"{taxa_devolucao:.1f}%")
     
     st.markdown("---")
     
-    # Gráficos
-    st.markdown("### 📊 Análises")
     col5, col6 = st.columns(2)
     
-    # Tema Plotly profissional
-    plotly_config = {'displayModeBar': False, 'displaylogo': False}
-    plotly_layout = dict(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(family='Inter, sans-serif', size=12, color='#374151'),
-        xaxis=dict(showgrid=False, showline=True, linecolor='#E5E7EB'),
-        yaxis=dict(showgrid=True, gridcolor='#F3F4F6', showline=False),
-        margin=dict(l=40, r=40, t=40, b=40)
-    )
-    
     with col5:
-        st.markdown("#### 📈 Evolução de Vendas Brutas")
+        st.subheader("📈 Evolução de Vendas Brutas")
+        # Filtra apenas vendas (sem devoluções) para o gráfico
         vendas_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
         vendas_tempo = vendas_apenas.groupby('MesAno')['TotalProduto'].sum().reset_index()
         vendas_tempo = vendas_tempo.sort_values('MesAno')
@@ -1177,14 +1358,20 @@ if menu == "Dashboard":
                 y='TotalProduto',
                 labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'}
             )
-            fig_linha.update_traces(line_color='#1F4788', line_width=3)
-            fig_linha.update_layout(**plotly_layout)
-            st.plotly_chart(fig_linha, use_container_width=True, config=plotly_config)
+            fig_linha.update_traces(line_color='#1F4788', line_width=3, mode='lines+markers', marker=dict(size=6, color='#1F4788'))
+            fig_linha.update_layout(
+                xaxis_title="Período",
+                yaxis_title="Valor (R$)",
+                hovermode='x unified'
+            )
+            fig_linha = aplicar_layout_grafico(fig_linha)
+            st.plotly_chart(fig_linha, use_container_width=True)
         else:
-            st.info("Sem dados para exibir")
+            st.info("Sem dados para exibir no período selecionado")
     
     with col6:
-        st.markdown("#### 🗺️ Top 10 Estados")
+        st.subheader("🗺️ Top 10 Estados")
+        # Filtra apenas vendas (sem devoluções)
         vendas_estado_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
         vendas_estado = vendas_estado_apenas.groupby('Estado')['TotalProduto'].sum().reset_index()
         vendas_estado = vendas_estado.sort_values('TotalProduto', ascending=False).head(10)
@@ -1193,11 +1380,12 @@ if menu == "Dashboard":
             vendas_estado, 
             x='Estado', 
             y='TotalProduto',
-            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'}
+            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
+            color='TotalProduto',
+            color_discrete_sequence=['#28A745']
         )
-        fig_bar.update_traces(marker_color='#1F4788')
-        fig_bar.update_layout(**plotly_layout)
-        st.plotly_chart(fig_bar, use_container_width=True, config=plotly_config)
+        fig_bar = aplicar_layout_grafico(fig_bar)
+        st.plotly_chart(fig_bar, use_container_width=True)
     
     st.markdown("---")
     
@@ -1215,10 +1403,10 @@ if menu == "Dashboard":
             x='Vendedor',
             y='Clientes',
             labels={'Vendedor': 'Vendedor', 'Clientes': 'Clientes Atendidos'},
-            template='plotly_white',
             color='Clientes',
-            color_continuous_scale='Blues'
+            color_discrete_sequence=['#1F4788']
         )
+        fig_posit = aplicar_layout_grafico(fig_posit)
         st.plotly_chart(fig_posit, use_container_width=True)
     
     with col8:
@@ -1234,10 +1422,10 @@ if menu == "Dashboard":
             y='RazaoSocial',
             orientation='h',
             labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
-            template='plotly_white',
             color='TotalProduto',
-            color_continuous_scale='Oranges'
+            color_discrete_sequence=['#F4A261']
         )
+        fig_clientes = aplicar_layout_grafico(fig_clientes)
         st.plotly_chart(fig_clientes, use_container_width=True)
     
     st.markdown("---")
@@ -1263,10 +1451,10 @@ if menu == "Dashboard":
             y='RazaoSocial',
             orientation='h',
             labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
-            template='plotly_white',
             color='ValorHistorico',
-            color_continuous_scale='Reds'
+            color_discrete_sequence=['#DC3545']
         )
+        fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
     
     with col10:
@@ -1282,15 +1470,15 @@ if menu == "Dashboard":
             y='Vendedor',
             orientation='h',
             labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
-            template='plotly_white',
             color='TotalProduto',
-            color_continuous_scale='Purples'
+            color_discrete_sequence=['#6F42C1']
         )
+        fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
         st.plotly_chart(fig_rank_vend, use_container_width=True)
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
-    st.header("👥 Relatório de Positivação")
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">👥 Relatório de Positivação</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado"])
     
@@ -1317,11 +1505,11 @@ elif menu == "Positivação":
             x='Vendedor',
             y='Percentual',
             labels={'Vendedor': 'Vendedor', 'Percentual': 'Positivação (%)'},
-            template='plotly_white',
             color='Percentual',
-            color_continuous_scale='Blues',
+            color_discrete_sequence=['#1F4788'],
             title='Top 15 Vendedores - Taxa de Positivação'
         )
+        fig_posit_vend = aplicar_layout_grafico(fig_posit_vend)
         st.plotly_chart(fig_posit_vend, use_container_width=True)
         
         # Formatar para exibição
@@ -1414,11 +1602,11 @@ elif menu == "Positivação":
             x='Estado',
             y='Percentual',
             labels={'Estado': 'Estado', 'Percentual': 'Positivação (%)'},
-            template='plotly_white',
             color='Percentual',
-            color_continuous_scale='Greens',
+            color_discrete_sequence=['#28A745'],
             title='Top 15 Estados - Taxa de Positivação'
         )
+        fig_posit_estado = aplicar_layout_grafico(fig_posit_estado)
         st.plotly_chart(fig_posit_estado, use_container_width=True)
         
         # Formatar para exibição
@@ -1434,7 +1622,7 @@ elif menu == "Positivação":
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
-    st.header("💳 Relatório de Inadimplência")
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">💳 Relatório de Inadimplência</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha de inadimplência existe
     if not planilhas_disponiveis['inadimplencia']:
@@ -1533,11 +1721,11 @@ elif menu == "Inadimplência":
                 x='FaixaAtraso',
                 y='ValorLiquido',
                 labels={'FaixaAtraso': 'Faixa de Atraso', 'ValorLiquido': 'Valor (R$)'},
-                template='plotly_white',
                 color='ValorLiquido',
-                color_continuous_scale='Reds'
+                color_discrete_sequence=['#DC3545']
             )
-            st.plotly_chart(fig_faixa, use_container_width=True)
+            fig_faixa = aplicar_layout_grafico(fig_faixa)
+        st.plotly_chart(fig_faixa, use_container_width=True)
         
         with col6:
             st.subheader("🏦 Inadimplência por Banco")
@@ -1550,11 +1738,11 @@ elif menu == "Inadimplência":
                 y='Banco',
                 orientation='h',
                 labels={'Banco': 'Banco', 'ValorLiquido': 'Valor (R$)'},
-                template='plotly_white',
                 color='ValorLiquido',
-                color_continuous_scale='Blues'
+                color_discrete_sequence=['#1F4788']
             )
-            st.plotly_chart(fig_banco, use_container_width=True)
+            fig_banco = aplicar_layout_grafico(fig_banco)
+        st.plotly_chart(fig_banco, use_container_width=True)
         
         st.markdown("---")
         
@@ -1585,11 +1773,11 @@ elif menu == "Inadimplência":
                 x='Vendedor',
                 y='Valor',
                 labels={'Vendedor': 'Vendedor', 'Valor': 'Valor (R$)'},
-                template='plotly_white',
                 color='Valor',
-                color_continuous_scale='Oranges'
+                color_discrete_sequence=['#F4A261']
             )
-            st.plotly_chart(fig_vend_inad, use_container_width=True)
+            fig_vend_inad = aplicar_layout_grafico(fig_vend_inad)
+        st.plotly_chart(fig_vend_inad, use_container_width=True)
         
         with col8:
             st.subheader("🗺️ Top 10 Estados - Inadimplência")
@@ -1601,11 +1789,11 @@ elif menu == "Inadimplência":
                 x='Estado',
                 y='ValorLiquido',
                 labels={'Estado': 'Estado', 'ValorLiquido': 'Valor (R$)'},
-                template='plotly_white',
                 color='ValorLiquido',
-                color_continuous_scale='Purples'
+                color_discrete_sequence=['#6F42C1']
             )
-            st.plotly_chart(fig_est_inad, use_container_width=True)
+            fig_est_inad = aplicar_layout_grafico(fig_est_inad)
+        st.plotly_chart(fig_est_inad, use_container_width=True)
         
         st.markdown("---")
         
@@ -1655,7 +1843,7 @@ elif menu == "Inadimplência":
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
-    st.header("⚠️ Clientes sem Compra no Período (Churn)")
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">⚠️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
@@ -1729,11 +1917,11 @@ elif menu == "Clientes sem Compra":
             y='RazaoSocial',
             orientation='h',
             labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
-            template='plotly_white',
             color='ValorHistorico',
-            color_continuous_scale='Reds',
+            color_discrete_sequence=['#DC3545'],
             title='Top 15 Clientes sem Compra por Valor Histórico'
         )
+        fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
     
     # Formatar para exibição
@@ -1760,7 +1948,7 @@ elif menu == "Clientes sem Compra":
 
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
-    st.header("📜 Histórico de Vendas")
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">📜 Histórico de Vendas</h2>', unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor", "📝 Pedidos"])
     
@@ -1843,10 +2031,10 @@ elif menu == "Histórico":
                         x='MesAno',
                         y='TotalProduto',
                         labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'},
-                        template='plotly_white',
                         title='Evolução de Compras'
                     )
-                    fig_hist.update_traces(line_color='#2ECC71', line_width=3)
+                    fig_hist.update_traces(line_color='#28A745', line_width=3, mode='lines+markers', marker=dict(size=6, color='#28A745'))
+                    fig_hist = aplicar_layout_grafico(fig_hist)
                     st.plotly_chart(fig_hist, use_container_width=True)
                 
                 st.markdown("---")
@@ -2298,7 +2486,7 @@ elif menu == "Histórico":
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
-    st.header("💰 Análise de Preço Médio por Produto")
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">💰 Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
     
     # Verificar se as planilhas necessárias existem
     if not planilhas_disponiveis['vendas_produto']:
@@ -2510,10 +2698,10 @@ elif menu == "Preço Médio":
             y='NOMEPRODUTO',
             orientation='h',
             labels={'NOMEPRODUTO': 'Produto', 'TOTLIQUIDO': 'Faturamento (R$)'},
-            template='plotly_white',
             color='TOTLIQUIDO',
-            color_continuous_scale='Blues'
+            color_discrete_sequence=['#1F4788']
         )
+        fig_fat = aplicar_layout_grafico(fig_fat)
         st.plotly_chart(fig_fat, use_container_width=True)
     
     with col6:
@@ -2528,10 +2716,10 @@ elif menu == "Preço Médio":
             y='NOMEPRODUTO',
             orientation='h',
             labels={'NOMEPRODUTO': 'Produto', 'TOTQTD': 'Quantidade Vendida'},
-            template='plotly_white',
             color='TOTQTD',
-            color_continuous_scale='Greens'
+            color_discrete_sequence=['#28A745']
         )
+        fig_qtd = aplicar_layout_grafico(fig_qtd)
         st.plotly_chart(fig_qtd, use_container_width=True)
     
     st.markdown("---")
@@ -2565,10 +2753,10 @@ elif menu == "Preço Médio":
             x='MesAno',
             y='PRECOUNITMEDIO',
             labels={'MesAno': 'Período', 'PRECOUNITMEDIO': 'Preço Médio (R$)'},
-            template='plotly_white',
             title=f'Evolução do Preço Médio - {produto_selecionado}'
         )
         fig_evolucao.update_traces(line_color='#FF6B6B', line_width=3)
+        fig_evolucao = aplicar_layout_grafico(fig_evolucao)
         st.plotly_chart(fig_evolucao, use_container_width=True)
     
     st.markdown("---")
@@ -2624,7 +2812,7 @@ elif menu == "Preço Médio":
 
 # ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
-    st.header("📦 Pedidos Pendentes de Faturamento")
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">📦 Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha existe
     if not planilhas_disponiveis.get('pedidos_pendentes'):
@@ -2816,10 +3004,10 @@ elif menu == "Pedidos Pendentes":
             y='Cliente',
             orientation='h',
             labels={'Cliente': 'Cliente', 'ValorPendente': 'Valor Pendente (R$)'},
-            template='plotly_white',
             color='ValorPendente',
-            color_continuous_scale='Reds'
+            color_discrete_sequence=['#DC3545']
         )
+        fig_cli = aplicar_layout_grafico(fig_cli)
         st.plotly_chart(fig_cli, use_container_width=True)
     
     with col6:
@@ -2833,10 +3021,10 @@ elif menu == "Pedidos Pendentes":
             y='Vendedor',
             orientation='h',
             labels={'Vendedor': 'Vendedor', 'ValorPendente': 'Valor Pendente (R$)'},
-            template='plotly_white',
             color='ValorPendente',
-            color_continuous_scale='Oranges'
+            color_discrete_sequence=['#F4A261']
         )
+        fig_vend = aplicar_layout_grafico(fig_vend)
         st.plotly_chart(fig_vend, use_container_width=True)
     
     st.markdown("---")
@@ -2894,7 +3082,7 @@ elif menu == "Pedidos Pendentes":
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
-    st.header("🏆 Rankings")
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">🏆 Rankings</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Vendedores", "👥 Clientes"])
     
@@ -2915,11 +3103,11 @@ elif menu == "Rankings":
             x='Vendedor',
             y='Valor Total',
             labels={'Vendedor': 'Vendedor', 'Valor Total': 'Valor Total (R$)'},
-            template='plotly_white',
             color='Valor Total',
-            color_continuous_scale='Purples',
+            color_discrete_sequence=['#6F42C1'],
             title='Top 15 Vendedores por Valor'
         )
+        fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
         st.plotly_chart(fig_rank_vend, use_container_width=True)
         
         # Formatar para exibição
@@ -2952,11 +3140,11 @@ elif menu == "Rankings":
             y='Razão Social',
             orientation='h',
             labels={'Razão Social': 'Cliente', 'Valor Total': 'Valor Total (R$)'},
-            template='plotly_white',
             color='Valor Total',
-            color_continuous_scale='Oranges',
+            color_discrete_sequence=['#F4A261'],
             title=f'Top 15 Clientes por Valor'
         )
+        fig_rank_cli = aplicar_layout_grafico(fig_rank_cli)
         st.plotly_chart(fig_rank_cli, use_container_width=True)
         
         # Formatar para exibição
@@ -2970,5 +3158,10 @@ elif menu == "Rankings":
             "application/vnd.ms-excel"
         )
 
-st.markdown("---")
-st.caption("Dashboard BI Medtextil 2.0 | Desenvolvido com Streamlit 🚀")
+st.markdown("""
+<hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
+<div style="text-align:center;color:#ADB5BD;font-size:0.78rem;padding-bottom:16px;">
+    Dashboard BI Medtextil 2.0 &nbsp;·&nbsp; Desenvolvido com Streamlit
+    &nbsp;·&nbsp; <span style="color:#1F4788;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
+</div>
+""", unsafe_allow_html=True)
