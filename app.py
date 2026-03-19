@@ -1058,6 +1058,276 @@ def processar_inadimplencia(df):
     
     return df
 
+
+# ====================== PROPOSTA PDF (HISTÓRICO DE CLIENTE) ======================
+def gerar_proposta_pdf_historico(cliente_info_dict, historico_df, vendas_resumo):
+    """
+    Gera PDF de Proposta Comercial baseada no histórico de compras do cliente.
+    Usa apenas a biblioteca fpdf2 (pip install fpdf2).
+    Fallback: se fpdf2 não estiver disponível, usa ReportLab.
+    """
+    import io, requests
+    from datetime import date
+
+    razao    = str(cliente_info_dict.get('RazaoSocial', ''))
+    cpf_cnpj = str(cliente_info_dict.get('CPF_CNPJ', ''))
+    cidade   = str(cliente_info_dict.get('Cidade', ''))
+    estado   = str(cliente_info_dict.get('Estado', ''))
+    vendedor = str(cliente_info_dict.get('Vendedor', ''))
+    hoje     = date.today().strftime('%d/%m/%Y')
+
+    # ── Tentar fpdf2 primeiro ─────────────────────────────────────────────
+    try:
+        from fpdf import FPDF
+
+        class PropostaPDF(FPDF):
+            def header(self):
+                # Logo
+                try:
+                    resp = requests.get("https://i.imgur.com/gt3rgyL.png", timeout=8)
+                    if resp.status_code == 200:
+                        tmp = io.BytesIO(resp.content)
+                        tmp.seek(0)
+                        import tempfile, os
+                        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f_tmp:
+                            f_tmp.write(resp.content)
+                            tmp_path = f_tmp.name
+                        self.image(tmp_path, x=10, y=8, w=32)
+                        os.unlink(tmp_path)
+                except Exception:
+                    pass
+                self.set_xy(46, 10)
+                self.set_font('Helvetica', 'B', 13)
+                self.set_text_color(31, 71, 136)
+                self.cell(0, 6, 'MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES', ln=True)
+                self.set_xy(46, 16)
+                self.set_font('Helvetica', '', 8)
+                self.set_text_color(100, 100, 100)
+                self.cell(0, 5, 'CNPJ: 40.357.820/0001-50  |  IE: 16.390.286-0', ln=True)
+                self.set_draw_color(31, 71, 136)
+                self.set_line_width(0.6)
+                self.line(10, 26, 200, 26)
+                self.ln(4)
+
+            def footer(self):
+                self.set_y(-14)
+                self.set_font('Helvetica', 'I', 7)
+                self.set_text_color(160, 160, 160)
+                self.cell(0, 6,
+                    f'Medtextil — Proposta gerada em {hoje}  |  Pág. {self.page_no()}',
+                    align='C')
+
+        pdf = PropostaPDF()
+        pdf.set_auto_page_break(auto=True, margin=18)
+        pdf.add_page()
+        pdf.set_margins(10, 10, 10)
+
+        # ── Título ────────────────────────────────────────────────────────
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_text_color(31, 71, 136)
+        pdf.cell(0, 8, 'PROPOSTA COMERCIAL', align='C', ln=True)
+        pdf.set_font('Helvetica', '', 8)
+        pdf.set_text_color(130, 130, 130)
+        pdf.cell(0, 5, f'Emitida em {hoje}', align='C', ln=True)
+        pdf.ln(4)
+
+        # ── Dados do Cliente ──────────────────────────────────────────────
+        pdf.set_fill_color(240, 244, 255)
+        pdf.set_draw_color(200, 210, 230)
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.set_text_color(31, 71, 136)
+        pdf.cell(0, 7, ' DADOS DO CLIENTE', fill=True, border=1, ln=True)
+
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(50, 50, 50)
+        w1, w2 = 38, 152
+        for label, valor in [
+            ('Razão Social', razao),
+            ('CPF / CNPJ',   cpf_cnpj),
+            ('Cidade / UF',  f'{cidade} / {estado}'),
+            ('Vendedor',     vendedor),
+        ]:
+            pdf.set_font('Helvetica', 'B', 8)
+            pdf.cell(w1, 6, f'  {label}:', border='LB', fill=False)
+            pdf.set_font('Helvetica', '', 8)
+            pdf.cell(w2, 6, f'  {valor}', border='RB', ln=True)
+        pdf.ln(5)
+
+        # ── Resumo Financeiro ─────────────────────────────────────────────
+        pdf.set_fill_color(240, 244, 255)
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.set_text_color(31, 71, 136)
+        pdf.cell(0, 7, ' RESUMO FINANCEIRO (PERÍODO SELECIONADO)', fill=True, border=1, ln=True)
+
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(50, 50, 50)
+        w3 = 95
+        itens_resumo = list(vendas_resumo.items())
+        for i in range(0, len(itens_resumo), 2):
+            k1, v1 = itens_resumo[i]
+            pdf.set_font('Helvetica', 'B', 8)
+            pdf.cell(w3, 6, f'  {k1}:', border='LB')
+            pdf.set_font('Helvetica', '', 8)
+            if i + 1 < len(itens_resumo):
+                k2, v2 = itens_resumo[i+1]
+                pdf.cell(w3, 6, f'  {v1}', border='B')
+                pdf.set_font('Helvetica', 'B', 8)
+                pdf.cell(0, 6, f'  {k2}:', border='B')
+            else:
+                pdf.cell(0, 6, f'  {v1}', border='RB')
+            pdf.ln()
+        pdf.ln(5)
+
+        # ── Tabela de Produtos ────────────────────────────────────────────
+        pdf.set_fill_color(31, 71, 136)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Helvetica', 'B', 8)
+        cols_w = [18, 72, 18, 22, 26, 26]
+        cols_h = ['Código', 'Produto', 'Qtd', 'Prazo', 'Preço Unit.', 'Total']
+        for cw, ch in zip(cols_w, cols_h):
+            pdf.cell(cw, 7, ch, border=1, fill=True, align='C')
+        pdf.ln()
+
+        pdf.set_text_color(50, 50, 50)
+        fill_row = False
+        vendas_only = historico_df[historico_df['TipoMov'] == 'NF Venda'].copy()
+        # Agrupar por produto para resumo
+        grp_cols = ['CodigoProduto', 'NomeProduto']
+        if 'PrazoHistorico' in vendas_only.columns:
+            grp_cols_agg = {
+                'Quantidade': 'sum',
+                'PrecoUnit': 'mean',
+                'TotalProduto': 'sum',
+                'PrazoHistorico': 'first'
+            }
+        else:
+            grp_cols_agg = {
+                'Quantidade': 'sum',
+                'PrecoUnit': 'mean',
+                'TotalProduto': 'sum'
+            }
+        try:
+            resumo_prod = vendas_only.groupby(
+                ['CodigoProduto', 'NomeProduto'], as_index=False
+            ).agg({k: v for k, v in grp_cols_agg.items() if k in vendas_only.columns})
+            resumo_prod = resumo_prod.sort_values('TotalProduto', ascending=False)
+        except Exception:
+            resumo_prod = vendas_only[['CodigoProduto','NomeProduto','Quantidade','PrecoUnit','TotalProduto']].head(30)
+
+        for _, row in resumo_prod.iterrows():
+            pdf.set_fill_color(247, 249, 255) if fill_row else pdf.set_fill_color(255, 255, 255)
+            pdf.set_font('Helvetica', '', 7)
+            cod  = str(row.get('CodigoProduto', ''))[:8]
+            nome = str(row.get('NomeProduto', ''))[:38]
+            qtd  = f"{row.get('Quantidade', 0):,.0f}"
+            prazo = str(row.get('PrazoHistorico', '-'))[:10] if 'PrazoHistorico' in row.index else '-'
+            preco = f"R$ {row.get('PrecoUnit', 0):,.2f}"
+            total = f"R$ {row.get('TotalProduto', 0):,.2f}"
+            row_vals = [cod, nome, qtd, prazo, preco, total]
+            aligns   = ['C', 'L', 'C', 'C', 'R', 'R']
+            for cw, rv, al in zip(cols_w, row_vals, aligns):
+                pdf.cell(cw, 6, rv, border=1, fill=True, align=al)
+            pdf.ln()
+            fill_row = not fill_row
+
+        # Total geral
+        total_geral = vendas_only['TotalProduto'].sum() if len(vendas_only) > 0 else 0
+        pdf.set_fill_color(31, 71, 136)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.cell(sum(cols_w[:5]), 7, 'TOTAL GERAL', border=1, fill=True, align='R')
+        pdf.cell(cols_w[5], 7, f'R$ {total_geral:,.2f}', border=1, fill=True, align='R')
+        pdf.ln(8)
+
+        # ── Rodapé da proposta ────────────────────────────────────────────
+        pdf.set_font('Helvetica', 'I', 8)
+        pdf.set_text_color(130, 130, 130)
+        pdf.multi_cell(0, 5,
+            'Esta proposta é baseada no histórico de compras do cliente e não representa um pedido confirmado. '
+            'Valores sujeitos a alteração. Validade: 15 dias.')
+
+        return pdf.output()
+
+    # ── Fallback: ReportLab ───────────────────────────────────────────────
+    except ImportError:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                rightMargin=15*mm, leftMargin=15*mm,
+                                topMargin=15*mm, bottomMargin=15*mm)
+        styles = getSampleStyleSheet()
+        azul = colors.HexColor('#1F4788')
+        elements = []
+
+        # Título
+        p_title = ParagraphStyle('T', parent=styles['Heading1'],
+                                 fontSize=16, textColor=azul, alignment=1)
+        elements.append(Paragraph('PROPOSTA COMERCIAL', p_title))
+        elements.append(Paragraph(f'<font size=9 color="grey">Medtextil — {hoje}</font>', styles['Normal']))
+        elements.append(Spacer(1, 6*mm))
+
+        # Dados do cliente
+        dados = [['Razão Social', razao], ['CPF/CNPJ', cpf_cnpj],
+                 ['Cidade/UF', f'{cidade}/{estado}'], ['Vendedor', vendedor]]
+        t_dados = Table(dados, colWidths=[40*mm, 150*mm])
+        t_dados.setStyle(TableStyle([
+            ('BACKGROUND', (0,0),(0,-1), colors.HexColor('#F0F4FF')),
+            ('TEXTCOLOR', (0,0),(0,-1), azul),
+            ('FONTNAME', (0,0),(0,-1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0),(-1,-1), 8),
+            ('BOX', (0,0),(-1,-1), 0.5, colors.grey),
+            ('INNERGRID', (0,0),(-1,-1), 0.3, colors.lightgrey),
+            ('LEFTPADDING', (0,0),(-1,-1), 5),
+        ]))
+        elements.append(t_dados)
+        elements.append(Spacer(1, 6*mm))
+
+        # Resumo
+        for k, v in vendas_resumo.items():
+            elements.append(Paragraph(f'<b>{k}:</b> {v}', styles['Normal']))
+        elements.append(Spacer(1, 4*mm))
+
+        # Tabela de produtos
+        vendas_only = historico_df[historico_df['TipoMov'] == 'NF Venda']
+        header = ['Código', 'Produto', 'Qtd', 'Preço Unit.', 'Total']
+        rows = [header]
+        try:
+            grp = vendas_only.groupby(['CodigoProduto','NomeProduto'], as_index=False).agg(
+                {'Quantidade':'sum','PrecoUnit':'mean','TotalProduto':'sum'})
+            grp = grp.sort_values('TotalProduto', ascending=False)
+            for _, r in grp.iterrows():
+                rows.append([str(r['CodigoProduto'])[:8], str(r['NomeProduto'])[:40],
+                             f"{r['Quantidade']:,.0f}", f"R$ {r['PrecoUnit']:,.2f}",
+                             f"R$ {r['TotalProduto']:,.2f}"])
+        except Exception:
+            pass
+        total_g = vendas_only['TotalProduto'].sum() if len(vendas_only) > 0 else 0
+        rows.append(['','','','Total Geral', f'R$ {total_g:,.2f}'])
+
+        t_prod = Table(rows, colWidths=[20*mm, 80*mm, 18*mm, 28*mm, 28*mm])
+        t_prod.setStyle(TableStyle([
+            ('BACKGROUND', (0,0),(-1,0), azul),
+            ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+            ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0),(-1,-1), 7),
+            ('ROWBACKGROUNDS', (0,1),(-1,-2), [colors.white, colors.HexColor('#F7F9FF')]),
+            ('BACKGROUND', (0,-1),(-1,-1), colors.HexColor('#F0F4FF')),
+            ('FONTNAME', (0,-1),(-1,-1), 'Helvetica-Bold'),
+            ('BOX', (0,0),(-1,-1), 0.5, colors.grey),
+            ('INNERGRID', (0,0),(-1,-1), 0.3, colors.lightgrey),
+            ('LEFTPADDING', (0,0),(-1,-1), 3),
+            ('ALIGN', (2,0),(-1,-1), 'RIGHT'),
+        ]))
+        elements.append(t_prod)
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
+
 # ====================== INÍCIO DO APP ======================
 if not check_password():
     st.stop()
@@ -1232,7 +1502,7 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 
 st.sidebar.markdown("---")
 
-# ====================== NAVEGAÇÃO — session_state unificado ======================
+# ====================== NAVEGAÇÃO ======================
 
 _DESC = {
     "Dashboard":          "Visão geral de faturamento",
@@ -1245,12 +1515,6 @@ _DESC = {
     "Rankings":           "Top vendedores e clientes",
 }
 
-_ICONE_TEXTO = {
-    "Dashboard": "▦", "Positivação": "✓", "Inadimplência": "!",
-    "Clientes sem Compra": "+", "Histórico": "◷", "Preço Médio": "$",
-    "Pedidos Pendentes": "▣", "Rankings": "▲",
-}
-
 # ── Inicializar session_state ──────────────────────────────────────────────
 if 'menu_option' not in st.session_state:
     st.session_state.menu_option = '__home__'
@@ -1260,79 +1524,87 @@ modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Histórico","Preço Médio","Pedidos Pendentes","Rankings"
 ]
 
-# ── CSS da sidebar: botões de nav como itens de menu limpos ───────────────
+# ── CSS isolado: apenas os cards da home recebem estilo azul ──────────────
+# Usamos data-testid específico dos containers dos cards para não vazar para sidebar
 st.markdown("""
 <style>
-/* ── Sidebar nav: botões reais como menu vertical ── */
-section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] button {
-    background: transparent !important;
+/* Cards da Home — identificados pelo container pai .home-grid */
+.home-grid button {
+    height: auto !important;
+    min-height: 120px !important;
+    white-space: pre-wrap !important;
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
     border: none !important;
-    border-radius: 0 10px 10px 0 !important;
+    border-radius: 12px !important;
+    font-size: 0.93rem !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 8px rgba(31,71,136,0.20) !important;
+    padding: 16px 14px !important;
     text-align: left !important;
-    padding: 10px 14px !important;
+    line-height: 1.45 !important;
+    width: 100% !important;
+    cursor: pointer !important;
+    transition: background 0.18s, box-shadow 0.18s, transform 0.18s !important;
+}
+.home-grid button:hover {
+    background: #163561 !important;
+    box-shadow: 0 6px 22px rgba(31,71,136,0.30) !important;
+    transform: translateY(-3px) !important;
+}
+.home-grid button p {
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+}
+/* Sidebar: radio estilo menu limpo */
+section[data-testid="stSidebar"] .stRadio label {
     font-size: 0.9rem !important;
     font-weight: 500 !important;
     color: #495057 !important;
-    width: 100% !important;
-    margin: 1px 0 !important;
-    box-shadow: none !important;
-    border-left: 3px solid transparent !important;
-    transition: all 0.15s !important;
+    padding: 6px 4px !important;
+    cursor: pointer !important;
 }
-section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] button:hover {
-    background: #F4F7FD !important;
-    color: #1F4788 !important;
-    border-left-color: #8EB3E8 !important;
-}
-/* Botões da home: estilo card azul institucional */
-div[data-testid="stMain"] div[data-testid="stVerticalBlock"] button.home-card-btn {
-    border-radius: 10px !important;
+section[data-testid="stSidebar"] .stRadio div[data-testid="stRadioGroup"] {
+    gap: 2px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar: navegação limpa com st.button real ───────────────────────────
+# ── Sidebar: st.radio nativo — zero CSS custom, zero offset ──────────────
 with st.sidebar:
     st.markdown("""<div style="font-size:0.65rem;font-weight:700;color:#ADB5BD;
-        letter-spacing:0.12em;text-transform:uppercase;
-        padding:2px 6px 8px 6px;">Menu</div>""", unsafe_allow_html=True)
+        letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">
+        Navegação</div>""", unsafe_allow_html=True)
 
-    # Início
-    _ativo = st.session_state.menu_option == '__home__'
-    _label_home = "◉  Início" if _ativo else "○  Início"
-    if st.sidebar.button(_label_home, key="nav_home", use_container_width=True):
-        st.session_state.menu_option = '__home__'
+    _opcoes_nav = ["Início"] + modulos_visiveis
+
+    # Determinar índice selecionado atual
+    _cur = st.session_state.menu_option
+    if _cur == '__home__':
+        _idx_atual = 0
+    elif _cur in modulos_visiveis:
+        _idx_atual = modulos_visiveis.index(_cur) + 1
+    else:
+        _idx_atual = 0
+
+    _nav_escolha = st.radio(
+        label="nav",
+        options=_opcoes_nav,
+        index=_idx_atual,
+        key="sidebar_radio",
+        label_visibility="collapsed"
+    )
+
+    # Sincronizar radio → session_state
+    if _nav_escolha == "Início":
+        _novo_estado = '__home__'
+    else:
+        _novo_estado = _nav_escolha
+
+    if _novo_estado != st.session_state.menu_option:
+        st.session_state.menu_option = _novo_estado
         st.rerun()
-
-    # Módulos
-    for _mod in modulos_visiveis:
-        _ativo = st.session_state.menu_option == _mod
-        _ic = _ICONE_TEXTO.get(_mod, "•")
-        _lbl = f"◉  {_mod}" if _ativo else f"○  {_mod}"
-        if st.sidebar.button(_lbl, key=f"nav_{_mod}", use_container_width=True):
-            st.session_state.menu_option = _mod
-            st.rerun()
-
-# ── CSS adicional: item ativo da sidebar com destaque ─────────────────────
-_cur = st.session_state.menu_option
-st.markdown(f"""
-<style>
-/* Destaque dinâmico pelo texto do botão ativo — via :has não disponível em todos os browsers,
-   então usamos a abordagem de nth-child baseada no índice */
-section[data-testid="stSidebar"] button {{
-    border-left: 3px solid transparent !important;
-    background: transparent !important;
-    color: #495057 !important;
-    font-weight: 500 !important;
-    box-shadow: none !important;
-}}
-section[data-testid="stSidebar"] button:hover {{
-    background: #F0F4FF !important;
-    color: #1F4788 !important;
-    border-left-color: #4A7BC8 !important;
-}}
-</style>
-""", unsafe_allow_html=True)
 
 # ── Tela Home ─────────────────────────────────────────────────────────────
 if st.session_state.menu_option == '__home__':
@@ -1351,19 +1623,19 @@ if st.session_state.menu_option == '__home__':
         total_clientes = 0
 
     cards_data = [
-        {'nome': 'Dashboard',          'info': f'R$ {vendas_mes:,.0f} no mês atual'},
+        {'nome': 'Dashboard',          'info': f'R$ {vendas_mes:,.0f} no mês'},
         {'nome': 'Positivação',         'info': f'{total_clientes} clientes na base'},
-        {'nome': 'Inadimplência',       'info': 'Títulos em aberto e atrasos'},
-        {'nome': 'Clientes sem Compra', 'info': 'Identificar inativos'},
-        {'nome': 'Histórico',           'info': 'Consultas por cliente / vendedor'},
-        {'nome': 'Preço Médio',         'info': 'Análise de preços por produto'},
-        {'nome': 'Pedidos Pendentes',   'info': 'Itens aguardando faturamento'},
+        {'nome': 'Inadimplência',       'info': 'Títulos em aberto'},
+        {'nome': 'Clientes sem Compra', 'info': 'Inativos para reativar'},
+        {'nome': 'Histórico',           'info': 'Por cliente ou vendedor'},
+        {'nome': 'Preço Médio',         'info': 'Por produto'},
+        {'nome': 'Pedidos Pendentes',   'info': 'Aguardando faturamento'},
         {'nome': 'Rankings',            'info': 'Top vendedores e clientes'},
     ]
     cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
 
     st.markdown(f"""
-    <div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #E9ECEF;">
+    <div style="margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
         <div style="font-size:1.5rem;font-weight:700;color:#1A2F52;margin-bottom:3px;">
             Olá, {usuario_info.get('nome','Usuário')}
         </div>
@@ -1373,56 +1645,24 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Cards: st.button real estilizado via CSS — 100% clicável ─────────
-    # CSS dos cards da home
-    st.markdown("""
-    <style>
-    /* Cards da Home: botão real com estilo card corporativo */
-    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] button {
-        height: auto !important;
-        min-height: 110px !important;
-        white-space: pre-wrap !important;
-        background: #1F4788 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        border-radius: 10px !important;
-        font-size: 0.95rem !important;
-        font-weight: 700 !important;
-        letter-spacing: -0.01em !important;
-        box-shadow: 0 2px 8px rgba(31,71,136,0.18) !important;
-        transition: all 0.18s ease !important;
-        padding: 18px 14px !important;
-        text-align: left !important;
-        line-height: 1.4 !important;
-        margin-bottom: 2px !important;
-    }
-    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] button:hover {
-        background: #163561 !important;
-        box-shadow: 0 6px 20px rgba(31,71,136,0.32) !important;
-        transform: translateY(-2px) !important;
-    }
-    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] button:active {
-        transform: translateY(0) !important;
-        box-shadow: 0 2px 6px rgba(31,71,136,0.2) !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Grid de cards: 4 por linha, botão real com texto estruturado
+    # Grid de cards: st.button nativo dentro de div.home-grid
+    # O wrapper .home-grid isola o CSS azul apenas aqui
     for row_start in range(0, len(cards_visiveis), 4):
         row_cards = cards_visiveis[row_start:row_start+4]
+        # Abre o wrapper isolador
+        st.markdown('<div class="home-grid">', unsafe_allow_html=True)
         cols = st.columns(4)
         for j, card in enumerate(row_cards):
             with cols[j]:
                 desc = _DESC.get(card['nome'], '')
                 info = card['info']
-                # Texto multilinha dentro do botão
-                label = card['nome'] + "\n" + desc + "\n" + info
+                label = card['nome'] + "\n" + desc + "\n\n" + info
                 if st.button(label, key=f"home_card_{card['nome']}",
                              use_container_width=True):
                     st.session_state.menu_option = card['nome']
                     st.rerun()
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     st.stop()
 
@@ -2226,11 +2466,74 @@ elif menu == "Histórico":
                 st.dataframe(historico_display, use_container_width=True, height=400)
                 
                 st.download_button(
-                    "📥 Exportar Histórico",
+                    "📥 Exportar Histórico Excel",
                     to_excel(historico),
                     f"historico_{cpf_cnpj}.xlsx",
-                    "application/vnd.ms-excel"
+                    "application/vnd.ms-excel",
+                    key="dl_hist_excel"
                 )
+
+                st.markdown("---")
+                st.markdown("""
+                <div style="background:#F0F4FF;border:1px solid #C5D5F0;border-radius:10px;
+                            padding:14px 18px;margin-bottom:8px;">
+                    <div style="font-size:0.88rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
+                        Gerar Proposta Comercial PDF
+                    </div>
+                    <div style="font-size:0.78rem;color:#6C757D;">
+                        Exporta os produtos do histórico do cliente em formato de proposta
+                        comercial com cabeçalho Medtextil, dados do cliente e tabela de itens.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                _col_pdf1, _col_pdf2 = st.columns([2, 1])
+                with _col_pdf1:
+                    _vendas_resumo = {
+                        'Total de Vendas':   f"R$ {vendas_cliente['TotalProduto'].sum():,.2f}",
+                        'Total Devoluções':  f"R$ {devolucoes_cliente['TotalProduto'].sum():,.2f}",
+                        'Notas de Venda':    str(len(vendas_cliente['Numero_NF'].unique())),
+                        'Clientes (CNPJ)':   cpf_cnpj,
+                    }
+                    _cliente_info_dict = {
+                        'RazaoSocial': cliente_info.get('RazaoSocial',''),
+                        'CPF_CNPJ':    cpf_cnpj,
+                        'Cidade':      cliente_info.get('Cidade',''),
+                        'Estado':      cliente_info.get('Estado',''),
+                        'Vendedor':    cliente_info.get('Vendedor',''),
+                    }
+                    if st.button("Gerar Proposta PDF", key="btn_gerar_proposta",
+                                 use_container_width=True, type="primary"):
+                        with st.spinner("Gerando proposta..."):
+                            try:
+                                _pdf_bytes = gerar_proposta_pdf_historico(
+                                    _cliente_info_dict, historico, _vendas_resumo
+                                )
+                                st.session_state['proposta_pdf_bytes'] = _pdf_bytes
+                                st.session_state['proposta_pdf_nome'] = (
+                                    f"Proposta_{razao_curta}_{hoje_str}.pdf"
+                                    if 'razao_curta' in dir() else
+                                    f"Proposta_{cpf_cnpj}.pdf"
+                                )
+                                st.success("Proposta gerada! Clique em Download abaixo.")
+                            except Exception as _e:
+                                st.error(f"Erro ao gerar proposta: {_e}")
+
+                with _col_pdf2:
+                    if st.session_state.get('proposta_pdf_bytes'):
+                        import datetime as _dt
+                        _nome_pdf = (
+                            f"Proposta_Medtextil_{cliente_info.get('RazaoSocial','cliente')[:20].replace(' ','_')}"
+                            f"_{_dt.date.today().strftime('%Y%m%d')}.pdf"
+                        )
+                        st.download_button(
+                            "Download PDF",
+                            data=st.session_state['proposta_pdf_bytes'],
+                            file_name=_nome_pdf,
+                            mime="application/pdf",
+                            key="dl_proposta_pdf",
+                            use_container_width=True
+                        )
             else:
                 st.warning("Nenhum registro encontrado para este cliente")
         else:
