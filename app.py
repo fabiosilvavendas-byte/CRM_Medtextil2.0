@@ -1232,19 +1232,8 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 
 st.sidebar.markdown("---")
 
-# ====================== SISTEMA DE NAVEGAÇÃO CORRIGIDO ======================
+# ====================== NAVEGAÇÃO — session_state unificado ======================
 
-# ── Ícones SVG minimalistas (Lucide-style inline) ─────────────────────────
-_SVG = {
-    "Dashboard":         '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
-    "Positivação":       '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
-    "Inadimplência":     '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="#1F4788"/></svg>',
-    "Clientes sem Compra":'<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
-    "Histórico":         '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>',
-    "Preço Médio":       '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-    "Pedidos Pendentes": '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M21 10V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7"/><polyline points="16 2 16 8 19 8"/><circle cx="18" cy="18" r="4"/><line x1="18" y1="16" x2="18" y2="20"/><line x1="16" y1="18" x2="20" y2="18"/></svg>',
-    "Rankings":          '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><polyline points="18 20 18 10"/><polyline points="12 20 12 4"/><polyline points="6 20 6 14"/></svg>',
-}
 _DESC = {
     "Dashboard":          "Visão geral de faturamento",
     "Positivação":        "Clientes atendidos no período",
@@ -1256,6 +1245,12 @@ _DESC = {
     "Rankings":           "Top vendedores e clientes",
 }
 
+_ICONE_TEXTO = {
+    "Dashboard": "▦", "Positivação": "✓", "Inadimplência": "!",
+    "Clientes sem Compra": "+", "Histórico": "◷", "Preço Médio": "$",
+    "Pedidos Pendentes": "▣", "Rankings": "▲",
+}
+
 # ── Inicializar session_state ──────────────────────────────────────────────
 if 'menu_option' not in st.session_state:
     st.session_state.menu_option = '__home__'
@@ -1265,52 +1260,77 @@ modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Histórico","Preço Médio","Pedidos Pendentes","Rankings"
 ]
 
-# ── Sidebar: navegação com SVG icons ──────────────────────────────────────
-with st.sidebar:
-    st.markdown("""
-    <div style="font-size:0.65rem;font-weight:700;color:#ADB5BD;letter-spacing:0.12em;
-                text-transform:uppercase;padding:0 6px 6px 6px;">Navegação</div>
-    """, unsafe_allow_html=True)
+# ── CSS da sidebar: botões de nav como itens de menu limpos ───────────────
+st.markdown("""
+<style>
+/* ── Sidebar nav: botões reais como menu vertical ── */
+section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] button {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 10px 10px 0 !important;
+    text-align: left !important;
+    padding: 10px 14px !important;
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    color: #495057 !important;
+    width: 100% !important;
+    margin: 1px 0 !important;
+    box-shadow: none !important;
+    border-left: 3px solid transparent !important;
+    transition: all 0.15s !important;
+}
+section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] button:hover {
+    background: #F4F7FD !important;
+    color: #1F4788 !important;
+    border-left-color: #8EB3E8 !important;
+}
+/* Botões da home: estilo card azul institucional */
+div[data-testid="stMain"] div[data-testid="stVerticalBlock"] button.home-card-btn {
+    border-radius: 10px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-    # Botão Home
-    _home_active = st.session_state.menu_option == '__home__'
-    _home_bg = "background:linear-gradient(135deg,#F0F4FF,#E4EDFC);border-left:4px solid #1F4788;font-weight:700;" if _home_active else "background:transparent;border-left:4px solid transparent;"
-    st.markdown(f"""
-    <div style="{_home_bg}border-radius:0 10px 10px 0;padding:10px 14px;
-                 color:#1F4788;font-size:0.9rem;cursor:pointer;margin-bottom:3px;
-                 display:flex;align-items:center;gap:10px;">
-        <svg width="18" height="18" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-        <span>Início</span>
-    </div>""", unsafe_allow_html=True)
-    if st.button("", key="nav_home", help="Início",
-                 use_container_width=True,
-                 type="secondary"):
+# ── Sidebar: navegação limpa com st.button real ───────────────────────────
+with st.sidebar:
+    st.markdown("""<div style="font-size:0.65rem;font-weight:700;color:#ADB5BD;
+        letter-spacing:0.12em;text-transform:uppercase;
+        padding:2px 6px 8px 6px;">Menu</div>""", unsafe_allow_html=True)
+
+    # Início
+    _ativo = st.session_state.menu_option == '__home__'
+    _label_home = "◉  Início" if _ativo else "○  Início"
+    if st.sidebar.button(_label_home, key="nav_home", use_container_width=True):
         st.session_state.menu_option = '__home__'
         st.rerun()
 
+    # Módulos
     for _mod in modulos_visiveis:
-        _active = st.session_state.menu_option == _mod
-        _bg = "background:linear-gradient(135deg,#F0F4FF,#E4EDFC);border-left:4px solid #1F4788;font-weight:700;" if _active else "background:transparent;border-left:4px solid transparent;"
-        st.markdown(f"""
-        <div style="{_bg}border-radius:0 10px 10px 0;padding:10px 14px;
-                     color:#1F4788;font-size:0.9rem;cursor:pointer;margin-bottom:3px;
-                     display:flex;align-items:center;gap:10px;">
-            {_SVG.get(_mod,'<span>&#9632;</span>')}
-            <span>{_mod}</span>
-        </div>""", unsafe_allow_html=True)
-        if st.button("", key=f"nav_{_mod}", help=_mod,
-                     use_container_width=True,
-                     type="secondary"):
+        _ativo = st.session_state.menu_option == _mod
+        _ic = _ICONE_TEXTO.get(_mod, "•")
+        _lbl = f"◉  {_mod}" if _ativo else f"○  {_mod}"
+        if st.sidebar.button(_lbl, key=f"nav_{_mod}", use_container_width=True):
             st.session_state.menu_option = _mod
             st.rerun()
 
-# ── Aplicar CSS para ocultar o texto dos botões da sidebar ────────────────
-st.markdown("""
+# ── CSS adicional: item ativo da sidebar com destaque ─────────────────────
+_cur = st.session_state.menu_option
+st.markdown(f"""
 <style>
-/* nav overlay handled inline */
+/* Destaque dinâmico pelo texto do botão ativo — via :has não disponível em todos os browsers,
+   então usamos a abordagem de nth-child baseada no índice */
+section[data-testid="stSidebar"] button {{
+    border-left: 3px solid transparent !important;
+    background: transparent !important;
+    color: #495057 !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}}
+section[data-testid="stSidebar"] button:hover {{
+    background: #F0F4FF !important;
+    color: #1F4788 !important;
+    border-left-color: #4A7BC8 !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1343,94 +1363,78 @@ if st.session_state.menu_option == '__home__':
     cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
 
     st.markdown(f"""
-    <div style="margin-bottom:28px;">
-        <div style="font-size:1.55rem;font-weight:700;color:#1A2F52;margin-bottom:4px;">
+    <div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #E9ECEF;">
+        <div style="font-size:1.5rem;font-weight:700;color:#1A2F52;margin-bottom:3px;">
             Olá, {usuario_info.get('nome','Usuário')}
         </div>
-        <div style="color:#6C757D;font-size:0.92rem;">
-            Selecione um módulo abaixo para começar a análise.
+        <div style="color:#8A96A8;font-size:0.88rem;">
+            Selecione um módulo abaixo para iniciar a análise.
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # CSS para overlay dos botões dos cards (torna todo card clicável)
+    # ── Cards: st.button real estilizado via CSS — 100% clicável ─────────
+    # CSS dos cards da home
     st.markdown("""
     <style>
-    div[data-card-btn] > button, .card-nav-btn button {
-        position: absolute !important; top:0 !important; left:0 !important;
-        width: 100% !important; height: 100% !important;
-        opacity: 0 !important; cursor: pointer !important;
-        z-index: 10 !important;
+    /* Cards da Home: botão real com estilo card corporativo */
+    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] button {
+        height: auto !important;
+        min-height: 110px !important;
+        white-space: pre-wrap !important;
+        background: #1F4788 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-size: 0.95rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.01em !important;
+        box-shadow: 0 2px 8px rgba(31,71,136,0.18) !important;
+        transition: all 0.18s ease !important;
+        padding: 18px 14px !important;
+        text-align: left !important;
+        line-height: 1.4 !important;
+        margin-bottom: 2px !important;
     }
-    .nav-card-wrap { position: relative !important; }
+    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] button:hover {
+        background: #163561 !important;
+        box-shadow: 0 6px 20px rgba(31,71,136,0.32) !important;
+        transform: translateY(-2px) !important;
+    }
+    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] button:active {
+        transform: translateY(0) !important;
+        box-shadow: 0 2px 6px rgba(31,71,136,0.2) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    # Renderizar grid de cards: 4 colunas
+    # Grid de cards: 4 por linha, botão real com texto estruturado
     for row_start in range(0, len(cards_visiveis), 4):
         row_cards = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4)
         for j, card in enumerate(row_cards):
             with cols[j]:
-                svg = _SVG.get(card['nome'], '')
                 desc = _DESC.get(card['nome'], '')
-                # Card HTML corporativo com hover nativo
-                st.markdown(f"""
-                <div class="nav-card-wrap" style="background:#FFFFFF;border:1px solid #E4E9F0;
-                            border-radius:14px;padding:24px 20px 18px 20px;
-                            box-shadow:0 1px 6px rgba(31,71,136,0.07);
-                            transition:all 0.2s ease;cursor:pointer;"
-                     onmouseover="this.style.boxShadow='0 8px 24px rgba(31,71,136,0.15)';
-                                  this.style.transform='translateY(-4px)';
-                                  this.style.borderColor='#B8CDF0'"
-                     onmouseout="this.style.boxShadow='0 1px 6px rgba(31,71,136,0.07)';
-                                 this.style.transform='translateY(0)';
-                                 this.style.borderColor='#E4E9F0'">
-                    <div style="width:42px;height:42px;background:#F0F4FF;border-radius:10px;
-                                display:flex;align-items:center;justify-content:center;
-                                margin-bottom:14px;">{svg}</div>
-                    <div style="font-size:0.97rem;font-weight:700;color:#1A2F52;
-                                margin-bottom:5px;letter-spacing:-0.01em;">{card['nome']}</div>
-                    <div style="font-size:0.78rem;color:#6C757D;line-height:1.45;
-                                margin-bottom:12px;">{desc}</div>
-                    <div style="font-size:0.71rem;color:#ADB5BD;border-top:1px solid #F0F2F5;
-                                padding-top:8px;">{card['info']}</div>
-                </div>""", unsafe_allow_html=True)
-                # Botão real de navegação (invisível via CSS, sobreposto ao card)
-                if st.button(f"→ {card['nome']}", key=f"home_card_{card['nome']}",
+                info = card['info']
+                # Texto multilinha dentro do botão
+                label = card['nome'] + "\n" + desc + "\n" + info
+                if st.button(label, key=f"home_card_{card['nome']}",
                              use_container_width=True):
                     st.session_state.menu_option = card['nome']
                     st.rerun()
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
     st.stop()
-
-# ── CSS corporativo para botões dos cards (overlay invisível) ─────────────
-st.markdown("""
-<style>
-/* Cards da home: botão de navegação invisível sobre o card */
-div[data-testid="stButton"] button {
-    margin-top: -180px !important;
-    height: 180px !important;
-    opacity: 0 !important;
-    cursor: pointer !important;
-    border: none !important;
-    background: transparent !important;
-    width: 100% !important;
-    position: relative !important;
-    z-index: 5 !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
 menu = st.session_state.menu_option
 
-# Breadcrumb discreto
+# Breadcrumb
 st.markdown(f"""
-<div style="font-size:0.78rem;color:#ADB5BD;margin-bottom:12px;">
-    <span style="cursor:pointer;color:#6C757D;">Inicio</span>
-    <span style="margin:0 6px;">›</span>
+<div style="font-size:0.75rem;color:#ADB5BD;margin-bottom:14px;
+            padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
+    <span style="color:#6C757D;">Início</span>
+    <span style="margin:0 6px;color:#D0D5DE;">›</span>
     <span style="color:#1F4788;font-weight:600;">{menu}</span>
 </div>
 """, unsafe_allow_html=True)
