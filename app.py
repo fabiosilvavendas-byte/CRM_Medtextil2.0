@@ -15,6 +15,92 @@ st.set_page_config(
     page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 )
 
+# ====================== CSS PROFISSIONAL ======================
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    * { font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif !important; }
+    
+    .main { background-color: #F8F9FA !important; }
+    
+    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+    
+    /* Sidebar profissional */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1F4788 0%, #2D5AA0 100%) !important;
+    }
+    [data-testid="stSidebar"] * { color: white !important; }
+    
+    /* Cards para métricas */
+    [data-testid="stMetric"] {
+        background-color: white !important;
+        padding: 1.5rem !important;
+        border-radius: 12px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+        border-left: 4px solid #1F4788 !important;
+        transition: transform 0.2s ease !important;
+    }
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
+    }
+    
+    /* Cores diferentes por coluna */
+    [data-testid="column"]:nth-child(1) [data-testid="stMetric"] { border-left-color: #1F4788 !important; }
+    [data-testid="column"]:nth-child(2) [data-testid="stMetric"] { border-left-color: #10B981 !important; }
+    [data-testid="column"]:nth-child(3) [data-testid="stMetric"] { border-left-color: #F59E0B !important; }
+    [data-testid="column"]:nth-child(4) [data-testid="stMetric"] { border-left-color: #EF4444 !important; }
+    
+    /* Títulos */
+    h1 { color: #1F2937 !important; font-weight: 700 !important; }
+    h2 { color: #374151 !important; font-weight: 600 !important; margin-top: 2rem !important; }
+    h3 { color: #4B5563 !important; font-weight: 600 !important; }
+    
+    /* Botões modernos */
+    .stButton button {
+        background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.625rem 1.25rem !important;
+        font-weight: 600 !important;
+        box-shadow: 0 2px 4px rgba(31, 71, 136, 0.2) !important;
+        transition: all 0.3s ease !important;
+    }
+    .stButton button:hover {
+        box-shadow: 0 4px 8px rgba(31, 71, 136, 0.3) !important;
+        transform: translateY(-1px) !important;
+    }
+    
+    /* Inputs */
+    input, select, textarea {
+        border-radius: 8px !important;
+        border: 1px solid #E5E7EB !important;
+    }
+    input:focus, select:focus { border-color: #1F4788 !important; }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: white !important;
+        padding: 0.5rem !important;
+        border-radius: 8px !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1F4788 !important;
+        color: white !important;
+    }
+    
+    /* Gráficos */
+    .js-plotly-plot {
+        border-radius: 12px !important;
+        background-color: white !important;
+        padding: 1rem !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ====================== CONFIGURAÇÃO DO ÍCONE ======================
 # O Streamlit gerencia automaticamente o ícone via page_icon
 # Nenhuma configuração adicional é necessária
@@ -949,54 +1035,73 @@ if menu not in modulos_permitidos:
 
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
-        vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-        st.metric("💰 Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
-    
-    with col2:
-        # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
-        # Valor_Real já negativiza as devoluções automaticamente
-        faturamento_liquido = notas_unicas['Valor_Real'].sum()
-        st.metric("💵 Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
-    
-    with col3:
-        clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-        st.metric("👥 Clientes Únicos", f"{clientes_unicos:,}")
-    
-    with col4:
-        total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-        st.metric("📄 Notas de Venda", f"{total_notas:,}")
-    
-    # Segunda linha de métricas - Detalhamento
-    col1b, col2b, col3b, col4b = st.columns(4)
-    
-    with col1b:
-        # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
-        total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        st.metric("↩️ Devoluções", f"R$ {total_devolucoes:,.2f}")
-    
-    with col2b:
-        ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        st.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
-    
-    with col3b:
-        qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        st.metric("📋 Notas Devolução", f"{qtd_notas_dev:,}")
-    
-    with col4b:
-        taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        st.metric("📊 Taxa Devolução", f"{taxa_devolucao:.1f}%")
+    # Header profissional
+    col_h1, col_h2 = st.columns([3, 1])
+    with col_h1:
+        st.title("📊 Dashboard Comercial")
+    with col_h2:
+        st.markdown(f"**Atualizado:** {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
     
     st.markdown("---")
     
+    # Métricas principais
+    st.markdown("### 📈 Indicadores Principais")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
+        st.metric("Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
+    
+    with col2:
+        faturamento_liquido = notas_unicas['Valor_Real'].sum()
+        st.metric("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
+    
+    with col3:
+        clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
+        st.metric("Clientes Únicos", f"{clientes_unicos:,}")
+    
+    with col4:
+        total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
+        st.metric("Notas de Venda", f"{total_notas:,}")
+    
+    # Segunda linha de métricas
+    col1b, col2b, col3b, col4b = st.columns(4)
+    
+    with col1b:
+        total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
+        st.metric("Devoluções", f"R$ {total_devolucoes:,.2f}")
+    
+    with col2b:
+        ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
+        st.metric("Ticket Médio", f"R$ {ticket_medio:,.2f}")
+    
+    with col3b:
+        qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
+        st.metric("Notas Devolução", f"{qtd_notas_dev:,}")
+    
+    with col4b:
+        taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
+        st.metric("Taxa Devolução", f"{taxa_devolucao:.1f}%")
+    
+    st.markdown("---")
+    
+    # Gráficos
+    st.markdown("### 📊 Análises")
     col5, col6 = st.columns(2)
     
+    # Tema Plotly profissional
+    plotly_config = {'displayModeBar': False, 'displaylogo': False}
+    plotly_layout = dict(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter, sans-serif', size=12, color='#374151'),
+        xaxis=dict(showgrid=False, showline=True, linecolor='#E5E7EB'),
+        yaxis=dict(showgrid=True, gridcolor='#F3F4F6', showline=False),
+        margin=dict(l=40, r=40, t=40, b=40)
+    )
+    
     with col5:
-        st.subheader("📈 Evolução de Vendas Brutas")
-        # Filtra apenas vendas (sem devoluções) para o gráfico
+        st.markdown("#### 📈 Evolução de Vendas Brutas")
         vendas_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
         vendas_tempo = vendas_apenas.groupby('MesAno')['TotalProduto'].sum().reset_index()
         vendas_tempo = vendas_tempo.sort_values('MesAno')
@@ -1006,22 +1111,16 @@ if menu == "Dashboard":
                 vendas_tempo, 
                 x='MesAno', 
                 y='TotalProduto',
-                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'},
-                template='plotly_white'
+                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'}
             )
-            fig_linha.update_traces(line_color='#1f77b4', line_width=3)
-            fig_linha.update_layout(
-                xaxis_title="Período",
-                yaxis_title="Valor (R$)",
-                hovermode='x unified'
-            )
-            st.plotly_chart(fig_linha, use_container_width=True)
+            fig_linha.update_traces(line_color='#1F4788', line_width=3)
+            fig_linha.update_layout(**plotly_layout)
+            st.plotly_chart(fig_linha, use_container_width=True, config=plotly_config)
         else:
-            st.info("Sem dados para exibir no período selecionado")
+            st.info("Sem dados para exibir")
     
     with col6:
-        st.subheader("🗺️ Top 10 Estados")
-        # Filtra apenas vendas (sem devoluções)
+        st.markdown("#### 🗺️ Top 10 Estados")
         vendas_estado_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
         vendas_estado = vendas_estado_apenas.groupby('Estado')['TotalProduto'].sum().reset_index()
         vendas_estado = vendas_estado.sort_values('TotalProduto', ascending=False).head(10)
@@ -1030,12 +1129,11 @@ if menu == "Dashboard":
             vendas_estado, 
             x='Estado', 
             y='TotalProduto',
-            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
-            template='plotly_white',
-            color='TotalProduto',
-            color_continuous_scale='Greens'
+            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'}
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        fig_bar.update_traces(marker_color='#1F4788')
+        fig_bar.update_layout(**plotly_layout)
+        st.plotly_chart(fig_bar, use_container_width=True, config=plotly_config)
     
     st.markdown("---")
     
