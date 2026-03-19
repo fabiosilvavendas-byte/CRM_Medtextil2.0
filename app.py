@@ -993,17 +993,25 @@ if st.session_state.tela_atual == 'home':
     num_colunas = 2
     num_botoes = len(botoes_visiveis)
     
-    # CSS GLOBAL aplicado ANTES dos botões - usando nth-child direto
+    # CSS GLOBAL aplicado ANTES dos botões - targeting específico por coluna
     css_global = "<style>"
+    
+    # Seletores mais específicos - por linha e coluna
+    linha_idx = 0
     for i, botao in enumerate(botoes_visiveis):
-        # Cada botão é o (i+1)-ésimo botão secondary na página
+        col_idx = i % 2  # 0 ou 1
+        if i > 0 and col_idx == 0:
+            linha_idx += 1
+        
+        # Seletor usando estrutura de colunas do Streamlit
         css_global += f"""
-        button[kind="secondary"]:nth-of-type({i+1}) {{
+        /* {botao['nome']} - Linha {linha_idx}, Coluna {col_idx} */
+        div[data-testid="column"]:nth-child({col_idx + 1}) button[kind="secondary"] {{
             border: 2px solid {botao['cor']} !important;
             background: linear-gradient(135deg, {botao['cor']}60 0%, {botao['cor']}25 100%) !important;
             color: #1a202c !important;
         }}
-        button[kind="secondary"]:nth-of-type({i+1}):hover {{
+        div[data-testid="column"]:nth-child({col_idx + 1}) button[kind="secondary"]:hover {{
             background: linear-gradient(135deg, {botao['cor']}80 0%, {botao['cor']}40 100%) !important;
             border-color: {botao['cor']}DD !important;
         }}
