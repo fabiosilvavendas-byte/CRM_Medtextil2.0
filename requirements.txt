@@ -7,3 +7,4 @@ requests
 PyGithub
 reportlab
 Pillow
+streamlit-card
