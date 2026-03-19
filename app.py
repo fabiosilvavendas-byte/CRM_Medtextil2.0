@@ -7,34 +7,6 @@ import io
 import requests
 from github import Github
 
-# ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
-def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
-    """Renderiza card KPI profissional com HTML/CSS - substitui st.metric()"""
-    delta_html = ""
-    if delta:
-        delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
-        try:
-            delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
-        except:
-            delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
-        delta_html = f'<div style="color:{delta_color};font-size:0.875rem;font-weight:600;margin-top:0.5rem;">{delta}</div>'
-    
-    st.markdown(f"""
-    <div style="background:white;padding:1.5rem;border-radius:15px;
-                box-shadow:0 4px 12px rgba(0,0,0,0.05);border-left:4px solid {color};
-                height:140px;display:flex;flex-direction:column;justify-content:space-between;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <div style="font-size:0.8rem;color:#6B7280;font-weight:600;
-                        text-transform:uppercase;letter-spacing:0.05em;">{label}</div>
-            <div style="font-size:1.75rem;">{icon}</div>
-        </div>
-        <div>
-            <div style="font-size:1.75rem;font-weight:700;color:#1F2937;">{value}</div>
-            {delta_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
 # Configuração da página
 st.set_page_config(
     page_title="Dashboard BI Medtextil", 
@@ -1764,7 +1736,7 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — card HTML + botão overlay COMPLETAMENTE invisível
+    # Grid 4 colunas — card HTML + botão overlay imediatamente abaixo
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4)
@@ -1775,11 +1747,9 @@ if st.session_state.menu_option == '__home__':
                 info = card['info']
                 ic   = _ICONES_CARD.get(nome, '•')
 
-                # Wrapper container
-                st.markdown('<div class="med-card-col">', unsafe_allow_html=True)
-                
-                # Card visual HTML (NÃO SERÁ ALTERADO)
+                # 1) Card visual HTML
                 st.markdown(f"""
+                <div class="med-card-col">
                 <div class="med-card"
                      onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
                      onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
@@ -1790,35 +1760,13 @@ if st.session_state.menu_option == '__home__':
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Botão overlay TOTALMENTE invisível
+                # 2) Botão overlay — renderizado logo após, na mesma coluna
+                #    CSS sobe ele via margin-top:-148px e opacity:0
                 if st.button(nome, key=f"hc_{nome}", use_container_width=True):
                     st.session_state.menu_option = nome
                     st.rerun()
-                
-                # CSS para tornar ESTE botão específico completamente invisível
-                st.markdown(f"""
-                <style>
-                div.med-card-col:has(button[aria-label="{nome}"]) button {{
-                    position: absolute !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    height: 138px !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    opacity: 0 !important;
-                    background: transparent !important;
-                    border: none !important;
-                    cursor: pointer !important;
-                    z-index: 99 !important;
-                    font-size: 0 !important;
-                    color: transparent !important;
-                    transform: translateY(-148px) !important;
-                }}
-                </style>
-                """, unsafe_allow_html=True)
 
-                # Fecha wrapper
+                # Fecha div.med-card-col (necessário para o seletor CSS funcionar)
                 st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
@@ -1846,45 +1794,46 @@ if menu not in modulos_permitidos:
     st.stop()
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    # KPIs principais com cards customizados
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
+        # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-        render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
+        st.metric("Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
     
     with col2:
+        # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
+        # Valor_Real já negativiza as devoluções automaticamente
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
-        render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
+        st.metric("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
     
     with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-        render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
+        st.metric("Clientes Únicos", f"{clientes_unicos:,}")
     
     with col4:
         total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-        render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
+        st.metric("Notas de Venda", f"{total_notas:,}")
     
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Segunda linha de KPIs
+    # Segunda linha de métricas - Detalhamento
     col1b, col2b, col3b, col4b = st.columns(4)
     
     with col1b:
+        # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
+        st.metric("Devoluções", f"R$ {total_devolucoes:,.2f}")
     
     with col2b:
         ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
+        st.metric("Ticket Médio", f"R$ {ticket_medio:,.2f}")
     
     with col3b:
         qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
+        st.metric("Notas Devolução", f"{qtd_notas_dev:,}")
     
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
+        st.metric("Taxa Devolução", f"{taxa_devolucao:.1f}%")
     
     st.markdown("---")
     
