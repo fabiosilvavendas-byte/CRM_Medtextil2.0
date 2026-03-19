@@ -279,25 +279,29 @@ hr {
     gap: 4px !important;
 }
 [data-testid="stSidebar"] .stRadio > div label {
-    border-radius: 8px !important;
-    padding: 8px 12px !important;
+    border-radius: 10px !important;
+    padding: 11px 14px !important;
     border: none !important;
-    font-size: 0.9rem !important;
+    font-size: 0.92rem !important;
     font-weight: 500 !important;
     color: #495057 !important;
     background: transparent !important;
     width: 100% !important;
+    transition: all 0.15s ease !important;
+    margin-bottom: 2px !important;
 }
 [data-testid="stSidebar"] .stRadio > div label:has(input:checked) {
-    background: #F0F4FF !important;
+    background: linear-gradient(135deg, #F0F4FF, #E4EDFC) !important;
     color: #1F4788 !important;
-    border-left: 3px solid #1F4788 !important;
-    border-radius: 0 8px 8px 0 !important;
-    font-weight: 600 !important;
+    border-left: 4px solid #1F4788 !important;
+    border-radius: 0 10px 10px 0 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 1px 4px rgba(31,71,136,0.10) !important;
 }
 [data-testid="stSidebar"] .stRadio > div label:hover {
-    background: #F8F9FA !important;
+    background: #F4F7FD !important;
     color: #1F4788 !important;
+    transform: translateX(2px) !important;
 }
 
 /* ── Success/warning/error messages ── */
@@ -1029,29 +1033,33 @@ modulos_permitidos = usuario.get("modulos", [])
 
 # ── Sidebar: Logo + Usuário + Navegação (clean) ──────────────────────────
 with st.sidebar:
-    # Logo
+    # ── Logo centralizado ──
     st.markdown("""
-    <div style="text-align:center;padding:16px 0 12px 0;border-bottom:1px solid #E9ECEF;margin-bottom:12px;">
-        <img src="https://i.imgur.com/gt3rgyL.png" height="48"
-             style="border-radius:8px;" onerror="this.style.display='none'"/>
-        <div style="font-size:0.75rem;font-weight:700;color:#1F4788;letter-spacing:0.08em;
-                    text-transform:uppercase;margin-top:8px;">Medtextil BI 2.0</div>
+    <div style="text-align:center;padding:20px 0 14px 0;border-bottom:1px solid #E9ECEF;margin-bottom:14px;">
+        <img src="https://i.imgur.com/gt3rgyL.png" height="56"
+             style="border-radius:10px;box-shadow:0 2px 8px rgba(31,71,136,0.18);"
+             onerror="this.style.display='none'"/>
+        <div style="font-size:0.8rem;font-weight:800;color:#1F4788;letter-spacing:0.1em;
+                    text-transform:uppercase;margin-top:10px;">Medtextil</div>
+        <div style="font-size:0.65rem;color:#ADB5BD;letter-spacing:0.06em;margin-top:1px;">
+            BI Dashboard 2.0
+        </div>
     </div>
     """, unsafe_allow_html=True)
-    # Badge do usuário
+    # ── Badge do usuário ──
     st.markdown(f"""
-    <div style="background:#F0F4FF;border:1px solid #C5D5F0;border-radius:8px;
-                padding:8px 12px;font-size:0.82rem;color:#1F4788;font-weight:600;
-                text-align:center;margin-bottom:16px;">
-        👤 {nome_usuario}
+    <div style="background:linear-gradient(135deg,#F0F4FF,#E8EFFD);border:1px solid #C5D5F0;
+                border-radius:10px;padding:10px 14px;font-size:0.83rem;color:#1F4788;
+                font-weight:600;text-align:center;margin-bottom:6px;">
+        👤 &nbsp;{nome_usuario}
     </div>
     """, unsafe_allow_html=True)
-    # Botão sair
+    # ── Botão sair compacto ──
     if st.button("🚪 Sair", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
 # ── Cabeçalho principal ───────────────────────────────────────────────────
 col_titulo, col_actions = st.columns([4, 1])
@@ -1060,70 +1068,63 @@ with col_titulo:
     st.markdown('<p class="page-subtitle">Medtextil Produtos Textil Hospitalares — Análise de Vendas & BI</p>',
                 unsafe_allow_html=True)
 
-col_header1, col_header2 = st.columns([3, 1])
+# ── Carregamento silencioso + Status no sidebar expander ─────────────────
+with st.sidebar:
+    with st.expander("🛠️ Status das Planilhas", expanded=False):
+        with st.spinner("Conectando ao GitHub..."):
+            planilhas_disponiveis = listar_planilhas_github()
 
-with col_header1:
-    with st.spinner("🔄 Conectando ao GitHub..."):
-        planilhas_disponiveis = listar_planilhas_github()
-    
-    if planilhas_disponiveis['vendas']:
-        st.info(f"📊 Planilha de Vendas: **{planilhas_disponiveis['vendas']['nome']}**")
-        url_planilha_vendas = planilhas_disponiveis['vendas']['url']
-    else:
-        st.error("❌ Planilha de vendas não encontrada")
-        st.info("💡 Procurando por arquivo com 'CONSULTA_VENDEDORES' no nome")
-        st.stop()
-    
-    if planilhas_disponiveis['inadimplencia']:
-        st.info(f"💳 Planilha de Inadimplência: **{planilhas_disponiveis['inadimplencia']['nome']}**")
-    else:
-        st.warning("⚠️ Planilha de inadimplência não encontrada (módulo desabilitado)")
+        if planilhas_disponiveis['vendas']:
+            st.success(f"✅ Vendas: {planilhas_disponiveis['vendas']['nome']}")
+            url_planilha_vendas = planilhas_disponiveis['vendas']['url']
+        else:
+            st.error("❌ Planilha de vendas não encontrada")
+            st.info("Procurando por arquivo com 'CONSULTA_VENDEDORES' no nome")
 
-with col_header2:
-    if st.button("🔄 Recarregar Dados", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+        if planilhas_disponiveis['inadimplencia']:
+            st.success(f"✅ Inadimplência: {planilhas_disponiveis['inadimplencia']['nome']}")
+        else:
+            st.warning("⚠️ Inadimplência não encontrada (módulo desabilitado)")
 
-with st.spinner("📥 Carregando dados de vendas..."):
+        if planilhas_disponiveis.get('produtos_agrupados'):
+            st.success(f"✅ Produtos: {planilhas_disponiveis['produtos_agrupados']['nome']}")
+
+        if st.button("🔄 Recarregar Dados", use_container_width=True, key="btn_reload"):
+            st.cache_data.clear()
+            st.rerun()
+
+# Validação crítica fora do expander (sem mensagem visual)
+if not planilhas_disponiveis.get('vendas'):
+    st.error("❌ Planilha de vendas não encontrada no GitHub. Verifique o repositório.")
+    st.stop()
+
+with st.spinner(""):
     df = carregar_planilha_github(url_planilha_vendas)
 
 if df is None:
-    st.error("❌ Não foi possível carregar os dados de vendas")
+    st.error("❌ Não foi possível carregar os dados de vendas.")
     st.stop()
 
 df = processar_dados(df)
-st.success(f"✅ Dados de vendas carregados: ({len(df):,} registros)")
 
 # Carregar planilha de produtos para cálculo de comissão
 if planilhas_disponiveis.get('produtos_agrupados'):
-    with st.spinner("📥 Carregando tabela de preços de referência..."):
-        df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-    
+    df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
     if df_ref_preco is not None:
         df_ref_preco.columns = df_ref_preco.columns.str.upper()
-        
-        # Verificar se as colunas necessárias existem
         if 'ID_COD' in df_ref_preco.columns and 'PRECO' in df_ref_preco.columns:
-            # Manter apenas código e preço de referência
             df_ref_preco = df_ref_preco[['ID_COD', 'PRECO']].rename(
                 columns={'ID_COD': 'CodigoProduto', 'PRECO': 'PrecoRef'}
             )
-            # Normalizar código para inteiro em ambas as planilhas
-            # Vendas tem '3.0' e Produtos tem '3' — converter os dois para int como string
             def normalizar_codigo(val):
                 try:
                     return str(int(float(str(val).strip())))
                 except:
                     return str(val).strip()
-            
             df['CodigoProduto'] = df['CodigoProduto'].apply(normalizar_codigo)
             df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].apply(normalizar_codigo)
-            
-            # Remover duplicatas (manter primeiro preço por produto)
             df_ref_preco = df_ref_preco.drop_duplicates(subset=['CodigoProduto'], keep='first')
-            # Fazer join com o df principal
             df = df.merge(df_ref_preco, on='CodigoProduto', how='left')
-            # Calcular comissão para cada linha
             df['Comissao'] = df.apply(
                 lambda row: calcular_comissao(row['PrecoUnit'], row['PrecoRef']),
                 axis=1
@@ -1131,39 +1132,50 @@ if planilhas_disponiveis.get('produtos_agrupados'):
         else:
             df['PrecoRef'] = None
             df['Comissao'] = ''
-            colunas_encontradas = df_ref_preco.columns.tolist()
-            st.warning(f"⚠️ Coluna 'PRECO' ou 'ID_COD' não encontrada. Colunas disponíveis: {colunas_encontradas}")
 else:
     df['PrecoRef'] = None
     df['Comissao'] = ''
+''
 
-# ── Barra de Filtros Globais (horizontal, no topo da área principal) ──────
+# ── Barra de Filtros Compactos ────────────────────────────────────────────
 st.markdown("""
-<div style="background:#FFFFFF;border-radius:12px;padding:16px 20px 8px 20px;
-            margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);
-            border:1px solid #E9ECEF;">
-    <div style="font-size:0.75rem;font-weight:700;color:#6C757D;letter-spacing:0.07em;
-                text-transform:uppercase;margin-bottom:12px;">🔍 Filtros Globais</div>
+<div style="background:#FFFFFF;border-radius:12px;padding:12px 16px 4px 16px;
+            margin-bottom:16px;box-shadow:0 1px 6px rgba(31,71,136,0.07);
+            border:1px solid #E9ECEF;display:flex;align-items:center;gap:8px;">
+    <span style="font-size:0.72rem;font-weight:700;color:#6C757D;letter-spacing:0.08em;
+                 text-transform:uppercase;white-space:nowrap;margin-right:4px;">⚙️ Filtros</span>
 </div>
 """, unsafe_allow_html=True)
 
-fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.2, 1.2, 1.5, 1.5, 1, 1])
+fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.1, 1.1, 1.6, 1.6, 0.9, 0.9])
 with fc1:
-    data_inicial = st.date_input("📅 Data Inicial", value=None, key="data_ini", format="DD/MM/YYYY")
+    data_inicial = st.date_input("Di", value=None, key="data_ini", format="DD/MM/YYYY",
+                                  label_visibility="collapsed")
+    st.caption("📅 Data Inicial")
 with fc2:
-    data_final = st.date_input("📅 Data Final", value=None, key="data_fim", format="DD/MM/YYYY")
+    data_final = st.date_input("Df", value=None, key="data_fim", format="DD/MM/YYYY",
+                                label_visibility="collapsed")
+    st.caption("📅 Data Final")
 with fc3:
     vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
-    vendedor_filtro = st.selectbox("👤 Vendedor", vendedores, key="vend_global")
+    vendedor_filtro = st.selectbox("V", vendedores, key="vend_global",
+                                    label_visibility="collapsed")
+    st.caption("👤 Vendedor")
 with fc4:
     estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
-    estado_filtro = st.selectbox("🗺️ Estado", estados, key="est_global")
+    estado_filtro = st.selectbox("E", estados, key="est_global",
+                                  label_visibility="collapsed")
+    st.caption("🗺️ Estado")
 with fc5:
     meses_opcoes = ['Todos'] + list(range(1, 13))
-    mes_filtro = st.selectbox("📆 Mês", meses_opcoes, key="mes_global")
+    mes_filtro = st.selectbox("M", meses_opcoes, key="mes_global",
+                               label_visibility="collapsed")
+    st.caption("📆 Mês")
 with fc6:
     anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
-    ano_filtro = st.selectbox("🗓️ Ano", anos_opcoes, key="ano_global")
+    ano_filtro = st.selectbox("A", anos_opcoes, key="ano_global",
+                               label_visibility="collapsed")
+    st.caption("🗓️ Ano")
 
 df_filtrado = df.copy()
 
@@ -1282,14 +1294,23 @@ if menu not in modulos_permitidos:
 else:
     # Fallback: usar menu lateral tradicional se algo der errado
     st.sidebar.markdown("""
-    <div style="font-size:0.72rem;font-weight:700;color:#6C757D;letter-spacing:0.08em;
-                text-transform:uppercase;padding:0 4px;margin-bottom:4px;">Módulos</div>
+    <div style="font-size:0.68rem;font-weight:700;color:#ADB5BD;letter-spacing:0.1em;
+                text-transform:uppercase;padding:0 6px;margin-bottom:6px;">Navegação</div>
     """, unsafe_allow_html=True)
-    menu = st.sidebar.radio(
+    # Mapear ícones para cada módulo
+    _icones = {
+        "Dashboard": "📊", "Positivação": "✅", "Inadimplência": "⚠️",
+        "Clientes sem Compra": "😴", "Histórico": "📜", "Preço Médio": "💰",
+        "Pedidos Pendentes": "📦", "Rankings": "🏆"
+    }
+    modulos_com_icone = [f"{_icones.get(m, '•')}  {m}" for m in modulos_visiveis]
+    menu_idx = st.sidebar.radio(
         "",
-        modulos_visiveis,
-        index=0
+        modulos_com_icone,
+        index=0,
+        label_visibility="collapsed"
     )
+    menu = menu_idx.split("  ", 1)[-1]
 
 # Verificar se o usuário tem permissão para acessar o módulo
 if menu not in modulos_permitidos:
@@ -1382,7 +1403,7 @@ if menu == "Dashboard":
             y='TotalProduto',
             labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
             color='TotalProduto',
-            color_discrete_sequence=['#28A745']
+            color_discrete_sequence=['#2E86AB']
         )
         fig_bar = aplicar_layout_grafico(fig_bar)
         st.plotly_chart(fig_bar, use_container_width=True)
@@ -1423,7 +1444,7 @@ if menu == "Dashboard":
             orientation='h',
             labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
             color='TotalProduto',
-            color_discrete_sequence=['#F4A261']
+            color_discrete_sequence=['#4A7BC8']
         )
         fig_clientes = aplicar_layout_grafico(fig_clientes)
         st.plotly_chart(fig_clientes, use_container_width=True)
@@ -1452,7 +1473,7 @@ if menu == "Dashboard":
             orientation='h',
             labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
             color='ValorHistorico',
-            color_discrete_sequence=['#DC3545']
+            color_discrete_sequence=['#1F4788']
         )
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
@@ -1471,7 +1492,7 @@ if menu == "Dashboard":
             orientation='h',
             labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
             color='TotalProduto',
-            color_discrete_sequence=['#6F42C1']
+            color_discrete_sequence=['#163561']
         )
         fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
         st.plotly_chart(fig_rank_vend, use_container_width=True)
@@ -1603,7 +1624,7 @@ elif menu == "Positivação":
             y='Percentual',
             labels={'Estado': 'Estado', 'Percentual': 'Positivação (%)'},
             color='Percentual',
-            color_discrete_sequence=['#28A745'],
+            color_discrete_sequence=['#2E86AB'],
             title='Top 15 Estados - Taxa de Positivação'
         )
         fig_posit_estado = aplicar_layout_grafico(fig_posit_estado)
@@ -1722,7 +1743,7 @@ elif menu == "Inadimplência":
                 y='ValorLiquido',
                 labels={'FaixaAtraso': 'Faixa de Atraso', 'ValorLiquido': 'Valor (R$)'},
                 color='ValorLiquido',
-                color_discrete_sequence=['#DC3545']
+                color_discrete_sequence=['#1F4788']
             )
             fig_faixa = aplicar_layout_grafico(fig_faixa)
         st.plotly_chart(fig_faixa, use_container_width=True)
@@ -1774,7 +1795,7 @@ elif menu == "Inadimplência":
                 y='Valor',
                 labels={'Vendedor': 'Vendedor', 'Valor': 'Valor (R$)'},
                 color='Valor',
-                color_discrete_sequence=['#F4A261']
+                color_discrete_sequence=['#4A7BC8']
             )
             fig_vend_inad = aplicar_layout_grafico(fig_vend_inad)
         st.plotly_chart(fig_vend_inad, use_container_width=True)
@@ -1790,7 +1811,7 @@ elif menu == "Inadimplência":
                 y='ValorLiquido',
                 labels={'Estado': 'Estado', 'ValorLiquido': 'Valor (R$)'},
                 color='ValorLiquido',
-                color_discrete_sequence=['#6F42C1']
+                color_discrete_sequence=['#163561']
             )
             fig_est_inad = aplicar_layout_grafico(fig_est_inad)
         st.plotly_chart(fig_est_inad, use_container_width=True)
@@ -1918,7 +1939,7 @@ elif menu == "Clientes sem Compra":
             orientation='h',
             labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
             color='ValorHistorico',
-            color_discrete_sequence=['#DC3545'],
+            color_discrete_sequence=['#1F4788'],
             title='Top 15 Clientes sem Compra por Valor Histórico'
         )
         fig_churn = aplicar_layout_grafico(fig_churn)
@@ -2717,7 +2738,7 @@ elif menu == "Preço Médio":
             orientation='h',
             labels={'NOMEPRODUTO': 'Produto', 'TOTQTD': 'Quantidade Vendida'},
             color='TOTQTD',
-            color_discrete_sequence=['#28A745']
+            color_discrete_sequence=['#2E86AB']
         )
         fig_qtd = aplicar_layout_grafico(fig_qtd)
         st.plotly_chart(fig_qtd, use_container_width=True)
@@ -3005,7 +3026,7 @@ elif menu == "Pedidos Pendentes":
             orientation='h',
             labels={'Cliente': 'Cliente', 'ValorPendente': 'Valor Pendente (R$)'},
             color='ValorPendente',
-            color_discrete_sequence=['#DC3545']
+            color_discrete_sequence=['#1F4788']
         )
         fig_cli = aplicar_layout_grafico(fig_cli)
         st.plotly_chart(fig_cli, use_container_width=True)
@@ -3022,7 +3043,7 @@ elif menu == "Pedidos Pendentes":
             orientation='h',
             labels={'Vendedor': 'Vendedor', 'ValorPendente': 'Valor Pendente (R$)'},
             color='ValorPendente',
-            color_discrete_sequence=['#F4A261']
+            color_discrete_sequence=['#4A7BC8']
         )
         fig_vend = aplicar_layout_grafico(fig_vend)
         st.plotly_chart(fig_vend, use_container_width=True)
@@ -3104,7 +3125,7 @@ elif menu == "Rankings":
             y='Valor Total',
             labels={'Vendedor': 'Vendedor', 'Valor Total': 'Valor Total (R$)'},
             color='Valor Total',
-            color_discrete_sequence=['#6F42C1'],
+            color_discrete_sequence=['#163561'],
             title='Top 15 Vendedores por Valor'
         )
         fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
@@ -3141,7 +3162,7 @@ elif menu == "Rankings":
             orientation='h',
             labels={'Razão Social': 'Cliente', 'Valor Total': 'Valor Total (R$)'},
             color='Valor Total',
-            color_discrete_sequence=['#F4A261'],
+            color_discrete_sequence=['#4A7BC8'],
             title=f'Top 15 Clientes por Valor'
         )
         fig_rank_cli = aplicar_layout_grafico(fig_rank_cli)
