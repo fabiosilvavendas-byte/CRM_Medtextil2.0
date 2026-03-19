@@ -1764,7 +1764,7 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — card HTML + botão overlay
+    # Grid 4 colunas — card HTML + botão overlay COMPLETAMENTE invisível
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4)
@@ -1778,7 +1778,7 @@ if st.session_state.menu_option == '__home__':
                 # Wrapper container
                 st.markdown('<div class="med-card-col">', unsafe_allow_html=True)
                 
-                # Card visual HTML
+                # Card visual HTML (NÃO SERÁ ALTERADO)
                 st.markdown(f"""
                 <div class="med-card"
                      onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
@@ -1790,10 +1790,33 @@ if st.session_state.menu_option == '__home__':
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Botão overlay invisível
+                # Botão overlay TOTALMENTE invisível
                 if st.button(nome, key=f"hc_{nome}", use_container_width=True):
                     st.session_state.menu_option = nome
                     st.rerun()
+                
+                # CSS para tornar ESTE botão específico completamente invisível
+                st.markdown(f"""
+                <style>
+                div.med-card-col:has(button[aria-label="{nome}"]) button {{
+                    position: absolute !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100% !important;
+                    height: 138px !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    opacity: 0 !important;
+                    background: transparent !important;
+                    border: none !important;
+                    cursor: pointer !important;
+                    z-index: 99 !important;
+                    font-size: 0 !important;
+                    color: transparent !important;
+                    transform: translateY(-148px) !important;
+                }}
+                </style>
+                """, unsafe_allow_html=True)
 
                 # Fecha wrapper
                 st.markdown("</div>", unsafe_allow_html=True)
