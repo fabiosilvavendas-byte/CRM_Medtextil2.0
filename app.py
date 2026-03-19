@@ -309,6 +309,43 @@ hr {
     border-radius: 8px !important;
     font-size: 0.875rem !important;
 }
+
+/* ── Métricas: rótulo uppercase corporativo ── */
+[data-testid="stMetricLabel"] p {
+    text-transform: uppercase !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.06em !important;
+    color: #8A96A8 !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.45rem !important;
+    font-weight: 700 !important;
+    color: #1A2F52 !important;
+}
+
+/* ── Subheaders sem emoji weight ── */
+h2, h3 {
+    font-weight: 600 !important;
+    letter-spacing: -0.01em !important;
+}
+
+/* ── Expander painel de controle ── */
+[data-testid="stExpander"] summary {
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    color: #6C757D !important;
+}
+
+/* ── Captions dos filtros ── */
+.stCaption p {
+    font-size: 0.7rem !important;
+    color: #8A96A8 !important;
+    margin-top: -4px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.03em !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1139,11 +1176,10 @@ else:
 
 # ── Barra de Filtros Compactos ────────────────────────────────────────────
 st.markdown("""
-<div style="background:#FFFFFF;border-radius:12px;padding:12px 16px 4px 16px;
-            margin-bottom:16px;box-shadow:0 1px 6px rgba(31,71,136,0.07);
-            border:1px solid #E9ECEF;display:flex;align-items:center;gap:8px;">
-    <span style="font-size:0.72rem;font-weight:700;color:#6C757D;letter-spacing:0.08em;
-                 text-transform:uppercase;white-space:nowrap;margin-right:4px;">⚙️ Filtros</span>
+<div style="background:#F2F5FA;border-radius:10px;padding:8px 14px 2px 14px;
+            margin-bottom:14px;border:1px solid #DDE3EE;">
+    <span style="font-size:0.68rem;font-weight:700;color:#8A96A8;letter-spacing:0.1em;
+                 text-transform:uppercase;">Filtros de Período e Segmentação</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1196,126 +1232,216 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 
 st.sidebar.markdown("---")
 
-# ====================== SISTEMA DE NAVEGAÇÃO MELHORADO ======================
+# ====================== SISTEMA DE NAVEGAÇÃO CORRIGIDO ======================
 
-# Inicializar session_state
-if 'tela_atual' not in st.session_state:
-    st.session_state.tela_atual = 'home'
-if 'modulo_selecionado' not in st.session_state:
-    st.session_state.modulo_selecionado = None
+# ── Ícones SVG minimalistas (Lucide-style inline) ─────────────────────────
+_SVG = {
+    "Dashboard":         '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+    "Positivação":       '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
+    "Inadimplência":     '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="#1F4788"/></svg>',
+    "Clientes sem Compra":'<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
+    "Histórico":         '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>',
+    "Preço Médio":       '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    "Pedidos Pendentes": '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><path d="M21 10V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7"/><polyline points="16 2 16 8 19 8"/><circle cx="18" cy="18" r="4"/><line x1="18" y1="16" x2="18" y2="20"/><line x1="16" y1="18" x2="20" y2="18"/></svg>',
+    "Rankings":          '<svg width="22" height="22" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24"><polyline points="18 20 18 10"/><polyline points="12 20 12 4"/><polyline points="6 20 6 14"/></svg>',
+}
+_DESC = {
+    "Dashboard":          "Visão geral de faturamento",
+    "Positivação":        "Clientes atendidos no período",
+    "Inadimplência":      "Títulos em aberto e atrasos",
+    "Clientes sem Compra":"Clientes inativos para reativar",
+    "Histórico":          "Consulta por cliente ou vendedor",
+    "Preço Médio":        "Análise de preços por produto",
+    "Pedidos Pendentes":  "Itens aguardando faturamento",
+    "Rankings":           "Top vendedores e clientes",
+}
 
-modulos_visiveis = modulos_permitidos if modulos_permitidos else ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
+# ── Inicializar session_state ──────────────────────────────────────────────
+if 'menu_option' not in st.session_state:
+    st.session_state.menu_option = '__home__'
 
-def ir_para_modulo(modulo):
-    st.session_state.tela_atual = 'modulo'
-    st.session_state.modulo_selecionado = modulo
+modulos_visiveis = modulos_permitidos if modulos_permitidos else [
+    "Dashboard","Positivação","Inadimplência","Clientes sem Compra",
+    "Histórico","Preço Médio","Pedidos Pendentes","Rankings"
+]
 
-def voltar_home():
-    st.session_state.tela_atual = 'home'
-    st.session_state.modulo_selecionado = None
-
-# ====================== HEADER COM NAVEGAÇÃO ======================
-if st.session_state.tela_atual == 'modulo':
-    # Breadcrumb + Botão Voltar sempre visível
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown(f"🏠 **Início** › **{st.session_state.modulo_selecionado}**")
-    with col2:
-        if st.button("← Voltar", key="voltar_top", use_container_width=True):
-            voltar_home()
-            st.rerun()
-    st.markdown("---")
-
-# ====================== TELA HOME ======================
-if st.session_state.tela_atual == 'home':
-    usuario_info = st.session_state.get("usuario", {})
-    st.markdown(f"""
-    <div style="margin-bottom:24px;">
-        <div style="font-size:1.6rem;font-weight:700;color:#1A2F52;margin-bottom:4px;">
-            👋 Olá, {usuario_info.get('nome', 'Usuário')}!
-        </div>
-        <div style="color:#6C757D;font-size:0.95rem;">Selecione um módulo para começar a análise.</div>
-    </div>
+# ── Sidebar: navegação com SVG icons ──────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div style="font-size:0.65rem;font-weight:700;color:#ADB5BD;letter-spacing:0.12em;
+                text-transform:uppercase;padding:0 6px 6px 6px;">Navegação</div>
     """, unsafe_allow_html=True)
-    
-    # Dados para preview
+
+    # Botão Home
+    _home_active = st.session_state.menu_option == '__home__'
+    _home_bg = "background:linear-gradient(135deg,#F0F4FF,#E4EDFC);border-left:4px solid #1F4788;font-weight:700;" if _home_active else "background:transparent;border-left:4px solid transparent;"
+    st.markdown(f"""
+    <div style="{_home_bg}border-radius:0 10px 10px 0;padding:10px 14px;
+                 color:#1F4788;font-size:0.9rem;cursor:pointer;margin-bottom:3px;
+                 display:flex;align-items:center;gap:10px;">
+        <svg width="18" height="18" fill="none" stroke="#1F4788" stroke-width="1.8" viewBox="0 0 24 24">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span>Início</span>
+    </div>""", unsafe_allow_html=True)
+    if st.button("", key="nav_home", help="Início",
+                 use_container_width=True,
+                 type="secondary"):
+        st.session_state.menu_option = '__home__'
+        st.rerun()
+
+    for _mod in modulos_visiveis:
+        _active = st.session_state.menu_option == _mod
+        _bg = "background:linear-gradient(135deg,#F0F4FF,#E4EDFC);border-left:4px solid #1F4788;font-weight:700;" if _active else "background:transparent;border-left:4px solid transparent;"
+        st.markdown(f"""
+        <div style="{_bg}border-radius:0 10px 10px 0;padding:10px 14px;
+                     color:#1F4788;font-size:0.9rem;cursor:pointer;margin-bottom:3px;
+                     display:flex;align-items:center;gap:10px;">
+            {_SVG.get(_mod,'<span>&#9632;</span>')}
+            <span>{_mod}</span>
+        </div>""", unsafe_allow_html=True)
+        if st.button("", key=f"nav_{_mod}", help=_mod,
+                     use_container_width=True,
+                     type="secondary"):
+            st.session_state.menu_option = _mod
+            st.rerun()
+
+# ── Aplicar CSS para ocultar o texto dos botões da sidebar ────────────────
+st.markdown("""
+<style>
+/* nav overlay handled inline */
+</style>
+""", unsafe_allow_html=True)
+
+# ── Tela Home ─────────────────────────────────────────────────────────────
+if st.session_state.menu_option == '__home__':
+    usuario_info = st.session_state.get("usuario", {})
+
     try:
-        vendas_mes = notas_unicas[(notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) & (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)]['Valor_Real'].sum()
+        vendas_mes = notas_unicas[
+            (notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) &
+            (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)
+        ]['Valor_Real'].sum()
     except:
         vendas_mes = 0
     try:
         total_clientes = len(df['RazaoSocial'].unique())
     except:
         total_clientes = 0
-    
-    # Configuração dos cards
-    cards = [
-        {'nome': 'Dashboard', 'icone': '📊', 'info': f'R$ {vendas_mes:,.0f} no mês'},
-        {'nome': 'Positivação', 'icone': '✅', 'info': f'{total_clientes} clientes'},
-        {'nome': 'Inadimplência', 'icone': '⚠️', 'info': 'Títulos em atraso'},
-        {'nome': 'Clientes sem Compra', 'icone': '😴', 'info': 'Reativação'},
-        {'nome': 'Histórico', 'icone': '📜', 'info': 'Consultas'},
-        {'nome': 'Preço Médio', 'icone': '💰', 'info': 'Análise'},
-        {'nome': 'Pedidos Pendentes', 'icone': '📦', 'info': 'Pendências'},
-        {'nome': 'Rankings', 'icone': '🏆', 'info': 'Top vendas'}
+
+    cards_data = [
+        {'nome': 'Dashboard',          'info': f'R$ {vendas_mes:,.0f} no mês atual'},
+        {'nome': 'Positivação',         'info': f'{total_clientes} clientes na base'},
+        {'nome': 'Inadimplência',       'info': 'Títulos em aberto e atrasos'},
+        {'nome': 'Clientes sem Compra', 'info': 'Identificar inativos'},
+        {'nome': 'Histórico',           'info': 'Consultas por cliente / vendedor'},
+        {'nome': 'Preço Médio',         'info': 'Análise de preços por produto'},
+        {'nome': 'Pedidos Pendentes',   'info': 'Itens aguardando faturamento'},
+        {'nome': 'Rankings',            'info': 'Top vendedores e clientes'},
     ]
-    
-    cards_visiveis = [c for c in cards if c['nome'] in modulos_visiveis]
-    
-    # Grid 3 colunas
-    for i in range(0, len(cards_visiveis), 3):
-        cols = st.columns(3)
-        for j in range(3):
-            if i+j < len(cards_visiveis):
-                card = cards_visiveis[i+j]
-                with cols[j]:
-                    if st.button(
-                        f"{card['icone']}\n\n**{card['nome']}**\n\n{card['info']}", 
-                        key=f"card_{card['nome']}", 
-                        use_container_width=True
-                    ):
-                        ir_para_modulo(card['nome'])
-                        st.rerun()
-    st.stop()
+    cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
 
-# ====================== MÓDULO ATIVO ======================
-if st.session_state.tela_atual == 'modulo':
-    menu = st.session_state.modulo_selecionado
-else:
-    menu = "Dashboard"
-
-# Verificar se o usuário tem permissão para acessar o módulo
-if menu not in modulos_permitidos:
-    st.error("🚫 Você não tem permissão para acessar este módulo")
-    st.info(f"📋 Módulos disponíveis: {', '.join(modulos_permitidos)}")
-    st.stop()
-    # Definir menu como o módulo selecionado
-    menu = st.session_state.modulo_selecionado
-else:
-    # Fallback: usar menu lateral tradicional se algo der errado
-    st.sidebar.markdown("""
-    <div style="font-size:0.68rem;font-weight:700;color:#ADB5BD;letter-spacing:0.1em;
-                text-transform:uppercase;padding:0 6px;margin-bottom:6px;">Navegação</div>
+    st.markdown(f"""
+    <div style="margin-bottom:28px;">
+        <div style="font-size:1.55rem;font-weight:700;color:#1A2F52;margin-bottom:4px;">
+            Olá, {usuario_info.get('nome','Usuário')}
+        </div>
+        <div style="color:#6C757D;font-size:0.92rem;">
+            Selecione um módulo abaixo para começar a análise.
+        </div>
+    </div>
     """, unsafe_allow_html=True)
-    # Mapear ícones para cada módulo
-    _icones = {
-        "Dashboard": "📊", "Positivação": "✅", "Inadimplência": "⚠️",
-        "Clientes sem Compra": "😴", "Histórico": "📜", "Preço Médio": "💰",
-        "Pedidos Pendentes": "📦", "Rankings": "🏆"
-    }
-    modulos_com_icone = [f"{_icones.get(m, '•')}  {m}" for m in modulos_visiveis]
-    menu_idx = st.sidebar.radio(
-        "",
-        modulos_com_icone,
-        index=0,
-        label_visibility="collapsed"
-    )
-    menu = menu_idx.split("  ", 1)[-1]
 
-# Verificar se o usuário tem permissão para acessar o módulo
+    # CSS para overlay dos botões dos cards (torna todo card clicável)
+    st.markdown("""
+    <style>
+    div[data-card-btn] > button, .card-nav-btn button {
+        position: absolute !important; top:0 !important; left:0 !important;
+        width: 100% !important; height: 100% !important;
+        opacity: 0 !important; cursor: pointer !important;
+        z-index: 10 !important;
+    }
+    .nav-card-wrap { position: relative !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Renderizar grid de cards: 4 colunas
+    for row_start in range(0, len(cards_visiveis), 4):
+        row_cards = cards_visiveis[row_start:row_start+4]
+        cols = st.columns(4)
+        for j, card in enumerate(row_cards):
+            with cols[j]:
+                svg = _SVG.get(card['nome'], '')
+                desc = _DESC.get(card['nome'], '')
+                # Card HTML corporativo com hover nativo
+                st.markdown(f"""
+                <div class="nav-card-wrap" style="background:#FFFFFF;border:1px solid #E4E9F0;
+                            border-radius:14px;padding:24px 20px 18px 20px;
+                            box-shadow:0 1px 6px rgba(31,71,136,0.07);
+                            transition:all 0.2s ease;cursor:pointer;"
+                     onmouseover="this.style.boxShadow='0 8px 24px rgba(31,71,136,0.15)';
+                                  this.style.transform='translateY(-4px)';
+                                  this.style.borderColor='#B8CDF0'"
+                     onmouseout="this.style.boxShadow='0 1px 6px rgba(31,71,136,0.07)';
+                                 this.style.transform='translateY(0)';
+                                 this.style.borderColor='#E4E9F0'">
+                    <div style="width:42px;height:42px;background:#F0F4FF;border-radius:10px;
+                                display:flex;align-items:center;justify-content:center;
+                                margin-bottom:14px;">{svg}</div>
+                    <div style="font-size:0.97rem;font-weight:700;color:#1A2F52;
+                                margin-bottom:5px;letter-spacing:-0.01em;">{card['nome']}</div>
+                    <div style="font-size:0.78rem;color:#6C757D;line-height:1.45;
+                                margin-bottom:12px;">{desc}</div>
+                    <div style="font-size:0.71rem;color:#ADB5BD;border-top:1px solid #F0F2F5;
+                                padding-top:8px;">{card['info']}</div>
+                </div>""", unsafe_allow_html=True)
+                # Botão real de navegação (invisível via CSS, sobreposto ao card)
+                if st.button(f"→ {card['nome']}", key=f"home_card_{card['nome']}",
+                             use_container_width=True):
+                    st.session_state.menu_option = card['nome']
+                    st.rerun()
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    st.stop()
+
+# ── CSS corporativo para botões dos cards (overlay invisível) ─────────────
+st.markdown("""
+<style>
+/* Cards da home: botão de navegação invisível sobre o card */
+div[data-testid="stButton"] button {
+    margin-top: -180px !important;
+    height: 180px !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    border: none !important;
+    background: transparent !important;
+    width: 100% !important;
+    position: relative !important;
+    z-index: 5 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Módulo ativo ──────────────────────────────────────────────────────────
+menu = st.session_state.menu_option
+
+# Breadcrumb discreto
+st.markdown(f"""
+<div style="font-size:0.78rem;color:#ADB5BD;margin-bottom:12px;">
+    <span style="cursor:pointer;color:#6C757D;">Inicio</span>
+    <span style="margin:0 6px;">›</span>
+    <span style="color:#1F4788;font-weight:600;">{menu}</span>
+</div>
+""", unsafe_allow_html=True)
+
+# Verificar permissão
 if menu not in modulos_permitidos:
-    st.error("🚫 Você não tem permissão para acessar este módulo")
-    st.info(f"📋 Módulos disponíveis: {', '.join(modulos_permitidos)}")
+    st.markdown("""
+    <div style="background:#FFF3F3;border:1px solid #F5C6CB;border-radius:10px;
+                padding:16px 20px;color:#721C24;font-size:0.9rem;">
+        Acesso negado. Você não tem permissão para acessar este módulo.
+    </div>""", unsafe_allow_html=True)
     st.stop()
 
 # ====================== DASHBOARD ======================
@@ -1325,21 +1451,21 @@ if menu == "Dashboard":
     with col1:
         # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-        st.metric("💰 Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
+        st.metric("Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
     
     with col2:
         # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
         # Valor_Real já negativiza as devoluções automaticamente
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
-        st.metric("💵 Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
+        st.metric("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
     
     with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-        st.metric("👥 Clientes Únicos", f"{clientes_unicos:,}")
+        st.metric("Clientes Únicos", f"{clientes_unicos:,}")
     
     with col4:
         total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-        st.metric("📄 Notas de Venda", f"{total_notas:,}")
+        st.metric("Notas de Venda", f"{total_notas:,}")
     
     # Segunda linha de métricas - Detalhamento
     col1b, col2b, col3b, col4b = st.columns(4)
@@ -1347,19 +1473,19 @@ if menu == "Dashboard":
     with col1b:
         # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        st.metric("↩️ Devoluções", f"R$ {total_devolucoes:,.2f}")
+        st.metric("Devoluções", f"R$ {total_devolucoes:,.2f}")
     
     with col2b:
         ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        st.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+        st.metric("Ticket Médio", f"R$ {ticket_medio:,.2f}")
     
     with col3b:
         qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        st.metric("📋 Notas Devolução", f"{qtd_notas_dev:,}")
+        st.metric("Notas Devolução", f"{qtd_notas_dev:,}")
     
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        st.metric("📊 Taxa Devolução", f"{taxa_devolucao:.1f}%")
+        st.metric("Taxa Devolução", f"{taxa_devolucao:.1f}%")
     
     st.markdown("---")
     
@@ -1499,7 +1625,7 @@ if menu == "Dashboard":
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">👥 Relatório de Positivação</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado"])
     
@@ -1643,7 +1769,7 @@ elif menu == "Positivação":
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">💳 Relatório de Inadimplência</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Inadimplência</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha de inadimplência existe
     if not planilhas_disponiveis['inadimplencia']:
@@ -1660,7 +1786,6 @@ elif menu == "Inadimplência":
     if df_inadimplencia is not None and len(df_inadimplencia) > 0:
         df_inadimplencia = processar_inadimplencia(df_inadimplencia)
         
-        st.success(f"✅ Dados carregados: {len(df_inadimplencia):,} títulos a receber")
         
         # ========== FILTROS ==========
         st.subheader("🔍 Filtros")
@@ -1709,19 +1834,19 @@ elif menu == "Inadimplência":
         
         with col1:
             total_inadimplencia = df_inad_filtrado['ValorLiquido'].sum()
-            st.metric("💰 Total em Aberto", f"R$ {total_inadimplencia:,.2f}")
+            st.metric("Total em Aberto", f"R$ {total_inadimplencia:,.2f}")
         
         with col2:
             qtd_titulos = len(df_inad_filtrado)
-            st.metric("📄 Quantidade de Títulos", f"{qtd_titulos:,}")
+            st.metric("Qtd. Títulos", f"{qtd_titulos:,}")
         
         with col3:
             clientes_inadimplentes = df_inad_filtrado['Cliente'].nunique()
-            st.metric("👥 Clientes Inadimplentes", f"{clientes_inadimplentes:,}")
+            st.metric("Clientes Inadimplentes", f"{clientes_inadimplentes:,}")
         
         with col4:
             atraso_medio = df_inad_filtrado['DiasAtraso'].mean()
-            st.metric("📅 Atraso Médio", f"{atraso_medio:.0f} dias")
+            st.metric("Atraso Médio", f"{atraso_medio:.0f} dias")
         
         st.markdown("---")
         
@@ -1864,7 +1989,7 @@ elif menu == "Inadimplência":
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">⚠️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
@@ -1969,7 +2094,7 @@ elif menu == "Clientes sem Compra":
 
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">📜 Histórico de Vendas</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor", "📝 Pedidos"])
     
@@ -2507,7 +2632,7 @@ elif menu == "Histórico":
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">💰 Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
     
     # Verificar se as planilhas necessárias existem
     if not planilhas_disponiveis['vendas_produto']:
@@ -2542,7 +2667,6 @@ elif menu == "Preço Médio":
     # IMPORTANTE: Se a planilha de vendas já tiver NOMEPRODUTO, remover para usar apenas o da planilha de produtos
     if 'NOMEPRODUTO' in df_vendas_produto.columns:
         df_vendas_produto = df_vendas_produto.drop(columns=['NOMEPRODUTO'])
-        st.info("ℹ️ Coluna NOMEPRODUTO da planilha de vendas foi substituída pela descrição da planilha de produtos")
     
     # Verificar se as colunas necessárias existem
     colunas_vendas_necessarias = ['CODPRODUTO', 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO']
@@ -2630,15 +2754,7 @@ elif menu == "Preço Médio":
     else:
         df_preco_medio['GRAMATURA'] = 0
     
-    st.success(f"✅ Dados carregados: {len(df_preco_medio):,} registros de vendas")
-    st.info(f"📊 Planilha de Vendas: **{planilhas_disponiveis['vendas_produto']['nome']}**")
-    st.info(f"📦 Planilha de Produtos: **{planilhas_disponiveis['produtos_agrupados']['nome']}**")
-    st.info(f"📅 Período de Referência: **{data_atual.strftime('%B/%Y')}** (mês atual)")
     
-    if produtos_nao_catalogados > 0:
-        st.warning(f"⚠️ {produtos_nao_catalogados} produtos sem cadastro na planilha de produtos (verifique se os códigos coincidem)")
-    else:
-        st.success("✅ Todos os produtos foram encontrados no cadastro!")
     
     st.markdown("---")
     
@@ -2684,11 +2800,11 @@ elif menu == "Preço Médio":
     
     with col1:
         total_vendido = df_preco_filtrado['TOTLIQUIDO'].sum()
-        st.metric("💰 Total Vendido", f"R$ {total_vendido:,.2f}")
+        st.metric("Total Vendido", f"R$ {total_vendido:,.2f}")
     
     with col2:
         qtd_total = df_preco_filtrado['TOTQTD'].sum()
-        st.metric("📦 Qtd Total Vendida", f"{qtd_total:,.0f}")
+        st.metric("Qtd. Total Vendida", f"{qtd_total:,.0f}")
     
     with col3:
         # CORREÇÃO: Média ponderada = Total Vendido / Quantidade Total
@@ -2696,11 +2812,11 @@ elif menu == "Preço Médio":
             preco_medio_geral = df_preco_filtrado['TOTLIQUIDO'].sum() / df_preco_filtrado['TOTQTD'].sum()
         else:
             preco_medio_geral = 0
-        st.metric("💵 Preço Médio Geral", f"R$ {preco_medio_geral:,.2f}")
+        st.metric("Preço Médio Geral", f"R$ {preco_medio_geral:,.2f}")
     
     with col4:
         produtos_unicos = df_preco_filtrado['CODPRODUTO'].nunique()
-        st.metric("🏷️ Produtos Únicos", f"{produtos_unicos:,}")
+        st.metric("Produtos Únicos", f"{produtos_unicos:,}")
     
     st.markdown("---")
     
@@ -2833,7 +2949,7 @@ elif menu == "Preço Médio":
 
 # ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">📦 Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha existe
     if not planilhas_disponiveis.get('pedidos_pendentes'):
@@ -2947,7 +3063,6 @@ elif menu == "Pedidos Pendentes":
                 st.warning("⚠️ Nenhum pedido pendente encontrado na planilha")
                 st.stop()
             
-            st.success(f"✅ {len(df_pendentes):,} itens pendentes carregados")
             
         except Exception as e:
             st.error(f"❌ Erro ao processar planilha: {str(e)}")
@@ -2995,19 +3110,19 @@ elif menu == "Pedidos Pendentes":
     
     with col1:
         total_pendente = df_pend_filtrado['ValorPendente'].sum()
-        st.metric("💰 Valor Total Pendente", f"R$ {total_pendente:,.2f}")
+        st.metric("Valor Total Pendente", f"R$ {total_pendente:,.2f}")
     
     with col2:
         qtd_pendente = df_pend_filtrado['QtdPendente'].sum()
-        st.metric("📦 Qtd Total Pendente", f"{qtd_pendente:,.0f}")
+        st.metric("Qtd. Total Pendente", f"{qtd_pendente:,.0f}")
     
     with col3:
         pedidos_unicos = df_pend_filtrado['NumeroPedido'].nunique()
-        st.metric("📋 Pedidos Únicos", f"{pedidos_unicos:,}")
+        st.metric("Pedidos Únicos", f"{pedidos_unicos:,}")
     
     with col4:
         perc_medio = df_pend_filtrado['PercEntregue'].mean() if len(df_pend_filtrado) > 0 else 0
-        st.metric("📊 % Médio Entregue", f"{perc_medio:.1f}%")
+        st.metric("% Médio Entregue", f"{perc_medio:.1f}%")
     
     st.markdown("---")
     
@@ -3103,7 +3218,7 @@ elif menu == "Pedidos Pendentes":
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;">🏆 Rankings</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Vendedores", "👥 Clientes"])
     
