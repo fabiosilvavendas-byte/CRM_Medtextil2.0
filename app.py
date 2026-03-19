@@ -1515,7 +1515,17 @@ _DESC = {
     "Rankings":           "Top vendedores e clientes",
 }
 
-# ── Inicializar session_state ──────────────────────────────────────────────
+_SVG = {
+    "Dashboard":          "▦",
+    "Positivação":        "✓",
+    "Inadimplência":      "⚠",
+    "Clientes sem Compra":"＋",
+    "Histórico":          "◷",
+    "Preço Médio":        "＄",
+    "Pedidos Pendentes":  "▣",
+    "Rankings":           "▲",
+}
+
 if 'menu_option' not in st.session_state:
     st.session_state.menu_option = '__home__'
 
@@ -1524,86 +1534,113 @@ modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Histórico","Preço Médio","Pedidos Pendentes","Rankings"
 ]
 
-# ── CSS isolado: apenas os cards da home recebem estilo azul ──────────────
-# Usamos data-testid específico dos containers dos cards para não vazar para sidebar
+# ── CSS: sidebar st.radio estilizado como menu com ícone ─────────────────
 st.markdown("""
 <style>
-/* Cards da Home — identificados pelo container pai .home-grid */
-.home-grid button {
-    height: auto !important;
-    min-height: 120px !important;
-    white-space: pre-wrap !important;
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    border-radius: 12px !important;
-    font-size: 0.93rem !important;
-    font-weight: 700 !important;
-    box-shadow: 0 2px 8px rgba(31,71,136,0.20) !important;
-    padding: 16px 14px !important;
-    text-align: left !important;
-    line-height: 1.45 !important;
-    width: 100% !important;
-    cursor: pointer !important;
-    transition: background 0.18s, box-shadow 0.18s, transform 0.18s !important;
+/* Sidebar radio — aparência de menu vertical limpo */
+section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
+section[data-testid="stSidebar"] .stRadio > div {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px !important;
 }
-.home-grid button:hover {
-    background: #163561 !important;
-    box-shadow: 0 6px 22px rgba(31,71,136,0.30) !important;
-    transform: translateY(-3px) !important;
-}
-.home-grid button p {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-    margin: 0 !important;
-}
-/* Sidebar: radio estilo menu limpo */
-section[data-testid="stSidebar"] .stRadio label {
-    font-size: 0.9rem !important;
+section[data-testid="stSidebar"] .stRadio div[data-testid="stMarkdownContainer"] p {
+    font-size: 0.88rem !important;
     font-weight: 500 !important;
     color: #495057 !important;
-    padding: 6px 4px !important;
-    cursor: pointer !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
-section[data-testid="stSidebar"] .stRadio div[data-testid="stRadioGroup"] {
-    gap: 2px !important;
+section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
+    padding: 9px 12px 9px 10px !important;
+    border-radius: 0 10px 10px 0 !important;
+    border-left: 3px solid transparent !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    transition: all 0.15s !important;
+    align-items: center !important;
+}
+section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
+    background: #F4F7FD !important;
+    border-left-color: #8EB3E8 !important;
+}
+section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
+    background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
+    border-left-color: #1F4788 !important;
+}
+section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
+    color: #1F4788 !important;
+    font-weight: 600 !important;
+}
+/* Esconder o círculo padrão do radio */
+section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] { flex:1; }
+section[data-testid="stSidebar"] .stRadio svg { display:none !important; }
+section[data-testid="stSidebar"] .stRadio div[class*="RadioMarkFill"],
+section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"] {
+    display: none !important;
+}
+
+/* ── Cards da home: cada st.button vira um card branco completo ── */
+div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] 
+    div[data-testid="stButton"] > button {
+    background: #FFFFFF !important;
+    color: #1A2F52 !important;
+    border: 1px solid #E4E9F0 !important;
+    border-radius: 14px !important;
+    padding: 20px 18px !important;
+    text-align: left !important;
+    white-space: pre-wrap !important;
+    min-height: 130px !important;
+    font-size: 0.88rem !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
+    box-shadow: 0 1px 4px rgba(31,71,136,0.06) !important;
+    transition: all 0.18s ease !important;
+    width: 100% !important;
+}
+div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] 
+    div[data-testid="stButton"] > button:hover {
+    border-color: #B8CDF0 !important;
+    box-shadow: 0 6px 20px rgba(31,71,136,0.14) !important;
+    transform: translateY(-3px) !important;
+    background: #FAFBFF !important;
+}
+div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] 
+    div[data-testid="stButton"] > button p {
+    font-size: 0.88rem !important;
+    color: #1A2F52 !important;
+    margin: 0 !important;
+    white-space: pre-wrap !important;
+    line-height: 1.5 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar: st.radio nativo — zero CSS custom, zero offset ──────────────
+# ── Sidebar: st.radio com labels formatadas em markdown ──────────────────
 with st.sidebar:
-    st.markdown("""<div style="font-size:0.65rem;font-weight:700;color:#ADB5BD;
-        letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">
-        Navegação</div>""", unsafe_allow_html=True)
+    st.markdown("""<div style="font-size:0.63rem;font-weight:700;color:#ADB5BD;
+        letter-spacing:0.1em;text-transform:uppercase;
+        margin-bottom:6px;padding-left:4px;">Navegação</div>""",
+        unsafe_allow_html=True)
 
-    _opcoes_nav = ["Início"] + modulos_visiveis
+    _opcoes = ["🏠  Início"] + [
+        f"{_SVG.get(m,'•')}  {m}" for m in modulos_visiveis
+    ]
 
-    # Determinar índice selecionado atual
     _cur = st.session_state.menu_option
-    if _cur == '__home__':
-        _idx_atual = 0
-    elif _cur in modulos_visiveis:
-        _idx_atual = modulos_visiveis.index(_cur) + 1
-    else:
-        _idx_atual = 0
+    _idx = 0
+    if _cur != '__home__' and _cur in modulos_visiveis:
+        _idx = modulos_visiveis.index(_cur) + 1
 
-    _nav_escolha = st.radio(
-        label="nav",
-        options=_opcoes_nav,
-        index=_idx_atual,
-        key="sidebar_radio",
+    _escolha = st.radio(
+        "nav", _opcoes, index=_idx,
+        key="sidebar_radio_v2",
         label_visibility="collapsed"
     )
 
-    # Sincronizar radio → session_state
-    if _nav_escolha == "Início":
-        _novo_estado = '__home__'
-    else:
-        _novo_estado = _nav_escolha
-
-    if _novo_estado != st.session_state.menu_option:
-        st.session_state.menu_option = _novo_estado
+    _novo = '__home__' if _escolha.startswith("🏠") else _escolha.split("  ", 1)[-1]
+    if _novo != st.session_state.menu_option:
+        st.session_state.menu_option = _novo
         st.rerun()
 
 # ── Tela Home ─────────────────────────────────────────────────────────────
@@ -1623,53 +1660,50 @@ if st.session_state.menu_option == '__home__':
         total_clientes = 0
 
     cards_data = [
-        {'nome': 'Dashboard',          'info': f'R$ {vendas_mes:,.0f} no mês'},
+        {'nome': 'Dashboard',          'info': f'R$ {vendas_mes:,.0f} no mês atual'},
         {'nome': 'Positivação',         'info': f'{total_clientes} clientes na base'},
-        {'nome': 'Inadimplência',       'info': 'Títulos em aberto'},
-        {'nome': 'Clientes sem Compra', 'info': 'Inativos para reativar'},
+        {'nome': 'Inadimplência',       'info': 'Títulos em aberto e atrasos'},
+        {'nome': 'Clientes sem Compra', 'info': 'Identificar inativos'},
         {'nome': 'Histórico',           'info': 'Por cliente ou vendedor'},
-        {'nome': 'Preço Médio',         'info': 'Por produto'},
+        {'nome': 'Preço Médio',         'info': 'Análise por produto'},
         {'nome': 'Pedidos Pendentes',   'info': 'Aguardando faturamento'},
         {'nome': 'Rankings',            'info': 'Top vendedores e clientes'},
     ]
     cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
 
     st.markdown(f"""
-    <div style="margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
-        <div style="font-size:1.5rem;font-weight:700;color:#1A2F52;margin-bottom:3px;">
+    <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
+        <div style="font-size:1.45rem;font-weight:600;color:#1A2F52;margin-bottom:3px;">
             Olá, {usuario_info.get('nome','Usuário')}
         </div>
-        <div style="color:#8A96A8;font-size:0.88rem;">
+        <div style="color:#8A96A8;font-size:0.87rem;">
             Selecione um módulo abaixo para iniciar a análise.
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid de cards: st.button nativo dentro de div.home-grid
-    # O wrapper .home-grid isola o CSS azul apenas aqui
+    # Grid de cards via st.button — label estruturado com separador visual
     for row_start in range(0, len(cards_visiveis), 4):
         row_cards = cards_visiveis[row_start:row_start+4]
-        # Abre o wrapper isolador
-        st.markdown('<div class="home-grid">', unsafe_allow_html=True)
         cols = st.columns(4)
         for j, card in enumerate(row_cards):
             with cols[j]:
-                desc = _DESC.get(card['nome'], '')
+                nome = card['nome']
+                desc = _DESC.get(nome, '')
                 info = card['info']
-                label = card['nome'] + "\n" + desc + "\n\n" + info
-                if st.button(label, key=f"home_card_{card['nome']}",
-                             use_container_width=True):
-                    st.session_state.menu_option = card['nome']
+                icone = _SVG.get(nome, '•')
+                # Label: ícone + nome em destaque, desc, linha, info
+                lbl = icone + "  " + nome + "\n" + desc + "\n" + "─" * 13 + "\n" + info
+                if st.button(lbl, key=f"home_card_{nome}", use_container_width=True):
+                    st.session_state.menu_option = nome
                     st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
 menu = st.session_state.menu_option
 
-# Breadcrumb
 st.markdown(f"""
 <div style="font-size:0.75rem;color:#ADB5BD;margin-bottom:14px;
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
@@ -1679,7 +1713,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Verificar permissão
 if menu not in modulos_permitidos:
     st.markdown("""
     <div style="background:#FFF3F3;border:1px solid #F5C6CB;border-radius:10px;
@@ -1687,7 +1720,6 @@ if menu not in modulos_permitidos:
         Acesso negado. Você não tem permissão para acessar este módulo.
     </div>""", unsafe_allow_html=True)
     st.stop()
-
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
     col1, col2, col3, col4 = st.columns(4)
