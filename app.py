@@ -7,6 +7,34 @@ import io
 import requests
 from github import Github
 
+# ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
+def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
+    """Renderiza card KPI profissional com HTML/CSS - substitui st.metric()"""
+    delta_html = ""
+    if delta:
+        delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
+        try:
+            delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
+        except:
+            delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
+        delta_html = f'<div style="color:{delta_color};font-size:0.875rem;font-weight:600;margin-top:0.5rem;">{delta}</div>'
+    
+    st.markdown(f"""
+    <div style="background:white;padding:1.5rem;border-radius:15px;
+                box-shadow:0 4px 12px rgba(0,0,0,0.05);border-left:4px solid {color};
+                height:140px;display:flex;flex-direction:column;justify-content:space-between;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="font-size:0.8rem;color:#6B7280;font-weight:600;
+                        text-transform:uppercase;letter-spacing:0.05em;">{label}</div>
+            <div style="font-size:1.75rem;">{icon}</div>
+        </div>
+        <div>
+            <div style="font-size:1.75rem;font-weight:700;color:#1F2937;">{value}</div>
+            {delta_html}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # Configuração da página
 st.set_page_config(
     page_title="Dashboard BI Medtextil", 
@@ -45,6 +73,45 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] .stMarkdown h2,
 [data-testid="stSidebar"] .stMarkdown h3 {
     color: #1F4788 !important;
+}
+
+/* ── Botões de navegação da sidebar estilizados ── */
+[data-testid="stSidebar"] [data-testid="stRadio"] {
+    gap: 6px !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    background: #F8F9FA !important;
+    border: 1px solid #E9ECEF !important;
+    border-radius: 10px !important;
+    padding: 12px 16px !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    display: block !important;
+    width: 100% !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: #EEF2F7 !important;
+    border-color: #1F4788 !important;
+    transform: translateX(3px) !important;
+}
+
+/* Botão selecionado na sidebar */
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
+    background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
+    border-color: #1F4788 !important;
+    color: white !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(31, 71, 136, 0.2) !important;
+}
+
+/* Esconder radio button padrão */
+[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
+    display: none !important;
 }
 
 /* ── Cards de métricas (st.metric) ── */
@@ -1514,17 +1581,7 @@ _DESC = {
     "Pedidos Pendentes":  "Itens aguardando faturamento",
     "Rankings":           "Top vendedores e clientes",
 }
-
-_SVG = {
-    "Dashboard":          "▦",
-    "Positivação":        "✓",
-    "Inadimplência":      "⚠",
-    "Clientes sem Compra":"＋",
-    "Histórico":          "◷",
-    "Preço Médio":        "＄",
-    "Pedidos Pendentes":  "▣",
-    "Rankings":           "▲",
-}
+_INFO_CARD = {}  # preenchido depois dos dados
 
 if 'menu_option' not in st.session_state:
     st.session_state.menu_option = '__home__'
@@ -1534,114 +1591,198 @@ modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Histórico","Preço Médio","Pedidos Pendentes","Rankings"
 ]
 
-# ── CSS: sidebar st.radio estilizado como menu com ícone ─────────────────
+# ══════════════════════════════════════════════════════════════════
+# CSS GLOBAL — injetado uma única vez no topo do fluxo de página
+# Cobre: sidebar radio, cards home (overlay + visual), métricas,
+# gráficos, botões, filtros — tudo em um único bloco.
+# ══════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* Sidebar radio — aparência de menu vertical limpo */
-section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
-section[data-testid="stSidebar"] .stRadio > div {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 1px !important;
-}
-section[data-testid="stSidebar"] .stRadio div[data-testid="stMarkdownContainer"] p {
-    font-size: 0.88rem !important;
-    font-weight: 500 !important;
-    color: #495057 !important;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ── Base ── */
+html, body, [class*="css"] { font-family: 'Inter','Segoe UI',sans-serif !important; }
+.stApp { background-color: #F8F9FA !important; }
+
+/* ── Remove padding padrão das colunas (alinha cards) ── */
+div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
+div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"] {
     padding: 0 !important;
     margin: 0 !important;
+    min-width: 0 !important;
+}
+div[data-testid="column"] { padding: 0 !important; }
+
+/* ── Sidebar ── */
+section[data-testid="stSidebar"] {
+    background: #FFFFFF !important;
+    border-right: 1px solid #E9ECEF !important;
+}
+section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
+section[data-testid="stSidebar"] .stRadio > div {
+    display: flex !important; flex-direction: column !important; gap: 1px !important;
 }
 section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
     padding: 9px 12px 9px 10px !important;
     border-radius: 0 10px 10px 0 !important;
     border-left: 3px solid transparent !important;
-    margin: 0 !important;
-    cursor: pointer !important;
-    transition: all 0.15s !important;
-    align-items: center !important;
+    margin: 0 !important; cursor: pointer !important;
+    transition: all 0.15s !important; align-items: center !important;
 }
 section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
-    background: #F4F7FD !important;
-    border-left-color: #8EB3E8 !important;
+    background: #F4F7FD !important; border-left-color: #8EB3E8 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
     background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
     border-left-color: #1F4788 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #1F4788 !important;
-    font-weight: 600 !important;
+    color: #1F4788 !important; font-weight: 600 !important;
 }
-/* Esconder o círculo padrão do radio */
-section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] { flex:1; }
-section[data-testid="stSidebar"] .stRadio svg { display:none !important; }
+section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"],
 section[data-testid="stSidebar"] .stRadio div[class*="RadioMarkFill"],
-section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"] {
-    display: none !important;
+section[data-testid="stSidebar"] .stRadio svg { display:none !important; }
+section[data-testid="stSidebar"] .stRadio div[data-testid="stMarkdownContainer"] p {
+    font-size: 0.88rem !important; color: #495057 !important;
+    padding: 0 !important; margin: 0 !important;
 }
 
-/* ── Cards da home: cada st.button vira um card branco completo ── */
-div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] 
-    div[data-testid="stButton"] > button {
-    background: #FFFFFF !important;
-    color: #1A2F52 !important;
-    border: 1px solid #E4E9F0 !important;
-    border-radius: 14px !important;
-    padding: 20px 18px !important;
-    text-align: left !important;
-    white-space: pre-wrap !important;
-    min-height: 130px !important;
-    font-size: 0.88rem !important;
-    font-weight: 400 !important;
-    line-height: 1.5 !important;
-    box-shadow: 0 1px 4px rgba(31,71,136,0.06) !important;
-    transition: all 0.18s ease !important;
-    width: 100% !important;
+/* ── HOME: card visual (div.med-card) ── */
+div.med-card {
+    background: #FFFFFF;
+    border: 1px solid #E4E9F0;
+    border-radius: 14px;
+    padding: 20px 18px 16px;
+    min-height: 138px;
+    box-shadow: 0 1px 5px rgba(31,71,136,0.06);
+    transition: box-shadow 0.18s, transform 0.18s, border-color 0.18s;
+    cursor: pointer;
+    position: relative;
+    box-sizing: border-box;
 }
-div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] 
-    div[data-testid="stButton"] > button:hover {
+div.med-card:hover {
     border-color: #B8CDF0 !important;
-    box-shadow: 0 6px 20px rgba(31,71,136,0.14) !important;
-    transform: translateY(-3px) !important;
-    background: #FAFBFF !important;
+    box-shadow: 0 7px 22px rgba(31,71,136,0.14) !important;
+    transform: translateY(-3px);
 }
-div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] 
-    div[data-testid="stButton"] > button p {
-    font-size: 0.88rem !important;
-    color: #1A2F52 !important;
-    margin: 0 !important;
-    white-space: pre-wrap !important;
-    line-height: 1.5 !important;
+
+/* ── HOME: botão overlay invisível sobre o card ── */
+div.med-card-col div[data-testid="stButton"] > button {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    height: 138px !important;
+    margin-top: -148px !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    border: none !important;
+    background: transparent !important;
+    z-index: 99 !important;
+    padding: 0 !important;
+}
+
+div.med-card .mc-icon {
+    width: 38px; height: 38px;
+    background: #EEF3FC; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 11px; color: #1F4788; font-size: 16px;
+}
+div.med-card .mc-title {
+    font-size: 0.94rem; font-weight: 700;
+    color: #1A2F52; margin-bottom: 4px; letter-spacing: -0.01em;
+}
+div.med-card .mc-desc {
+    font-size: 0.75rem; color: #6C757D; line-height: 1.4; margin-bottom: 9px;
+}
+div.med-card .mc-info {
+    font-size: 0.70rem; color: #ADB5BD;
+    border-top: 1px solid #F0F2F5; padding-top: 7px;
+}
+
+/* ── HOME: botão overlay invisível sobre o card ──
+   O Streamlit renderiza o st.button logo após o st.markdown na mesma coluna.
+   Usamos margin-top negativo para "subir" o botão sobre o card,
+   e deixamos opacity:0 para ser invisível mas clicável. ── */
+div.med-card-col div[data-testid="stButton"] > button {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    height: 138px !important;
+    margin-top: -148px !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    border: none !important;
+    background: transparent !important;
+    z-index: 99 !important;
+    padding: 0 !important;
+}
+
+/* ── Métricas ── */
+[data-testid="stMetric"] {
+    background: #FFFFFF !important; border-radius: 12px !important;
+    padding: 16px 18px !important; border-left: 4px solid #1F4788 !important;
+    box-shadow: 0 1px 6px rgba(31,71,136,0.07) !important;
+}
+[data-testid="stMetricLabel"] p {
+    font-size: 0.71rem !important; font-weight: 700 !important;
+    text-transform: uppercase !important; letter-spacing: 0.06em !important;
+    color: #8A96A8 !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.4rem !important; font-weight: 700 !important; color: #1A2F52 !important;
+}
+
+/* ── Botões gerais ── */
+.stButton > button {
+    border-radius: 8px !important; font-weight: 600 !important;
+    font-size: 0.875rem !important;
+}
+
+/* ── Filtros ── */
+div[data-testid="stHorizontalBlock"].filter-bar { background: #F2F5FA !important; }
+
+/* ── Tabs ── */
+[data-testid="stTabs"] [aria-selected="true"] {
+    background: #1F4788 !important; color: #FFFFFF !important; font-weight: 600 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar: st.radio com labels formatadas em markdown ──────────────────
+# ── Sidebar: st.radio com labels com ícone Unicode ────────────────────────
+_ICONES_NAV = {
+    "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
+    "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
+    "Pedidos Pendentes":"▣","Rankings":"▲",
+}
+_ICONES_CARD = {
+    "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
+    "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
+    "Pedidos Pendentes":"▣","Rankings":"▲",
+}
+
 with st.sidebar:
-    st.markdown("""<div style="font-size:0.63rem;font-weight:700;color:#ADB5BD;
+    st.markdown("""<div style="font-size:0.62rem;font-weight:700;color:#ADB5BD;
         letter-spacing:0.1em;text-transform:uppercase;
-        margin-bottom:6px;padding-left:4px;">Navegação</div>""",
+        margin-bottom:5px;padding-left:4px;">Navegação</div>""",
         unsafe_allow_html=True)
 
-    _opcoes = ["🏠  Início"] + [
-        f"{_SVG.get(m,'•')}  {m}" for m in modulos_visiveis
-    ]
-
-    _cur = st.session_state.menu_option
-    _idx = 0
-    if _cur != '__home__' and _cur in modulos_visiveis:
-        _idx = modulos_visiveis.index(_cur) + 1
-
-    _escolha = st.radio(
-        "nav", _opcoes, index=_idx,
-        key="sidebar_radio_v2",
-        label_visibility="collapsed"
-    )
-
-    _novo = '__home__' if _escolha.startswith("🏠") else _escolha.split("  ", 1)[-1]
-    if _novo != st.session_state.menu_option:
-        st.session_state.menu_option = _novo
+    # Botão Início
+    if st.button("🏠  Início", key="nav_home", use_container_width=True, 
+                 type="primary" if st.session_state.menu_option == '__home__' else "secondary"):
+        st.session_state.menu_option = '__home__'
         st.rerun()
+    
+    # Botões dos módulos
+    for modulo in modulos_visiveis:
+        icone = _ICONES_NAV.get(modulo, '•')
+        is_selected = (st.session_state.menu_option == modulo)
+        
+        if st.button(f"{icone}  {modulo}", 
+                    key=f"nav_{modulo}", 
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary"):
+            st.session_state.menu_option = modulo
+            st.rerun()
 
 # ── Tela Home ─────────────────────────────────────────────────────────────
 if st.session_state.menu_option == '__home__':
@@ -1660,14 +1801,14 @@ if st.session_state.menu_option == '__home__':
         total_clientes = 0
 
     cards_data = [
-        {'nome': 'Dashboard',          'info': f'R$ {vendas_mes:,.0f} no mês atual'},
-        {'nome': 'Positivação',         'info': f'{total_clientes} clientes na base'},
-        {'nome': 'Inadimplência',       'info': 'Títulos em aberto e atrasos'},
-        {'nome': 'Clientes sem Compra', 'info': 'Identificar inativos'},
-        {'nome': 'Histórico',           'info': 'Por cliente ou vendedor'},
-        {'nome': 'Preço Médio',         'info': 'Análise por produto'},
-        {'nome': 'Pedidos Pendentes',   'info': 'Aguardando faturamento'},
-        {'nome': 'Rankings',            'info': 'Top vendedores e clientes'},
+        {'nome':'Dashboard',          'info':f'R$ {vendas_mes:,.0f} no mês atual'},
+        {'nome':'Positivação',         'info':f'{total_clientes} clientes na base'},
+        {'nome':'Inadimplência',       'info':'Títulos em aberto e atrasos'},
+        {'nome':'Clientes sem Compra', 'info':'Identificar inativos'},
+        {'nome':'Histórico',           'info':'Por cliente ou vendedor'},
+        {'nome':'Preço Médio',         'info':'Análise por produto'},
+        {'nome':'Pedidos Pendentes',   'info':'Aguardando faturamento'},
+        {'nome':'Rankings',            'info':'Top vendedores e clientes'},
     ]
     cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
 
@@ -1682,30 +1823,86 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid de cards via st.button — label estruturado com separador visual
-    for row_start in range(0, len(cards_visiveis), 4):
-        row_cards = cards_visiveis[row_start:row_start+4]
-        cols = st.columns(4)
-        for j, card in enumerate(row_cards):
-            with cols[j]:
-                nome = card['nome']
-                desc = _DESC.get(nome, '')
-                info = card['info']
-                icone = _SVG.get(nome, '•')
-                # Label: ícone + nome em destaque, desc, linha, info
-                lbl = icone + "  " + nome + "\n" + desc + "\n" + "─" * 13 + "\n" + info
-                if st.button(lbl, key=f"home_card_{nome}", use_container_width=True):
-                    st.session_state.menu_option = nome
-                    st.rerun()
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+    # Grid 4 colunas — técnica de botão overlay que FUNCIONA
+    try:
+        from streamlit_card import card as st_card
+        _USE_CARD_LIB = True
+    except ImportError:
+        _USE_CARD_LIB = False
 
+    for row_start in range(0, len(cards_visiveis), 4):
+        row = cards_visiveis[row_start:row_start+4]
+        cols = st.columns(4)
+        for j, c in enumerate(row):
+            with cols[j]:
+                nome = c['nome']
+                desc = _DESC.get(nome, '')
+                info = c['info']
+                ic   = _ICONES_CARD.get(nome, '•')
+
+                if _USE_CARD_LIB:
+                    clicked = st_card(
+                        title=f"{ic}  {nome}",
+                        text=[desc, info],
+                        key=f"hc_{nome}",
+                        styles={
+                            "card": {
+                                "width": "100%",
+                                "height": "148px",
+                                "background-color": "#FFFFFF",
+                                "border": "1px solid #E4E9F0",
+                                "border-radius": "14px",
+                                "box-shadow": "0 1px 6px rgba(31,71,136,0.07)",
+                                "cursor": "pointer",
+                                "padding": "20px 18px",
+                                "transition": "all 0.18s ease",
+                                "font-family": "Inter, Segoe UI, sans-serif",
+                            },
+                            "title": {
+                                "font-size": "0.95rem",
+                                "font-weight": "700",
+                                "color": "#1A2F52",
+                                "margin-bottom": "6px",
+                            },
+                            "text": {
+                                "font-size": "0.76rem",
+                                "color": "#6C757D",
+                            },
+                            "filter": {"background": "rgba(0,0,0,0)"},
+                        }
+                    )
+                    if clicked:
+                        st.session_state.menu_option = nome
+                        st.rerun()
+                else:
+                    # Fallback se streamlit-card não instalado
+                    st.markdown(f"""
+                    <div style="background:#FFFFFF;border:1px solid #E4E9F0;
+                                border-radius:14px;padding:20px 18px;min-height:148px;
+                                box-shadow:0 1px 6px rgba(31,71,136,0.07);
+                                font-family:'Inter','Segoe UI',sans-serif;">
+                        <div style="font-size:1rem;margin-bottom:10px;">{ic}</div>
+                        <div style="font-size:0.95rem;font-weight:700;color:#1A2F52;
+                                    margin-bottom:5px;">{nome}</div>
+                        <div style="font-size:0.76rem;color:#6C757D;
+                                    margin-bottom:8px;">{desc}</div>
+                        <div style="font-size:0.70rem;color:#ADB5BD;
+                                    border-top:1px solid #F0F2F5;padding-top:7px;">{info}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button(f"Abrir {nome}", key=f"hc_{nome}",
+                                 use_container_width=True):
+                        st.session_state.menu_option = nome
+                        st.rerun()
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
 menu = st.session_state.menu_option
 
 st.markdown(f"""
-<div style="font-size:0.75rem;color:#ADB5BD;margin-bottom:14px;
+<div style="font-size:0.74rem;color:#ADB5BD;margin-bottom:14px;
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
     <span style="color:#6C757D;">Início</span>
     <span style="margin:0 6px;color:#D0D5DE;">›</span>
@@ -1722,46 +1919,45 @@ if menu not in modulos_permitidos:
     st.stop()
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
+    # KPIs principais com cards customizados
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        # VENDAS BRUTAS = SOMASE(TipoMov="NF Venda", TotalProduto)
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-        st.metric("Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
+        render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
     
     with col2:
-        # FATURAMENTO LÍQUIDO = SOMA(Valor_Real) 
-        # Valor_Real já negativiza as devoluções automaticamente
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
-        st.metric("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
+        render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
     
     with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-        st.metric("Clientes Únicos", f"{clientes_unicos:,}")
+        render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
     
     with col4:
         total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-        st.metric("Notas de Venda", f"{total_notas:,}")
+        render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
     
-    # Segunda linha de métricas - Detalhamento
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Segunda linha de KPIs
     col1b, col2b, col3b, col4b = st.columns(4)
     
     with col1b:
-        # DEVOLUÇÕES = SOMASE(TipoMov="NF Dev.Venda", TotalProduto)
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        st.metric("Devoluções", f"R$ {total_devolucoes:,.2f}")
+        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
     
     with col2b:
         ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        st.metric("Ticket Médio", f"R$ {ticket_medio:,.2f}")
+        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
     
     with col3b:
         qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        st.metric("Notas Devolução", f"{qtd_notas_dev:,}")
+        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
     
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        st.metric("Taxa Devolução", f"{taxa_devolucao:.1f}%")
+        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
     
     st.markdown("---")
     
