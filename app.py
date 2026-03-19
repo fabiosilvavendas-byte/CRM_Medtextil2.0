@@ -843,18 +843,16 @@ notas_unicas = obter_notas_unicas(df_filtrado)
 
 st.sidebar.markdown("---")
 
-# ====================== SISTEMA DE NAVEGAÇÃO COM BOTÕES ======================
+# ====================== SISTEMA DE NAVEGAÇÃO MELHORADO ======================
 
-# Inicializar session_state para navegação
+# Inicializar session_state
 if 'tela_atual' not in st.session_state:
     st.session_state.tela_atual = 'home'
 if 'modulo_selecionado' not in st.session_state:
     st.session_state.modulo_selecionado = None
 
-# Mostrar apenas módulos permitidos para o usuário
 modulos_visiveis = modulos_permitidos if modulos_permitidos else ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
 
-# Funções de navegação
 def ir_para_modulo(modulo):
     st.session_state.tela_atual = 'modulo'
     st.session_state.modulo_selecionado = modulo
@@ -863,232 +861,76 @@ def voltar_home():
     st.session_state.tela_atual = 'home'
     st.session_state.modulo_selecionado = None
 
-# ====================== TELA HOME (BOTÕES GRANDES) ======================
+# ====================== HEADER COM NAVEGAÇÃO ======================
+if st.session_state.tela_atual == 'modulo':
+    # Breadcrumb + Botão Voltar sempre visível
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.markdown(f"🏠 **Início** › **{st.session_state.modulo_selecionado}**")
+    with col2:
+        if st.button("← Voltar", key="voltar_top", use_container_width=True):
+            voltar_home()
+            st.rerun()
+    st.markdown("---")
+
+# ====================== TELA HOME ======================
 if st.session_state.tela_atual == 'home':
-    st.title("🏠 Medtextil - Sistema de Gestão")
-    st.markdown("### Bem-vindo! Selecione um módulo:")
+    st.title("📊 Medtextil BI")
+    usuario_info = st.session_state.get("usuario", {})
+    st.markdown(f"**Olá, {usuario_info.get('nome', 'Usuário')}!** Selecione um módulo:")
+    st.markdown("")
     
-    # Calcular previews de dados
+    # Dados para preview
     try:
-        # Vendas do mês atual
-        vendas_mes = notas_unicas[
-            (notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) &
-            (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)
-        ]['Valor_Real'].sum()
+        vendas_mes = notas_unicas[(notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) & (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)]['Valor_Real'].sum()
     except:
         vendas_mes = 0
-    
     try:
-        # Total de clientes
         total_clientes = len(df['RazaoSocial'].unique())
     except:
         total_clientes = 0
     
-    st.markdown("---")
-    
-    # Configuração dos botões com ícones, descrições e previews
-    botoes_config = [
-        {
-            'nome': 'Dashboard',
-            'icone': '📊',
-            'descricao': 'Visão geral e métricas principais',
-            'preview': f'Vendas mês: R$ {vendas_mes:,.2f}',
-            'cor': '#0066CC'  # Azul royal
-        },
-        {
-            'nome': 'Positivação',
-            'icone': '✅',
-            'descricao': 'Clientes ativos e positivação',
-            'preview': f'{total_clientes} clientes ativos',
-            'cor': '#10B981'  # Verde esmeralda
-        },
-        {
-            'nome': 'Inadimplência',
-            'icone': '⚠️',
-            'descricao': 'Títulos vencidos e a vencer',
-            'preview': 'Gestão de recebíveis',
-            'cor': '#0EA5E9'  # Azul céu
-        },
-        {
-            'nome': 'Clientes sem Compra',
-            'icone': '😴',
-            'descricao': 'Clientes inativos para reativação',
-            'preview': 'Análise de inatividade',
-            'cor': '#22C55E'  # Verde lima
-        },
-        {
-            'nome': 'Histórico',
-            'icone': '📜',
-            'descricao': 'Histórico de vendas e pedidos',
-            'preview': 'Consultas e propostas',
-            'cor': '#3B82F6'  # Azul médio
-        },
-        {
-            'nome': 'Preço Médio',
-            'icone': '💰',
-            'descricao': 'Análise de preços por produto',
-            'preview': 'Comparativo de valores',
-            'cor': '#059669'  # Verde escuro
-        },
-        {
-            'nome': 'Pedidos Pendentes',
-            'icone': '📦',
-            'descricao': 'Pedidos aguardando faturamento',
-            'preview': 'Controle de pendências',
-            'cor': '#06B6D4'  # Azul ciano
-        },
-        {
-            'nome': 'Rankings',
-            'icone': '🏆',
-            'descricao': 'Rankings de vendedores e produtos',
-            'preview': 'Top performers',
-            'cor': '#14B8A6'  # Verde água
-        }
+    # Configuração dos cards
+    cards = [
+        {'nome': 'Dashboard', 'icone': '📊', 'info': f'R$ {vendas_mes:,.0f} no mês'},
+        {'nome': 'Positivação', 'icone': '✅', 'info': f'{total_clientes} clientes'},
+        {'nome': 'Inadimplência', 'icone': '⚠️', 'info': 'Títulos em atraso'},
+        {'nome': 'Clientes sem Compra', 'icone': '😴', 'info': 'Reativação'},
+        {'nome': 'Histórico', 'icone': '📜', 'info': 'Consultas'},
+        {'nome': 'Preço Médio', 'icone': '💰', 'info': 'Análise'},
+        {'nome': 'Pedidos Pendentes', 'icone': '📦', 'info': 'Pendências'},
+        {'nome': 'Rankings', 'icone': '🏆', 'info': 'Top vendas'}
     ]
     
-    # Filtrar apenas módulos visíveis para o usuário
-    botoes_visiveis = [b for b in botoes_config if b['nome'] in modulos_visiveis]
+    cards_visiveis = [c for c in cards if c['nome'] in modulos_visiveis]
     
-    # CSS para estilizar os botões como cards elegantes (APENAS NA HOME)
-    st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap');
-    
-    /* Estilo APENAS para botões da tela home */
-    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button {
-        height: 160px !important;
-        border-radius: 12px !important;
-        padding: 20px !important;
-        text-align: left !important;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        line-height: 1.6 !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        position: relative !important;
-        overflow: hidden !important;
-        font-size: 13px !important;
-        color: #4a5568 !important;
-    }
-    
-    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:hover {
-        transform: translateY(-4px) !important;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.12) !important;
-    }
-    
-    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:active {
-        transform: translateY(-2px) !important;
-    }
-    
-    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] div[data-testid="stButton"] button p {
-        margin: 0 !important;
-        padding: 0 !important;
-        text-align: left !important;
-        white-space: pre-line !important;
-        font-weight: 500 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Criar grid de botões - 2 colunas (melhor para mobile)
-    num_colunas = 2
-    num_botoes = len(botoes_visiveis)
-    
-    # CSS GLOBAL - Aplicar cores individuais usando múltiplos seletores
-    cores_botoes = [
-        '#0066CC',  # Dashboard - Azul Royal
-        '#10B981',  # Positivação - Verde Esmeralda
-        '#0EA5E9',  # Inadimplência - Azul Céu
-        '#22C55E',  # Clientes sem Compra - Verde Lima
-        '#3B82F6',  # Histórico - Azul Médio
-        '#059669',  # Preço Médio - Verde Escuro
-        '#06B6D4',  # Pedidos Pendentes - Azul Ciano
-        '#14B8A6'   # Rankings - Verde Água
-    ]
-    
-    css_global = """<style>
-    /* Aplicar cores a TODOS os botões secondary primeiro */
-    button[kind="secondary"] {
-        border: 2px solid #0066CC !important;
-        background: linear-gradient(135deg, #0066CC60 0%, #0066CC25 100%) !important;
-        color: #1a202c !important;
-    }
-    button[kind="secondary"]:hover {
-        background: linear-gradient(135deg, #0066CC80 0%, #0066CC40 100%) !important;
-        border-color: #0066CCDD !important;
-    }
-    """
-    
-    # Sobrescrever com cores específicas por posição
-    for i in range(min(len(botoes_visiveis), 8)):
-        cor = cores_botoes[i]
-        css_global += f"""
-        /* Botão {i+1} - {botoes_visiveis[i]['nome'] if i < len(botoes_visiveis) else 'N/A'} */
-        button[kind="secondary"]:nth-of-type({i+1}) {{
-            border: 2px solid {cor} !important;
-            background: linear-gradient(135deg, {cor}60 0%, {cor}25 100%) !important;
-        }}
-        button[kind="secondary"]:nth-of-type({i+1}):hover {{
-            background: linear-gradient(135deg, {cor}80 0%, {cor}40 100%) !important;
-            border-color: {cor}DD !important;
-        }}
-        """
-    
-    css_global += "</style>"
-    st.markdown(css_global, unsafe_allow_html=True)
-    
-    for idx in range(0, num_botoes, num_colunas):
-        cols = st.columns(num_colunas)
-        
-        for col_idx in range(num_colunas):
-            botao_idx = idx + col_idx
-            if botao_idx < num_botoes:
-                botao = botoes_visiveis[botao_idx]
-                
-                with cols[col_idx]:
-                    # Label com título maior
-                    botao_label = f"**{botao['nome'].upper()}**\n\n{botao['descricao']}\n\n{botao['preview']}"
-                    
+    # Grid 3 colunas
+    for i in range(0, len(cards_visiveis), 3):
+        cols = st.columns(3)
+        for j in range(3):
+            if i+j < len(cards_visiveis):
+                card = cards_visiveis[i+j]
+                with cols[j]:
                     if st.button(
-                        botao_label,
-                        key=f"btn_{botao['nome']}", 
-                        use_container_width=True,
-                        type="secondary"
+                        f"{card['icone']}\n\n**{card['nome']}**\n\n{card['info']}", 
+                        key=f"card_{card['nome']}", 
+                        use_container_width=True
                     ):
-                        ir_para_modulo(botao['nome'])
+                        ir_para_modulo(card['nome'])
                         st.rerun()
-    
-    # Informações do rodapé
-    st.markdown("---")
-    col_foot1, col_foot2, col_foot3 = st.columns(3)
-    
-    with col_foot1:
-        usuario_info = st.session_state.get("usuario", {})
-        nome_usuario = usuario_info.get("nome", "Usuário")
-        st.info(f"👤 **Usuário:** {nome_usuario}")
-    
-    with col_foot2:
-        tipo_usuario = usuario_info.get("tipo", "visitante")
-        st.info(f"🔐 **Perfil:** {tipo_usuario.title()}")
-    
-    with col_foot3:
-        st.info(f"📅 **Hoje:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
-    
-    st.stop()  # Não processar o resto enquanto estiver no home
+    st.stop()
 
-# ====================== NAVEGAÇÃO EM MÓDULO ======================
-if st.session_state.tela_atual == 'modulo' and st.session_state.modulo_selecionado:
-    # Botão voltar no topo da sidebar
-    with st.sidebar:
-        st.markdown("### 🧭 Navegação")
-        if st.button("🏠 Voltar ao Início", use_container_width=True, type="secondary"):
-            voltar_home()
-            st.rerun()
-        
-        st.markdown("---")
-        st.markdown(f"**Módulo Atual:**")
-        st.markdown(f"**{st.session_state.modulo_selecionado}**")
-        st.markdown("---")
-    
+# ====================== MÓDULO ATIVO ======================
+if st.session_state.tela_atual == 'modulo':
+    menu = st.session_state.modulo_selecionado
+else:
+    menu = "Dashboard"
+
+# Verificar se o usuário tem permissão para acessar o módulo
+if menu not in modulos_permitidos:
+    st.error("🚫 Você não tem permissão para acessar este módulo")
+    st.info(f"📋 Módulos disponíveis: {', '.join(modulos_permitidos)}")
+    st.stop()
     # Definir menu como o módulo selecionado
     menu = st.session_state.modulo_selecionado
 else:
