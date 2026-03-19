@@ -7,6 +7,42 @@ import io
 import requests
 from github import Github
 
+# ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
+def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
+    """Renderiza um card KPI profissional com HTML/CSS"""
+    delta_html = ""
+    if delta:
+        delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
+        delta_html = f'<div style="color: {delta_color}; font-size: 0.875rem; font-weight: 600; margin-top: 0.5rem;">{delta}</div>'
+    
+    card_html = f"""
+    <div style="
+        background: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        border-left: 4px solid {color};
+        height: 140px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="font-size: 0.8rem; color: #6B7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                {label}
+            </div>
+            <div style="font-size: 1.75rem;">{icon}</div>
+        </div>
+        <div>
+            <div style="font-size: 1.75rem; font-weight: 700; color: #1F2937;">
+                {value}
+            </div>
+            {delta_html}
+        </div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
 # Configuração da página
 st.set_page_config(
     page_title="Dashboard BI Medtextil", 
@@ -832,9 +868,40 @@ if df is None:
     st.stop()
 
 df = processar_dados(df)
-st.success(f"✅ Dados de vendas carregados: ({len(df):,} registros)")
 
-# Carregar planilha de produtos para cálculo de comissão
+# ====================== SIDEBAR PROFISSIONAL ======================
+with st.sidebar:
+    # Logo centralizado
+    col_logo = st.columns([1, 3, 1])
+    with col_logo[1]:
+        st.image("https://i.imgur.com/gt3rgyL.png", use_container_width=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Saudação ao usuário
+    st.markdown(f"""
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+        <p style="font-size: 0.875rem; margin: 0; opacity: 0.8;">Olá,</p>
+        <p style="font-size: 1.125rem; font-weight: 600; margin: 0;">Fábio</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Status do Sistema (logs técnicos escondidos)
+    with st.expander("🛠️ Status do Sistema"):
+        st.caption("**Planilhas GitHub:**")
+        for nome, info in planilhas_disponiveis.items():
+            if info and nome != 'todas':
+                st.success(f"✓ {nome.replace('_', ' ').title()}", icon="✅")
+        
+        st.caption(f"**Registros:** {len(df):,}")
+        st.caption(f"**Atualizado:** {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
+    
+    st.markdown("---")
+    
+    # Filtros na sidebar
+    st.header("🔍 Filtros Globais")
 if planilhas_disponiveis.get('produtos_agrupados'):
     with st.spinner("📥 Carregando tabela de preços de referência..."):
         df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
@@ -1035,53 +1102,50 @@ if menu not in modulos_permitidos:
 
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    # Header profissional
-    col_h1, col_h2 = st.columns([3, 1])
-    with col_h1:
-        st.title("📊 Dashboard Comercial")
-    with col_h2:
-        st.markdown(f"**Atualizado:** {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
+    # Header clean
+    st.title("📊 Dashboard Comercial")
     
     st.markdown("---")
     
-    # Métricas principais
-    st.markdown("### 📈 Indicadores Principais")
+    # KPIs Principais com cards customizados
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-        st.metric("Faturamento Bruto", f"R$ {vendas_brutas:,.2f}")
+        render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
     
     with col2:
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
-        st.metric("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}")
+        render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
     
     with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-        st.metric("Clientes Únicos", f"{clientes_unicos:,}")
+        render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
     
     with col4:
         total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-        st.metric("Notas de Venda", f"{total_notas:,}")
+        render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
     
-    # Segunda linha de métricas
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Segunda linha de KPIs
     col1b, col2b, col3b, col4b = st.columns(4)
     
     with col1b:
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        st.metric("Devoluções", f"R$ {total_devolucoes:,.2f}")
+        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
     
     with col2b:
         ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        st.metric("Ticket Médio", f"R$ {ticket_medio:,.2f}")
+        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
     
     with col3b:
         qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        st.metric("Notas Devolução", f"{qtd_notas_dev:,}")
+        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
     
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        st.metric("Taxa Devolução", f"{taxa_devolucao:.1f}%")
+        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
     
     st.markdown("---")
     
