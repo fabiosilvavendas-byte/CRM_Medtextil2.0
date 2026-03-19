@@ -75,6 +75,45 @@ html, body, [class*="css"] {
     color: #1F4788 !important;
 }
 
+/* ── Botões de navegação da sidebar estilizados ── */
+[data-testid="stSidebar"] [data-testid="stRadio"] {
+    gap: 6px !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    background: #F8F9FA !important;
+    border: 1px solid #E9ECEF !important;
+    border-radius: 10px !important;
+    padding: 12px 16px !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    display: block !important;
+    width: 100% !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: #EEF2F7 !important;
+    border-color: #1F4788 !important;
+    transform: translateX(3px) !important;
+}
+
+/* Botão selecionado na sidebar */
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
+    background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
+    border-color: #1F4788 !important;
+    color: white !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(31, 71, 136, 0.2) !important;
+}
+
+/* Esconder radio button padrão */
+[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
+    display: none !important;
+}
+
 /* ── Cards de métricas (st.metric) ── */
 [data-testid="stMetric"] {
     background: #FFFFFF !important;
@@ -1764,7 +1803,7 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — cards 100% clicáveis via link
+    # Grid 4 colunas — cards clicáveis via form (SEM abrir nova aba)
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4)
@@ -1775,31 +1814,44 @@ if st.session_state.menu_option == '__home__':
                 info = card['info']
                 ic   = _ICONES_CARD.get(nome, '•')
 
-                # Card TOTALMENTE clicável via tag <a> estilizada
+                # Card visual (mantém aparência)
                 st.markdown(f"""
-                <a href="?modulo={nome}" style="text-decoration: none; color: inherit;">
-                    <div class="med-card"
-                         onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
-                         onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'"
-                         style="cursor: pointer;">
-                        <div class="mc-icon">{ic}</div>
-                        <div class="mc-title">{nome}</div>
-                        <div class="mc-desc">{desc}</div>
-                        <div class="mc-info">{info}</div>
-                    </div>
-                </a>
+                <div class="med-card"
+                     onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
+                     onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
+                    <div class="mc-icon">{ic}</div>
+                    <div class="mc-title">{nome}</div>
+                    <div class="mc-desc">{desc}</div>
+                    <div class="mc-info">{info}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Botão invisível SOBRE o card usando form
+                with st.form(key=f"form_{nome}"):
+                    submitted = st.form_submit_button("", use_container_width=True)
+                    if submitted:
+                        st.session_state.menu_option = nome
+                        st.rerun()
+                
+                # CSS para tornar o form button invisível e sobrepor o card
+                st.markdown(f"""
+                <style>
+                form[data-testid="stForm"][key="form_{nome}"] {{
+                    position: relative;
+                    margin-top: -158px;
+                    z-index: 99;
+                }}
+                form[data-testid="stForm"][key="form_{nome}"] button {{
+                    opacity: 0 !important;
+                    height: 138px !important;
+                    cursor: pointer !important;
+                    background: transparent !important;
+                    border: none !important;
+                }}
+                </style>
                 """, unsafe_allow_html=True)
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    
-    # Detectar clique via query params
-    query_params = st.query_params
-    if 'modulo' in query_params:
-        modulo_clicado = query_params['modulo']
-        if modulo_clicado in modulos_visiveis:
-            st.session_state.menu_option = modulo_clicado
-            st.query_params.clear()  # Limpa a URL
-            st.rerun()
     
 
     st.stop()
