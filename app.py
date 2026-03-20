@@ -72,7 +72,7 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] .stMarkdown h1,
 [data-testid="stSidebar"] .stMarkdown h2,
 [data-testid="stSidebar"] .stMarkdown h3 {
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
 }
 
 /* ── Botões de navegação da sidebar estilizados ── */
@@ -96,14 +96,14 @@ html, body, [class*="css"] {
 
 [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
     background: #EEF2F7 !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     transform: translateX(3px) !important;
 }
 
 /* Botão selecionado na sidebar */
 [data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
     background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     color: white !important;
     font-weight: 600 !important;
     box-shadow: 0 2px 8px rgba(31, 71, 136, 0.2) !important;
@@ -137,7 +137,7 @@ html, body, [class*="css"] {
 [data-testid="stMetricValue"] {
     font-size: 1.5rem !important;
     font-weight: 700 !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
 }
 
 /* ── Cor alternada para cards de destaque ── */
@@ -158,7 +158,7 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
     font-size: 0.875rem !important;
     padding: 0.5rem 1.25rem !important;
     border: 1.5px solid #1F4788 !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     background: var(--secondary-background-color) !important;
     transition: all 0.2s ease !important;
     box-shadow: 0 1px 4px rgba(31, 71, 136, 0.10) !important;
@@ -167,14 +167,14 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 .stButton > button:hover {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     box-shadow: 0 4px 12px rgba(31, 71, 136, 0.25) !important;
     transform: translateY(-1px) !important;
 }
 .stButton > button[kind="primary"] {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
 }
 .stButton > button[kind="primary"]:hover {
     background: #163561 !important;
@@ -186,7 +186,7 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
     border-radius: 8px !important;
     font-weight: 600 !important;
     background: var(--secondary-background-color) !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     border: 1.5px solid #1F4788 !important;
 }
 [data-testid="stDownloadButton"] > button:hover {
@@ -201,13 +201,13 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 
 /* ── Títulos de página ── */
 .stApp h1 {
-    color: #1A2F52 !important;
+    color: #2C5AA0 !important;
     font-weight: 700 !important;
     font-size: 1.75rem !important;
     letter-spacing: -0.02em !important;
 }
 .stApp h2 {
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     font-weight: 600 !important;
     font-size: 1.3rem !important;
 }
@@ -227,7 +227,7 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 }
 .stSelectbox > div > div:focus-within,
 .stTextInput > div > div:focus-within {
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     box-shadow: 0 0 0 2px rgba(31, 71, 136, 0.15) !important;
 }
 
@@ -285,7 +285,7 @@ hr {
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 0.85rem;
-    color: #1F4788;
+    color: #4A7BC8;
     font-weight: 600;
     width: 100%;
     text-align: center;
@@ -332,12 +332,12 @@ hr {
 .stRadio > div label:has(input:checked) {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
 }
 
 /* ── Spinner ── */
 .stSpinner > div {
-    border-top-color: #1F4788 !important;
+    border-top-color: #4A7BC8 !important;
 }
 
 /* ── Sidebar navigation radio ── */
@@ -359,7 +359,7 @@ hr {
 }
 [data-testid="stSidebar"] .stRadio > div label:has(input:checked) {
     background: linear-gradient(135deg, #F0F4FF, #E4EDFC) !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     border-left: 4px solid #1F4788 !important;
     border-radius: 0 10px 10px 0 !important;
     font-weight: 700 !important;
@@ -367,7 +367,7 @@ hr {
 }
 [data-testid="stSidebar"] .stRadio > div label:hover {
     background: #F4F7FD !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     transform: translateX(2px) !important;
 }
 
@@ -388,7 +388,7 @@ hr {
 [data-testid="stMetricValue"] {
     font-size: 1.45rem !important;
     font-weight: 700 !important;
-    color: #1A2F52 !important;
+    color: #2C5AA0 !important;
 }
 
 /* ── Subheaders sem emoji weight ── */
@@ -561,9 +561,21 @@ h2, h3 {
         flex: 0 0 calc(50% - 4px) !important;
     }
 
-    /* Sidebar: manter fundo sólido no mobile */
-    section[data-testid="stSidebar"] {
-        background: var(--secondary-background-color) !important;
+    /* Sidebar: fundo sólido no mobile — cores explícitas */
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] > div:first-child {
+        background-color: #FFFFFF !important;
+        background: #FFFFFF !important;
+    }
+    /* Dark mode sidebar mobile */
+    @media (prefers-color-scheme: dark) {
+        section[data-testid="stSidebar"],
+        section[data-testid="stSidebar"] > div,
+        section[data-testid="stSidebar"] > div:first-child {
+            background-color: #1A1D24 !important;
+            background: #1A1D24 !important;
+        }
     }
 
     /* Gráficos: garantir que caibam na tela */
@@ -586,7 +598,7 @@ div[data-testid="stExpander"] details summary {
     padding: 6px 12px !important;
 }
 div[data-testid="stExpander"] details summary:hover {
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
 }
 
 
@@ -734,7 +746,7 @@ def check_password():
                 <img src="https://i.imgur.com/gt3rgyL.png" height="52"
                      style="border-radius:8px;" onerror="this.style.display='none'"/>
             </div>
-            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
+            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#4A7BC8;margin-bottom:4px;">
                 Medtextil BI
             </div>
             <div style="text-align:center;font-size:0.85rem;color:#6C757D;margin-bottom:8px;">
@@ -1636,7 +1648,7 @@ with st.sidebar:
         <img src="https://i.imgur.com/gt3rgyL.png" height="56"
              style="border-radius:10px;box-shadow:0 2px 8px rgba(31,71,136,0.18);"
              onerror="this.style.display='none'"/>
-        <div style="font-size:0.8rem;font-weight:800;color:#1F4788;letter-spacing:0.1em;
+        <div style="font-size:0.8rem;font-weight:800;color:#4A7BC8;letter-spacing:0.1em;
                     text-transform:uppercase;margin-top:10px;">Medtextil</div>
         <div style="font-size:0.65rem;color:#ADB5BD;letter-spacing:0.06em;margin-top:1px;">
             BI Dashboard 2.0
@@ -1646,7 +1658,7 @@ with st.sidebar:
     # ── Badge do usuário ──
     st.markdown(f"""
     <div style="background:linear-gradient(135deg,#F0F4FF,#E8EFFD);border:1px solid #C5D5F0;
-                border-radius:10px;padding:10px 14px;font-size:0.83rem;color:#1F4788;
+                border-radius:10px;padding:10px 14px;font-size:0.83rem;color:#4A7BC8;
                 font-weight:600;text-align:center;margin-bottom:6px;">
         👤 &nbsp;{nome_usuario}
     </div>
@@ -1844,10 +1856,10 @@ section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
     background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
-    border-left-color: #1F4788 !important;
+    border-left-color: #4A7BC8 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #1F4788 !important; font-weight: 600 !important;
+    color: #4A7BC8 !important; font-weight: 600 !important;
 }
 section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"],
 section[data-testid="stSidebar"] .stRadio div[class*="RadioMarkFill"],
@@ -1895,11 +1907,11 @@ div.med-card .mc-icon {
     width: 38px; height: 38px;
     background: #EEF3FC; border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
-    margin-bottom: 11px; color: #1F4788; font-size: 16px;
+    margin-bottom: 11px; color: #4A7BC8; font-size: 16px;
 }
 div.med-card .mc-title {
     font-size: 0.94rem; font-weight: 700;
-    color: #1A2F52; margin-bottom: 4px; letter-spacing: -0.01em;
+    color: #2C5AA0; margin-bottom: 4px; letter-spacing: -0.01em;
 }
 div.med-card .mc-desc {
     font-size: 0.75rem; color: #6C757D; line-height: 1.4; margin-bottom: 9px;
@@ -1939,7 +1951,7 @@ div.med-card-col div[data-testid="stButton"] > button {
     color: #8A96A8 !important;
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.4rem !important; font-weight: 700 !important; color: #1A2F52 !important;
+    font-size: 1.4rem !important; font-weight: 700 !important; color: #2C5AA0 !important;
 }
 
 /* ── Botões gerais ── */
@@ -2024,7 +2036,7 @@ if st.session_state.menu_option == '__home__':
 
     st.markdown(f"""
     <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
-        <div style="font-size:1.45rem;font-weight:600;color:#1A2F52;margin-bottom:3px;">
+        <div style="font-size:1.45rem;font-weight:600;color:#2C5AA0;margin-bottom:3px;">
             Olá, {usuario_info.get('nome','Usuário')}
         </div>
         <div style="color:#8A96A8;font-size:0.87rem;">
@@ -2040,9 +2052,31 @@ if st.session_state.menu_option == '__home__':
     except ImportError:
         _USE_CARD_LIB = False
 
-    for row_start in range(0, len(cards_visiveis), 4):
-        row = cards_visiveis[row_start:row_start+4]
-        cols = st.columns(4)
+    # ── Detectar mobile via JS → session_state ──────────────────────────
+    # Injeta script que lê window.innerWidth e recarrega com ?mobile=1
+    # na primeira vez. Nas seguintes leituras usa o query param.
+    import streamlit.components.v1 as _components
+    if 'is_mobile' not in st.session_state:
+        _components.html("""
+        <script>
+        const w = window.innerWidth || document.documentElement.clientWidth;
+        if (w <= 768) {
+            const url = new URL(window.parent.location.href);
+            if (url.searchParams.get('mobile') !== '1') {
+                url.searchParams.set('mobile', '1');
+                window.parent.location.href = url.toString();
+            }
+        }
+        </script>
+        """, height=0)
+        _mobile_param = st.query_params.get("mobile", "0")
+        st.session_state['is_mobile'] = (_mobile_param == "1")
+
+    _n_cols = 2 if st.session_state.get('is_mobile', False) else 4
+
+    for row_start in range(0, len(cards_visiveis), _n_cols):
+        row = cards_visiveis[row_start:row_start+_n_cols]
+        cols = st.columns(_n_cols)
         for j, c in enumerate(row):
             with cols[j]:
                 nome = c['nome']
@@ -2072,7 +2106,7 @@ if st.session_state.menu_option == '__home__':
                             "title": {
                                 "font-size": "1rem",
                                 "font-weight": "700",
-                                "color": "#1A2F52",
+                                "color": "#2C5AA0",
                                 "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
                                 "letter-spacing": "-0.01em",
                                 "margin-bottom": "6px",
@@ -2100,7 +2134,7 @@ if st.session_state.menu_option == '__home__':
                                 box-shadow:0 1px 6px rgba(31,71,136,0.07);
                                 font-family:'Inter','Segoe UI',sans-serif;">
                         <div style="font-size:1rem;margin-bottom:10px;">{ic}</div>
-                        <div style="font-size:0.95rem;font-weight:700;color:#1A2F52;
+                        <div style="font-size:0.95rem;font-weight:700;color:#2C5AA0;
                                     margin-bottom:5px;">{nome}</div>
                         <div style="font-size:0.76rem;color:#6C757D;
                                     margin-bottom:8px;">{desc}</div>
@@ -2124,7 +2158,7 @@ st.markdown(f"""
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
     <span style="color:#6C757D;">Início</span>
     <span style="margin:0 6px;color:#D0D5DE;">›</span>
-    <span style="color:#1F4788;font-weight:600;">{menu}</span>
+    <span style="color:#4A7BC8;font-weight:600;">{menu}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -2315,7 +2349,7 @@ if menu == "Dashboard":
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado"])
     
@@ -2459,7 +2493,7 @@ elif menu == "Positivação":
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Inadimplência</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Inadimplência</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha de inadimplência existe
     if not planilhas_disponiveis['inadimplencia']:
@@ -2665,7 +2699,7 @@ elif menu == "Inadimplência":
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
@@ -2770,7 +2804,7 @@ elif menu == "Clientes sem Compra":
 
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor", "📝 Pedidos"])
     
@@ -2909,7 +2943,7 @@ elif menu == "Histórico":
                 st.markdown("""
                 <div style="background:#F0F4FF;border:1px solid #C5D5F0;border-radius:10px;
                             padding:14px 18px;margin-bottom:8px;">
-                    <div style="font-size:0.88rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
+                    <div style="font-size:0.88rem;font-weight:700;color:#4A7BC8;margin-bottom:4px;">
                         Gerar Proposta Comercial PDF
                     </div>
                     <div style="font-size:0.78rem;color:#6C757D;">
@@ -3357,7 +3391,7 @@ elif menu == "Histórico":
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
     
     # Verificar se as planilhas necessárias existem
     if not planilhas_disponiveis['vendas_produto']:
@@ -3674,7 +3708,7 @@ elif menu == "Preço Médio":
 
 # ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha existe
     if not planilhas_disponiveis.get('pedidos_pendentes'):
@@ -3943,7 +3977,7 @@ elif menu == "Pedidos Pendentes":
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Vendedores", "👥 Clientes"])
     
@@ -4023,6 +4057,6 @@ st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
 <div style="text-align:center;color:#ADB5BD;font-size:0.78rem;padding-bottom:16px;">
     Dashboard BI Medtextil 2.0 &nbsp;·&nbsp; Desenvolvido com Streamlit
-    &nbsp;·&nbsp; <span style="color:#1F4788;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
+    &nbsp;·&nbsp; <span style="color:#4A7BC8;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
 </div>
 """, unsafe_allow_html=True)
