@@ -2052,27 +2052,18 @@ if st.session_state.menu_option == '__home__':
     except ImportError:
         _USE_CARD_LIB = False
 
-    # ── Detectar mobile via JS → session_state ──────────────────────────
-    # Injeta script que lê window.innerWidth e recarrega com ?mobile=1
-    # na primeira vez. Nas seguintes leituras usa o query param.
-    import streamlit.components.v1 as _components
-    if 'is_mobile' not in st.session_state:
-        _components.html("""
-        <script>
-        const w = window.innerWidth || document.documentElement.clientWidth;
-        if (w <= 768) {
-            const url = new URL(window.parent.location.href);
-            if (url.searchParams.get('mobile') !== '1') {
-                url.searchParams.set('mobile', '1');
-                window.parent.location.href = url.toString();
-            }
-        }
-        </script>
-        """, height=0)
-        _mobile_param = st.query_params.get("mobile", "0")
-        st.session_state['is_mobile'] = (_mobile_param == "1")
+    # ── Detectar mobile via streamlit-js-eval ───────────────────────────
+    try:
+        from streamlit_js_eval import streamlit_js_eval
+        _screen_width = streamlit_js_eval(
+            js_expressions="window.innerWidth",
+            key="screen_width"
+        )
+        _is_mobile = bool(_screen_width and int(_screen_width) <= 768)
+    except Exception:
+        _is_mobile = False
 
-    _n_cols = 2 if st.session_state.get('is_mobile', False) else 4
+    _n_cols = 2 if _is_mobile else 4
 
     for row_start in range(0, len(cards_visiveis), _n_cols):
         row = cards_visiveis[row_start:row_start+_n_cols]
