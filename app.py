@@ -413,6 +413,122 @@ h2, h3 {
     letter-spacing: 0.03em !important;
 }
 
+
+/* ══════════════════════════════════════════════════════
+   DARK MODE — sobrescreve cores fixas quando o tema
+   escuro está ativo. Usa prefers-color-scheme E o
+   atributo data-theme que o Streamlit injeta no <body>.
+   ══════════════════════════════════════════════════════ */
+
+/* Detectar dark mode via atributo do Streamlit */
+@media (prefers-color-scheme: dark) {
+    .stApp { background-color: #0E1117 !important; }
+}
+
+/* Streamlit injeta data-theme="dark" no root quando tema escuro ativo */
+[data-theme="dark"] .stApp,
+.stApp[data-theme="dark"] {
+    background-color: #0E1117 !important;
+}
+
+/* Sidebar dark */
+[data-theme="dark"] section[data-testid="stSidebar"],
+[data-theme="dark"] [data-testid="stSidebar"] {
+    background: #1A1D24 !important;
+    border-right-color: #2D3139 !important;
+}
+
+/* Métricas dark */
+[data-theme="dark"] [data-testid="stMetric"] {
+    background: #1A1D24 !important;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.3) !important;
+}
+[data-theme="dark"] [data-testid="stMetricLabel"] p {
+    color: #8A96A8 !important;
+}
+[data-theme="dark"] [data-testid="stMetricValue"] {
+    color: #E8EDF5 !important;
+}
+
+/* Filtros dark */
+[data-theme="dark"] div[style*="background:#F2F5FA"],
+[data-theme="dark"] div[style*="background: #F2F5FA"] {
+    background: #1A1D24 !important;
+    border-color: #2D3139 !important;
+}
+
+/* Botões gerais dark */
+[data-theme="dark"] .stButton > button {
+    background: #1A1D24 !important;
+    color: #A8C4E8 !important;
+    border-color: #2D5AA0 !important;
+}
+[data-theme="dark"] .stButton > button:hover {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+}
+
+/* Expander dark */
+[data-theme="dark"] [data-testid="stExpander"] {
+    background: #1A1D24 !important;
+    border-color: #2D3139 !important;
+}
+
+/* Dataframes dark */
+[data-theme="dark"] [data-testid="stDataFrame"] {
+    background: #1A1D24 !important;
+}
+
+/* Tabs dark */
+[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: #1A1D24 !important;
+}
+[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab"] {
+    color: #8A96A8 !important;
+}
+
+/* Radio sidebar dark */
+[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
+    color: #A8B4C4 !important;
+}
+[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
+    background: linear-gradient(90deg,#1A2A45,#1F3560) !important;
+    border-left-color: #4A7BC8 !important;
+}
+[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
+    color: #7EB3F7 !important;
+}
+
+/* Breadcrumb e textos de apoio dark */
+[data-theme="dark"] .stMarkdown p {
+    color: #C4CDD9 !important;
+}
+
+/* Inputs dark */
+[data-theme="dark"] .stSelectbox > div > div,
+[data-theme="dark"] .stTextInput > div > div > input,
+[data-theme="dark"] .stDateInput > div > div > input {
+    background: #1A1D24 !important;
+    border-color: #2D3139 !important;
+    color: #E0E6EF !important;
+}
+
+/* Download button dark */
+[data-theme="dark"] [data-testid="stDownloadButton"] > button {
+    background: #1A2A45 !important;
+    color: #7EB3F7 !important;
+    border-color: #2D5AA0 !important;
+}
+[data-theme="dark"] [data-testid="stDownloadButton"] > button:hover {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+}
+
+/* Cabeçalho títulos dark */
+[data-theme="dark"] .stApp h1 { color: #E8EDF5 !important; }
+[data-theme="dark"] .stApp h2 { color: #A8C4E8 !important; }
+[data-theme="dark"] .stApp h3 { color: #8AADD4 !important; }
+
 </style>
 """, unsafe_allow_html=True)
 
