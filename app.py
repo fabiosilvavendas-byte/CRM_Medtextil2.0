@@ -530,20 +530,42 @@ h2, h3 {
 [data-theme="dark"] .stApp h3 { color: #8AADD4 !important; }
 
 
-/* ── Mobile: cards 2 por linha ── */
+/* ── Mobile (≤768px): layout compacto ── */
 @media (max-width: 768px) {
-    /* Forçar wrap nas colunas dos cards */
+
+    /* Cards da home: 2 por linha */
     div.home-grid div[data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
+        gap: 8px !important;
     }
     div.home-grid div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"] {
-        width: 48% !important;
-        min-width: 48% !important;
-        flex: 0 0 48% !important;
+        width: calc(50% - 4px) !important;
+        min-width: calc(50% - 4px) !important;
+        flex: 0 0 calc(50% - 4px) !important;
     }
-    /* Sidebar oculta por padrão no mobile — comportamento padrão Streamlit */
-    div[data-testid="stHorizontalBlock"] {
-        gap: 8px !important;
+
+    /* Filtros: esconder barra de labels (captions) no mobile */
+    .filter-header-bar { display: none !important; }
+
+    /* Colunas de filtros: empilhar verticalmente no mobile */
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"]) {
+        flex-wrap: wrap !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"])
+        > div[data-testid="stVerticalBlock"] {
+        width: calc(50% - 4px) !important;
+        min-width: calc(50% - 4px) !important;
+        flex: 0 0 calc(50% - 4px) !important;
+    }
+
+    /* Sidebar: recolher automaticamente no mobile */
+    section[data-testid="stSidebar"] {
+        min-width: 0 !important;
+    }
+
+    /* Gráficos: garantir que caibam na tela */
+    div[data-testid="stPlotlyChart"] {
+        overflow-x: auto !important;
     }
 }
 
@@ -1690,24 +1712,17 @@ else:
     df['Comissao'] = ''
 ''
 
-# ── Barra de Filtros Compactos ────────────────────────────────────────────
+# ── Barra de Filtros — Desktop: horizontal | Mobile: expander ────────────
 st.markdown("""
 <div style="background:#F2F5FA;border-radius:10px;padding:8px 14px 2px 14px;
-            margin-bottom:14px;border:1px solid #DDE3EE;">
+            margin-bottom:14px;border:1px solid #DDE3EE;" class="filter-header-bar">
     <span style="font-size:0.68rem;font-weight:700;color:#8A96A8;letter-spacing:0.1em;
                  text-transform:uppercase;">Filtros de Período e Segmentação</span>
 </div>
 """, unsafe_allow_html=True)
 
-fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.1, 1.1, 1.6, 1.6, 0.9, 0.9])
-with fc1:
-    data_inicial = st.date_input("Di", value=None, key="data_ini", format="DD/MM/YYYY",
-                                  label_visibility="collapsed")
-    st.caption("📅 Data Inicial")
-with fc2:
-    data_final = st.date_input("Df", value=None, key="data_fim", format="DD/MM/YYYY",
-                                label_visibility="collapsed")
-    st.caption("📅 Data Final")
+# Filtros de Vendedor/Estado/Mês/Ano — sempre visíveis (compactos)
+fc3, fc4, fc5, fc6 = st.columns([1.6, 1.6, 0.9, 0.9])
 with fc3:
     vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
     vendedor_filtro = st.selectbox("V", vendedores, key="vend_global",
@@ -1728,6 +1743,9 @@ with fc6:
     ano_filtro = st.selectbox("A", anos_opcoes, key="ano_global",
                                label_visibility="collapsed")
     st.caption("🗓️ Ano")
+
+# Datas em expander compacto — ocupa 1 linha no mobile
+data_inicial, data_final = renderizar_filtros_locais("global", "📅 Filtrar por Data")
 
 df_filtrado = df.copy()
 
