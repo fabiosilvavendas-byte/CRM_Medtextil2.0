@@ -533,21 +533,17 @@ h2, h3 {
 /* ── Mobile (≤768px): layout compacto ── */
 @media (max-width: 768px) {
 
-    /* Cards da home: 2 por linha no mobile */
-    div.home-grid {
-        width: 100% !important;
-    }
-    div.home-grid div[data-testid="stHorizontalBlock"] {
+    /* Cards da home: 2 por linha no mobile — seletor correto */
+    div.home-grid > div[data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
-        gap: 8px !important;
         display: flex !important;
+        gap: 6px !important;
     }
-    div.home-grid div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"],
-    div.home-grid div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: calc(50% - 4px) !important;
-        min-width: calc(50% - 4px) !important;
-        max-width: calc(50% - 4px) !important;
-        flex: 0 0 calc(50% - 4px) !important;
+    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        width: calc(50% - 3px) !important;
+        min-width: calc(50% - 3px) !important;
+        max-width: calc(50% - 3px) !important;
+        flex: 0 0 calc(50% - 3px) !important;
         box-sizing: border-box !important;
     }
 
@@ -591,6 +587,25 @@ div[data-testid="stExpander"] details summary {
 }
 div[data-testid="stExpander"] details summary:hover {
     color: #1F4788 !important;
+}
+
+
+/* ── Dark mode via prefers-color-scheme (mais confiável no Streamlit) ── */
+@media (prefers-color-scheme: dark) {
+    .stApp h1, .stApp h2, .stApp h3 { color: #7EB3F7 !important; }
+    [data-testid="stMetricValue"]    { color: #E8EDF5 !important; }
+    [data-testid="stMetricLabel"] p  { color: #8A96A8 !important; }
+    [data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
+        color: #7EB3F7 !important;
+    }
+    /* Títulos dos módulos (h2 inline) */
+    .stMarkdown h2 { color: #7EB3F7 !important; }
+    /* Texto padrão */
+    .stMarkdown p  { color: #C4CDD9 !important; }
+    /* Cards */
+    [data-testid="stMetric"] { background: var(--secondary-background-color) !important; }
+    /* Breadcrumb */
+    [data-testid="stSidebar"] { background: var(--secondary-background-color) !important; }
 }
 
 </style>
@@ -2025,9 +2040,9 @@ if st.session_state.menu_option == '__home__':
     except ImportError:
         _USE_CARD_LIB = False
 
-    for row_start in range(0, len(cards_visiveis), 2):
-        row = cards_visiveis[row_start:row_start+2]
-        cols = st.columns(2)
+    for row_start in range(0, len(cards_visiveis), 4):
+        row = cards_visiveis[row_start:row_start+4]
+        cols = st.columns(4)
         for j, c in enumerate(row):
             with cols[j]:
                 nome = c['nome']
