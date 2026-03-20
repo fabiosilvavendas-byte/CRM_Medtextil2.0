@@ -533,18 +533,15 @@ h2, h3 {
 /* ── Mobile (≤768px): layout compacto ── */
 @media (max-width: 768px) {
 
-    /* Cards da home: 2 por linha no mobile — seletor correto */
+    /* Cards da home: 4 colunas proporcionais no mobile */
     div.home-grid > div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        display: flex !important;
-        gap: 6px !important;
+        gap: 4px !important;
+        overflow-x: hidden !important;
     }
     div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: calc(50% - 3px) !important;
-        min-width: calc(50% - 3px) !important;
-        max-width: calc(50% - 3px) !important;
-        flex: 0 0 calc(50% - 3px) !important;
-        box-sizing: border-box !important;
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+        padding: 0 2px !important;
     }
 
     /* Filtros: esconder barra de labels (captions) no mobile */
@@ -2052,22 +2049,10 @@ if st.session_state.menu_option == '__home__':
     except ImportError:
         _USE_CARD_LIB = False
 
-    # ── Detectar mobile via streamlit-js-eval ───────────────────────────
-    try:
-        from streamlit_js_eval import streamlit_js_eval
-        _screen_width = streamlit_js_eval(
-            js_expressions="window.innerWidth",
-            key="screen_width"
-        )
-        _is_mobile = bool(_screen_width and int(_screen_width) <= 768)
-    except Exception:
-        _is_mobile = False
-
-    _n_cols = 2 if _is_mobile else 4
-
-    for row_start in range(0, len(cards_visiveis), _n_cols):
-        row = cards_visiveis[row_start:row_start+_n_cols]
-        cols = st.columns(_n_cols)
+    # ── Grid de cards: 4 colunas (mobile: cards menores, proporcionais) ──
+    for row_start in range(0, len(cards_visiveis), 4):
+        row = cards_visiveis[row_start:row_start+4]
+        cols = st.columns(4, gap="small")
         for j, c in enumerate(row):
             with cols[j]:
                 nome = c['nome']
@@ -2083,33 +2068,34 @@ if st.session_state.menu_option == '__home__':
                         styles={
                             "card": {
                                 "width": "100%",
-                                "height": "190px",
+                                "height": "170px",
                                 "background-color": "var(--secondary-background-color)",
                                 "border": "1px solid #E4E9F0",
-                                "border-radius": "14px",
-                                "box-shadow": "0 1px 6px rgba(31,71,136,0.07)",
+                                "border-radius": "10px",
+                                "box-shadow": "0 1px 4px rgba(31,71,136,0.07)",
                                 "cursor": "pointer",
-                                "padding": "22px 20px 18px 20px",
-                                "transition": "box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease",
+                                "padding": "14px 10px 12px 10px",
+                                "transition": "box-shadow 0.18s ease, transform 0.18s ease",
                                 "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
                                 "margin": "0",
+                                "overflow": "hidden",
                             },
                             "title": {
-                                "font-size": "1rem",
+                                "font-size": "0.78rem",
                                 "font-weight": "700",
                                 "color": "#2C5AA0",
                                 "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
                                 "letter-spacing": "-0.01em",
-                                "margin-bottom": "6px",
-                                "white-space": "nowrap",
+                                "margin-bottom": "4px",
+                                "white-space": "normal",
                                 "overflow": "hidden",
-                                "text-overflow": "ellipsis",
+                                "line-height": "1.2",
                             },
                             "text": {
-                                "font-size": "0.78rem",
+                                "font-size": "0.65rem",
                                 "color": "#6C757D",
                                 "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
-                                "line-height": "1.45",
+                                "line-height": "1.3",
                                 "font-weight": "400",
                             },
                             "filter": {"background": "rgba(0,0,0,0)"},
@@ -2120,17 +2106,18 @@ if st.session_state.menu_option == '__home__':
                         st.rerun()
                 else:
                     st.markdown(f"""
-                    <div style="background:var(--secondary-background-color);border:1px solid rgba(128,128,128,0.2);
-                                border-radius:14px;padding:20px 18px;min-height:148px;
-                                box-shadow:0 1px 6px rgba(31,71,136,0.07);
-                                font-family:'Inter','Segoe UI',sans-serif;">
-                        <div style="font-size:1rem;margin-bottom:10px;">{ic}</div>
-                        <div style="font-size:0.95rem;font-weight:700;color:#2C5AA0;
-                                    margin-bottom:5px;">{nome}</div>
-                        <div style="font-size:0.76rem;color:#6C757D;
-                                    margin-bottom:8px;">{desc}</div>
-                        <div style="font-size:0.70rem;color:#ADB5BD;
-                                    border-top:1px solid #F0F2F5;padding-top:7px;">{info}</div>
+                    <div style="background:var(--secondary-background-color);
+                                border:1px solid rgba(128,128,128,0.2);
+                                border-radius:10px;padding:14px 10px;min-height:130px;
+                                box-shadow:0 1px 4px rgba(31,71,136,0.07);
+                                font-family:'Inter','Segoe UI',sans-serif;overflow:hidden;">
+                        <div style="font-size:0.9rem;margin-bottom:6px;">{ic}</div>
+                        <div style="font-size:0.78rem;font-weight:700;color:#2C5AA0;
+                                    margin-bottom:3px;line-height:1.2;">{nome}</div>
+                        <div style="font-size:0.65rem;color:#6C757D;
+                                    margin-bottom:6px;line-height:1.3;">{desc}</div>
+                        <div style="font-size:0.60rem;color:#ADB5BD;
+                                    border-top:1px solid #F0F2F5;padding-top:5px;">{info}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     if st.button(f"Abrir {nome}", key=f"hc_{nome}",
@@ -2138,7 +2125,7 @@ if st.session_state.menu_option == '__home__':
                         st.session_state.menu_option = nome
                         st.rerun()
 
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
