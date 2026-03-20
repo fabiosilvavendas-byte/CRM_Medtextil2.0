@@ -565,9 +565,9 @@ h2, h3 {
         flex: 0 0 calc(50% - 4px) !important;
     }
 
-    /* Sidebar: recolher automaticamente no mobile */
+    /* Sidebar: manter fundo sólido no mobile */
     section[data-testid="stSidebar"] {
-        min-width: 0 !important;
+        background: var(--secondary-background-color) !important;
     }
 
     /* Gráficos: garantir que caibam na tela */
@@ -2025,9 +2025,9 @@ if st.session_state.menu_option == '__home__':
     except ImportError:
         _USE_CARD_LIB = False
 
-    for row_start in range(0, len(cards_visiveis), 4):
-        row = cards_visiveis[row_start:row_start+4]
-        cols = st.columns(4)
+    for row_start in range(0, len(cards_visiveis), 2):
+        row = cards_visiveis[row_start:row_start+2]
+        cols = st.columns(2)
         for j, c in enumerate(row):
             with cols[j]:
                 nome = c['nome']
@@ -2079,7 +2079,6 @@ if st.session_state.menu_option == '__home__':
                         st.session_state.menu_option = nome
                         st.rerun()
                 else:
-                    # Fallback se streamlit-card não instalado
                     st.markdown(f"""
                     <div style="background:var(--secondary-background-color);border:1px solid rgba(128,128,128,0.2);
                                 border-radius:14px;padding:20px 18px;min-height:148px;
