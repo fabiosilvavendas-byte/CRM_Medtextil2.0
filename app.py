@@ -529,6 +529,41 @@ h2, h3 {
 [data-theme="dark"] .stApp h2 { color: #A8C4E8 !important; }
 [data-theme="dark"] .stApp h3 { color: #8AADD4 !important; }
 
+
+/* ── Mobile: cards 2 por linha ── */
+@media (max-width: 768px) {
+    /* Forçar wrap nas colunas dos cards */
+    div.home-grid div[data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+    }
+    div.home-grid div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"] {
+        width: 48% !important;
+        min-width: 48% !important;
+        flex: 0 0 48% !important;
+    }
+    /* Sidebar oculta por padrão no mobile — comportamento padrão Streamlit */
+    div[data-testid="stHorizontalBlock"] {
+        gap: 8px !important;
+    }
+}
+
+/* ── Expander de filtros discreto ── */
+div[data-testid="stExpander"] details {
+    border: 1px solid rgba(128,128,128,0.15) !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    margin-bottom: 8px !important;
+}
+div[data-testid="stExpander"] details summary {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: #8A96A8 !important;
+    padding: 6px 12px !important;
+}
+div[data-testid="stExpander"] details summary:hover {
+    color: #1F4788 !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1511,6 +1546,34 @@ def gerar_proposta_pdf_historico(cliente_info_dict, historico_df, vendas_resumo)
         buffer.seek(0)
         return buffer.getvalue()
 
+
+# ====================== FILTROS DE DATA LOCAIS ======================
+def renderizar_filtros_locais(key_prefix, label="📅 Ajustar Período"):
+    """
+    Expander compacto com date_inputs lado a lado.
+    Retorna (data_inicial, data_final) — None se não preenchido.
+    Usa key_prefix para evitar conflito de keys entre módulos.
+    """
+    data_ini = None
+    data_fim = None
+    with st.expander(label, expanded=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            data_ini = st.date_input(
+                "De", value=None,
+                key=f"local_ini_{key_prefix}",
+                format="DD/MM/YYYY",
+                label_visibility="visible"
+            )
+        with c2:
+            data_fim = st.date_input(
+                "Até", value=None,
+                key=f"local_fim_{key_prefix}",
+                format="DD/MM/YYYY",
+                label_visibility="visible"
+            )
+    return data_ini, data_fim
+
 # ====================== INÍCIO DO APP ======================
 if not check_password():
     st.stop()
@@ -2386,7 +2449,7 @@ elif menu == "Inadimplência":
         
         # ========== FILTROS ==========
         st.subheader("🔍 Filtros")
-        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        col_f1, col_f2 = st.columns(2)
         
         with col_f1:
             vendedores_inad = ['Todos'] + sorted(df_inadimplencia['Vendedor'].dropna().unique().tolist())
@@ -2396,21 +2459,7 @@ elif menu == "Inadimplência":
             estados_inad = ['Todos'] + sorted(df_inadimplencia['Estado'].dropna().unique().tolist())
             estado_inad_filtro = st.selectbox("Estado", estados_inad, key="est_inad")
         
-        with col_f3:
-            data_inicial_inad = st.date_input(
-                "Vencimento De", 
-                value=None, 
-                key="data_ini_inad",
-                format="DD/MM/YYYY"
-            )
-        
-        with col_f4:
-            data_final_inad = st.date_input(
-                "Vencimento Até", 
-                value=None, 
-                key="data_fim_inad",
-                format="DD/MM/YYYY"
-            )
+        data_inicial_inad, data_final_inad = renderizar_filtros_locais("inad", "📅 Ajustar Período de Vencimento")
         
         # Aplicar filtros
         df_inad_filtrado = df_inadimplencia.copy()
@@ -2897,27 +2946,13 @@ elif menu == "Histórico":
         st.subheader("Histórico de Vendas por Vendedor")
         
         # Filtros
-        col_f1, col_f2, col_f3 = st.columns(3)
+        col_f1, = st.columns(1)
         
         with col_f1:
             vendedores_hist = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
             vendedor_hist_filtro = st.selectbox("Vendedor", vendedores_hist, key="vend_hist")
         
-        with col_f2:
-            data_inicial_hist = st.date_input(
-                "Data Inicial", 
-                value=None, 
-                key="data_ini_hist",
-                format="DD/MM/YYYY"
-            )
-        
-        with col_f3:
-            data_final_hist = st.date_input(
-                "Data Final", 
-                value=None, 
-                key="data_fim_hist",
-                format="DD/MM/YYYY"
-            )
+        data_inicial_hist, data_final_hist = renderizar_filtros_locais("hist_vend", "📅 Ajustar Período")
         
         # Aplicar filtros
         df_hist_vendedor = df[df['TipoMov'] == 'NF Venda'].copy()
