@@ -60,13 +60,13 @@ html, body, [class*="css"] {
 
 /* ── Fundo cinza muito claro ── */
 .stApp {
-    background-color: #F8F9FA !important;
+    background-color: var(--background-color) !important;
 }
 
 /* ── Sidebar limpa e profissional ── */
 [data-testid="stSidebar"] {
-    background: #FFFFFF !important;
-    border-right: 1px solid #E9ECEF !important;
+    background: var(--secondary-background-color) !important;
+    border-right: 1px solid rgba(128,128,128,0.2) !important;
     box-shadow: 2px 0 8px rgba(0,0,0,0.04) !important;
 }
 [data-testid="stSidebar"] .stMarkdown h1,
@@ -116,7 +116,7 @@ html, body, [class*="css"] {
 
 /* ── Cards de métricas (st.metric) ── */
 [data-testid="stMetric"] {
-    background: #FFFFFF !important;
+    background: var(--secondary-background-color) !important;
     border-radius: 12px !important;
     padding: 18px 20px !important;
     border-left: 4px solid #1F4788 !important;
@@ -159,7 +159,7 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
     padding: 0.5rem 1.25rem !important;
     border: 1.5px solid #1F4788 !important;
     color: #1F4788 !important;
-    background: #FFFFFF !important;
+    background: var(--secondary-background-color) !important;
     transition: all 0.2s ease !important;
     box-shadow: 0 1px 4px rgba(31, 71, 136, 0.10) !important;
     letter-spacing: 0.01em !important;
@@ -185,7 +185,7 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 [data-testid="stDownloadButton"] > button {
     border-radius: 8px !important;
     font-weight: 600 !important;
-    background: #F0F4FF !important;
+    background: var(--secondary-background-color) !important;
     color: #1F4788 !important;
     border: 1.5px solid #1F4788 !important;
 }
@@ -233,7 +233,7 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 
 /* ── Tabs ── */
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: #F0F4FF !important;
+    background: var(--secondary-background-color) !important;
     border-radius: 10px !important;
     padding: 4px !important;
     border-bottom: none !important;
@@ -1718,7 +1718,7 @@ st.markdown("""
 
 /* ── Base ── */
 html, body, [class*="css"] { font-family: 'Inter','Segoe UI',sans-serif !important; }
-.stApp { background-color: #F8F9FA !important; }
+.stApp { background-color: var(--background-color) !important; }
 
 /* ── Remove padding padrão das colunas (alinha cards) ── */
 div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
@@ -1731,8 +1731,8 @@ div[data-testid="column"] { padding: 0 !important; }
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background: #FFFFFF !important;
-    border-right: 1px solid #E9ECEF !important;
+    background: var(--secondary-background-color) !important;
+    border-right: 1px solid rgba(128,128,128,0.2) !important;
 }
 section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
 section[data-testid="stSidebar"] .stRadio > div {
@@ -1746,7 +1746,7 @@ section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
     transition: all 0.15s !important; align-items: center !important;
 }
 section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
-    background: #F4F7FD !important; border-left-color: #8EB3E8 !important;
+    background: rgba(31,71,136,0.08) !important; border-left-color: #8EB3E8 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
     background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
@@ -1835,7 +1835,7 @@ div.med-card-col div[data-testid="stButton"] > button {
 
 /* ── Métricas ── */
 [data-testid="stMetric"] {
-    background: #FFFFFF !important; border-radius: 12px !important;
+    background: var(--secondary-background-color) !important; border-radius: 12px !important;
     padding: 16px 18px !important; border-left: 4px solid #1F4788 !important;
     box-shadow: 0 1px 6px rgba(31,71,136,0.07) !important;
 }
@@ -1965,7 +1965,7 @@ if st.session_state.menu_option == '__home__':
                             "card": {
                                 "width": "100%",
                                 "height": "190px",
-                                "background-color": "#FFFFFF",
+                                "background-color": "var(--secondary-background-color)",
                                 "border": "1px solid #E4E9F0",
                                 "border-radius": "14px",
                                 "box-shadow": "0 1px 6px rgba(31,71,136,0.07)",
@@ -2002,7 +2002,7 @@ if st.session_state.menu_option == '__home__':
                 else:
                     # Fallback se streamlit-card não instalado
                     st.markdown(f"""
-                    <div style="background:#FFFFFF;border:1px solid #E4E9F0;
+                    <div style="background:var(--secondary-background-color);border:1px solid rgba(128,128,128,0.2);
                                 border-radius:14px;padding:20px 18px;min-height:148px;
                                 box-shadow:0 1px 6px rgba(31,71,136,0.07);
                                 font-family:'Inter','Segoe UI',sans-serif;">
