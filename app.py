@@ -533,15 +533,22 @@ h2, h3 {
 /* ── Mobile (≤768px): layout compacto ── */
 @media (max-width: 768px) {
 
-    /* Cards da home: 2 por linha */
+    /* Cards da home: 2 por linha no mobile */
+    div.home-grid {
+        width: 100% !important;
+    }
     div.home-grid div[data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
         gap: 8px !important;
+        display: flex !important;
     }
-    div.home-grid div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"] {
+    div.home-grid div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"],
+    div.home-grid div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
         width: calc(50% - 4px) !important;
         min-width: calc(50% - 4px) !important;
+        max-width: calc(50% - 4px) !important;
         flex: 0 0 calc(50% - 4px) !important;
+        box-sizing: border-box !important;
     }
 
     /* Filtros: esconder barra de labels (captions) no mobile */
@@ -1712,41 +1719,32 @@ else:
     df['Comissao'] = ''
 ''
 
-# ── Barra de Filtros — Desktop: horizontal | Mobile: expander ────────────
-st.markdown("""
-<div style="background:#F2F5FA;border-radius:10px;padding:8px 14px 2px 14px;
-            margin-bottom:14px;border:1px solid #DDE3EE;" class="filter-header-bar">
-    <span style="font-size:0.68rem;font-weight:700;color:#8A96A8;letter-spacing:0.1em;
-                 text-transform:uppercase;">Filtros de Período e Segmentação</span>
-</div>
-""", unsafe_allow_html=True)
-
-# Filtros de Vendedor/Estado/Mês/Ano — sempre visíveis (compactos)
-fc3, fc4, fc5, fc6 = st.columns([1.6, 1.6, 0.9, 0.9])
-with fc3:
-    vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
-    vendedor_filtro = st.selectbox("V", vendedores, key="vend_global",
-                                    label_visibility="collapsed")
-    st.caption("👤 Vendedor")
-with fc4:
-    estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
-    estado_filtro = st.selectbox("E", estados, key="est_global",
-                                  label_visibility="collapsed")
-    st.caption("🗺️ Estado")
-with fc5:
-    meses_opcoes = ['Todos'] + list(range(1, 13))
-    mes_filtro = st.selectbox("M", meses_opcoes, key="mes_global",
-                               label_visibility="collapsed")
-    st.caption("📆 Mês")
-with fc6:
-    anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
-    ano_filtro = st.selectbox("A", anos_opcoes, key="ano_global",
-                               label_visibility="collapsed")
-    st.caption("🗓️ Ano")
-
-# Datas em expander compacto — ocupa 1 linha no mobile
-data_inicial, data_final = renderizar_filtros_locais("global", "📅 Filtrar por Data")
-
+# ── Filtros Globais — dentro de expander único ───────────────────────────
+with st.expander("⚙️ Filtros", expanded=False):
+    # Linha 1: Datas lado a lado
+    fc1, fc2 = st.columns(2)
+    with fc1:
+        data_inicial = st.date_input("📅 Data Inicial", value=None,
+                                     key="data_ini", format="DD/MM/YYYY")
+    with fc2:
+        data_final = st.date_input("📅 Data Final", value=None,
+                                   key="data_fim", format="DD/MM/YYYY")
+    # Linha 2: Vendedor e Estado lado a lado
+    fc3, fc4 = st.columns(2)
+    with fc3:
+        vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
+        vendedor_filtro = st.selectbox("👤 Vendedor", vendedores, key="vend_global")
+    with fc4:
+        estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
+        estado_filtro = st.selectbox("🗺️ Estado", estados, key="est_global")
+    # Linha 3: Mês e Ano lado a lado
+    fc5, fc6 = st.columns(2)
+    with fc5:
+        meses_opcoes = ['Todos'] + list(range(1, 13))
+        mes_filtro = st.selectbox("📆 Mês", meses_opcoes, key="mes_global")
+    with fc6:
+        anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
+        ano_filtro = st.selectbox("🗓️ Ano", anos_opcoes, key="ano_global")
 df_filtrado = df.copy()
 
 if data_inicial:
