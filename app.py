@@ -2043,76 +2043,13 @@ if st.session_state.menu_option == '__home__':
     """, unsafe_allow_html=True)
 
     # Grid 4 colunas — técnica de botão overlay que FUNCIONA
-    _USE_CARD_LIB = False  # streamlit-card substituído por st.button nativo
+    try:
+        from streamlit_card import card as st_card
+        _USE_CARD_LIB = True
+    except ImportError:
+        _USE_CARD_LIB = False
 
-    # ── CSS dos cards home (st.button nativo — sem iframe) ─────────────
-    st.markdown("""
-    <style>
-    /* Grade responsiva: 4 colunas desktop, 2 no mobile */
-    div.home-nav div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 10px !important;
-    }
-    @media (max-width: 768px) {
-        div.home-nav div[data-testid="stHorizontalBlock"] {
-            flex-wrap: wrap !important;
-        }
-        div.home-nav div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            width: calc(50% - 5px) !important;
-            flex: 1 1 calc(50% - 5px) !important;
-            min-width: calc(50% - 5px) !important;
-            max-width: calc(50% - 5px) !important;
-            box-sizing: border-box !important;
-        }
-    }
-    /* Botão estilizado como card azul institucional */
-    div.home-nav div[data-testid="stButton"] > button {
-        background: #1F4788 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        border-radius: 12px !important;
-        padding: 18px 14px !important;
-        min-height: 130px !important;
-        height: auto !important;
-        width: 100% !important;
-        text-align: left !important;
-        white-space: pre-wrap !important;
-        font-family: 'Inter', 'Segoe UI', sans-serif !important;
-        font-size: 0.88rem !important;
-        font-weight: 400 !important;
-        line-height: 1.5 !important;
-        box-shadow: 0 2px 8px rgba(31,71,136,0.20) !important;
-        transition: all 0.18s ease !important;
-        cursor: pointer !important;
-        box-sizing: border-box !important;
-    }
-    div.home-nav div[data-testid="stButton"] > button:hover {
-        background: #163561 !important;
-        box-shadow: 0 6px 20px rgba(31,71,136,0.35) !important;
-        transform: translateY(-2px) !important;
-    }
-    div.home-nav div[data-testid="stButton"] > button p {
-        color: #FFFFFF !important;
-        white-space: pre-wrap !important;
-        text-align: left !important;
-        margin: 0 !important;
-        font-size: 0.88rem !important;
-        line-height: 1.5 !important;
-    }
-    @media (max-width: 768px) {
-        div.home-nav div[data-testid="stButton"] > button {
-            padding: 14px 10px !important;
-            min-height: 110px !important;
-            font-size: 0.78rem !important;
-        }
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Grid 4 colunas (CSS faz wrap para 2 no mobile) ────────────────────
-    st.markdown('<div class="home-nav">', unsafe_allow_html=True)
+    # ── Grid de cards: 4 colunas (mobile: cards menores, proporcionais) ──
     for row_start in range(0, len(cards_visiveis), 4):
         row = cards_visiveis[row_start:row_start+4]
         cols = st.columns(4, gap="small")
@@ -2122,12 +2059,73 @@ if st.session_state.menu_option == '__home__':
                 desc = _DESC.get(nome, '')
                 info = c['info']
                 ic   = _ICONES_CARD.get(nome, '•')
-                lbl  = f"{ic}  {nome}\n{desc}\n\n{info}"
-                if st.button(lbl, key=f"hc_{nome}", use_container_width=True):
-                    st.session_state.menu_option = nome
-                    st.rerun()
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+
+                if _USE_CARD_LIB:
+                    clicked = st_card(
+                        title=f"{ic}  {nome}",
+                        text=[desc, info],
+                        key=f"hc_{nome}",
+                        styles={
+                            "card": {
+                                "width": "100%",
+                                "height": "170px",
+                                "background-color": "var(--secondary-background-color)",
+                                "border": "1px solid #E4E9F0",
+                                "border-radius": "10px",
+                                "box-shadow": "0 1px 4px rgba(31,71,136,0.07)",
+                                "cursor": "pointer",
+                                "padding": "14px 10px 12px 10px",
+                                "transition": "box-shadow 0.18s ease, transform 0.18s ease",
+                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
+                                "margin": "0",
+                                "overflow": "hidden",
+                            },
+                            "title": {
+                                "font-size": "0.78rem",
+                                "font-weight": "700",
+                                "color": "#2C5AA0",
+                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
+                                "letter-spacing": "-0.01em",
+                                "margin-bottom": "4px",
+                                "white-space": "normal",
+                                "overflow": "hidden",
+                                "line-height": "1.2",
+                            },
+                            "text": {
+                                "font-size": "0.65rem",
+                                "color": "#6C757D",
+                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
+                                "line-height": "1.3",
+                                "font-weight": "400",
+                            },
+                            "filter": {"background": "rgba(0,0,0,0)"},
+                        }
+                    )
+                    if clicked:
+                        st.session_state.menu_option = nome
+                        st.rerun()
+                else:
+                    st.markdown(f"""
+                    <div style="background:var(--secondary-background-color);
+                                border:1px solid rgba(128,128,128,0.2);
+                                border-radius:10px;padding:14px 10px;min-height:130px;
+                                box-shadow:0 1px 4px rgba(31,71,136,0.07);
+                                font-family:'Inter','Segoe UI',sans-serif;overflow:hidden;">
+                        <div style="font-size:0.9rem;margin-bottom:6px;">{ic}</div>
+                        <div style="font-size:0.78rem;font-weight:700;color:#2C5AA0;
+                                    margin-bottom:3px;line-height:1.2;">{nome}</div>
+                        <div style="font-size:0.65rem;color:#6C757D;
+                                    margin-bottom:6px;line-height:1.3;">{desc}</div>
+                        <div style="font-size:0.60rem;color:#ADB5BD;
+                                    border-top:1px solid #F0F2F5;padding-top:5px;">{info}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button(f"Abrir {nome}", key=f"hc_{nome}",
+                                 use_container_width=True):
+                        st.session_state.menu_option = nome
+                        st.rerun()
+
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
