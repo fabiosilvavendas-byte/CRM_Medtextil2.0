@@ -625,7 +625,7 @@ GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def listar_planilhas_github():
     """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
@@ -685,7 +685,7 @@ def listar_planilhas_github():
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
         return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=60)
 def carregar_planilha_github(url):
     """Carrega planilha diretamente do GitHub"""
     try:
@@ -1166,7 +1166,6 @@ def aplicar_layout_grafico(fig, height=None):
     fig.update_layout(**layout_kwargs)
     return fig
 
-@st.cache_data
 def processar_dados(df):
     """Aplica as regras de negócio nos dados"""
     df['Valor_Real'] = df.apply(
@@ -1194,31 +1193,8 @@ def processar_dados(df):
     return df
 
 def obter_notas_unicas(df):
-    """
-    Agrupa produtos da mesma nota e soma os valores.
-    CORREÇÃO CRÍTICA: Cada linha = 1 produto. Mesma nota tem vários produtos.
-    ANTES: drop_duplicates mantinha só o primeiro produto (PERDIA VALORES!)
-    AGORA: groupby soma todos os produtos da mesma nota
-    """
-    if len(df) == 0:
-        return df
-    
-    # Colunas numéricas para somar
-    colunas_soma = ['TotalProduto', 'Quantidade']
-    if 'Valor_Real' in df.columns:
-        colunas_soma.append('Valor_Real')
-    
-    # Agrupar por Numero_NF e somar valores dos produtos
-    agg_dict = {col: 'sum' for col in colunas_soma if col in df.columns}
-    
-    # Manter outras colunas importantes (pegar primeiro valor da nota)
-    for col in df.columns:
-        if col not in agg_dict and col != 'Numero_NF':
-            agg_dict[col] = 'first'
-    
-    notas_agrupadas = df.groupby('Numero_NF', as_index=False).agg(agg_dict)
-    
-    return notas_agrupadas
+    """Remove duplicatas de Numero_NF mantendo apenas primeira ocorrência"""
+    return df.drop_duplicates(subset=['Numero_NF'], keep='first')
 
 def to_excel(df):
     """Converte DataFrame para Excel"""
@@ -1301,7 +1277,6 @@ def formatar_dataframe_moeda(df, colunas_moeda):
             df_formatado[col] = df_formatado[col].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
     return df_formatado
 
-@st.cache_data
 def processar_inadimplencia(df):
     """Processa dados de inadimplência"""
     # Padronizar nomes das colunas
