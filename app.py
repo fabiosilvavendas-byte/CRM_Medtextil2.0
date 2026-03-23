@@ -60,19 +60,19 @@ html, body, [class*="css"] {
 
 /* ── Fundo cinza muito claro ── */
 .stApp {
-    background-color: var(--background-color) !important;
+    background-color: #F8F9FA !important;
 }
 
 /* ── Sidebar limpa e profissional ── */
 [data-testid="stSidebar"] {
-    background: var(--secondary-background-color) !important;
-    border-right: 1px solid rgba(128,128,128,0.2) !important;
+    background: #FFFFFF !important;
+    border-right: 1px solid #E9ECEF !important;
     box-shadow: 2px 0 8px rgba(0,0,0,0.04) !important;
 }
 [data-testid="stSidebar"] .stMarkdown h1,
 [data-testid="stSidebar"] .stMarkdown h2,
 [data-testid="stSidebar"] .stMarkdown h3 {
-    color: #4A7BC8 !important;
+    color: #1F4788 !important;
 }
 
 /* ── Botões de navegação da sidebar estilizados ── */
@@ -96,14 +96,14 @@ html, body, [class*="css"] {
 
 [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
     background: #EEF2F7 !important;
-    border-color: #4A7BC8 !important;
+    border-color: #1F4788 !important;
     transform: translateX(3px) !important;
 }
 
 /* Botão selecionado na sidebar */
 [data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
     background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
-    border-color: #4A7BC8 !important;
+    border-color: #1F4788 !important;
     color: white !important;
     font-weight: 600 !important;
     box-shadow: 0 2px 8px rgba(31, 71, 136, 0.2) !important;
@@ -116,7 +116,7 @@ html, body, [class*="css"] {
 
 /* ── Cards de métricas (st.metric) ── */
 [data-testid="stMetric"] {
-    background: var(--secondary-background-color) !important;
+    background: #FFFFFF !important;
     border-radius: 12px !important;
     padding: 18px 20px !important;
     border-left: 4px solid #1F4788 !important;
@@ -137,7 +137,7 @@ html, body, [class*="css"] {
 [data-testid="stMetricValue"] {
     font-size: 1.5rem !important;
     font-weight: 700 !important;
-    color: #4A7BC8 !important;
+    color: #1F4788 !important;
 }
 
 /* ── Cor alternada para cards de destaque ── */
@@ -158,8 +158,8 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
     font-size: 0.875rem !important;
     padding: 0.5rem 1.25rem !important;
     border: 1.5px solid #1F4788 !important;
-    color: #4A7BC8 !important;
-    background: var(--secondary-background-color) !important;
+    color: #1F4788 !important;
+    background: #FFFFFF !important;
     transition: all 0.2s ease !important;
     box-shadow: 0 1px 4px rgba(31, 71, 136, 0.10) !important;
     letter-spacing: 0.01em !important;
@@ -167,14 +167,14 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 .stButton > button:hover {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
+    border-color: #1F4788 !important;
     box-shadow: 0 4px 12px rgba(31, 71, 136, 0.25) !important;
     transform: translateY(-1px) !important;
 }
 .stButton > button[kind="primary"] {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
+    border-color: #1F4788 !important;
 }
 .stButton > button[kind="primary"]:hover {
     background: #163561 !important;
@@ -185,8 +185,8 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 [data-testid="stDownloadButton"] > button {
     border-radius: 8px !important;
     font-weight: 600 !important;
-    background: var(--secondary-background-color) !important;
-    color: #4A7BC8 !important;
+    background: #F0F4FF !important;
+    color: #1F4788 !important;
     border: 1.5px solid #1F4788 !important;
 }
 [data-testid="stDownloadButton"] > button:hover {
@@ -201,13 +201,13 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 
 /* ── Títulos de página ── */
 .stApp h1 {
-    color: #2C5AA0 !important;
+    color: #1A2F52 !important;
     font-weight: 700 !important;
     font-size: 1.75rem !important;
     letter-spacing: -0.02em !important;
 }
 .stApp h2 {
-    color: #4A7BC8 !important;
+    color: #1F4788 !important;
     font-weight: 600 !important;
     font-size: 1.3rem !important;
 }
@@ -227,13 +227,13 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 }
 .stSelectbox > div > div:focus-within,
 .stTextInput > div > div:focus-within {
-    border-color: #4A7BC8 !important;
+    border-color: #1F4788 !important;
     box-shadow: 0 0 0 2px rgba(31, 71, 136, 0.15) !important;
 }
 
 /* ── Tabs ── */
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: var(--secondary-background-color) !important;
+    background: #F0F4FF !important;
     border-radius: 10px !important;
     padding: 4px !important;
     border-bottom: none !important;
@@ -285,7 +285,7 @@ hr {
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 0.85rem;
-    color: #4A7BC8;
+    color: #1F4788;
     font-weight: 600;
     width: 100%;
     text-align: center;
@@ -332,12 +332,12 @@ hr {
 .stRadio > div label:has(input:checked) {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
+    border-color: #1F4788 !important;
 }
 
 /* ── Spinner ── */
 .stSpinner > div {
-    border-top-color: #4A7BC8 !important;
+    border-top-color: #1F4788 !important;
 }
 
 /* ── Sidebar navigation radio ── */
@@ -359,7 +359,7 @@ hr {
 }
 [data-testid="stSidebar"] .stRadio > div label:has(input:checked) {
     background: linear-gradient(135deg, #F0F4FF, #E4EDFC) !important;
-    color: #4A7BC8 !important;
+    color: #1F4788 !important;
     border-left: 4px solid #1F4788 !important;
     border-radius: 0 10px 10px 0 !important;
     font-weight: 700 !important;
@@ -367,7 +367,7 @@ hr {
 }
 [data-testid="stSidebar"] .stRadio > div label:hover {
     background: #F4F7FD !important;
-    color: #4A7BC8 !important;
+    color: #1F4788 !important;
     transform: translateX(2px) !important;
 }
 
@@ -388,7 +388,7 @@ hr {
 [data-testid="stMetricValue"] {
     font-size: 1.45rem !important;
     font-weight: 700 !important;
-    color: #2C5AA0 !important;
+    color: #1A2F52 !important;
 }
 
 /* ── Subheaders sem emoji weight ── */
@@ -413,210 +413,6 @@ h2, h3 {
     letter-spacing: 0.03em !important;
 }
 
-
-/* ══════════════════════════════════════════════════════
-   DARK MODE — sobrescreve cores fixas quando o tema
-   escuro está ativo. Usa prefers-color-scheme E o
-   atributo data-theme que o Streamlit injeta no <body>.
-   ══════════════════════════════════════════════════════ */
-
-/* Detectar dark mode via atributo do Streamlit */
-@media (prefers-color-scheme: dark) {
-    .stApp { background-color: #0E1117 !important; }
-}
-
-/* Streamlit injeta data-theme="dark" no root quando tema escuro ativo */
-[data-theme="dark"] .stApp,
-.stApp[data-theme="dark"] {
-    background-color: #0E1117 !important;
-}
-
-/* Sidebar dark */
-[data-theme="dark"] section[data-testid="stSidebar"],
-[data-theme="dark"] [data-testid="stSidebar"] {
-    background: #1A1D24 !important;
-    border-right-color: #2D3139 !important;
-}
-
-/* Métricas dark */
-[data-theme="dark"] [data-testid="stMetric"] {
-    background: #1A1D24 !important;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.3) !important;
-}
-[data-theme="dark"] [data-testid="stMetricLabel"] p {
-    color: #8A96A8 !important;
-}
-[data-theme="dark"] [data-testid="stMetricValue"] {
-    color: #E8EDF5 !important;
-}
-
-/* Filtros dark */
-[data-theme="dark"] div[style*="background:#F2F5FA"],
-[data-theme="dark"] div[style*="background: #F2F5FA"] {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-}
-
-/* Botões gerais dark */
-[data-theme="dark"] .stButton > button {
-    background: #1A1D24 !important;
-    color: #A8C4E8 !important;
-    border-color: #2D5AA0 !important;
-}
-[data-theme="dark"] .stButton > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* Expander dark */
-[data-theme="dark"] [data-testid="stExpander"] {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-}
-
-/* Dataframes dark */
-[data-theme="dark"] [data-testid="stDataFrame"] {
-    background: #1A1D24 !important;
-}
-
-/* Tabs dark */
-[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: #1A1D24 !important;
-}
-[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab"] {
-    color: #8A96A8 !important;
-}
-
-/* Radio sidebar dark */
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
-    color: #A8B4C4 !important;
-}
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
-    background: linear-gradient(90deg,#1A2A45,#1F3560) !important;
-    border-left-color: #4A7BC8 !important;
-}
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #7EB3F7 !important;
-}
-
-/* Breadcrumb e textos de apoio dark */
-[data-theme="dark"] .stMarkdown p {
-    color: #C4CDD9 !important;
-}
-
-/* Inputs dark */
-[data-theme="dark"] .stSelectbox > div > div,
-[data-theme="dark"] .stTextInput > div > div > input,
-[data-theme="dark"] .stDateInput > div > div > input {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-    color: #E0E6EF !important;
-}
-
-/* Download button dark */
-[data-theme="dark"] [data-testid="stDownloadButton"] > button {
-    background: #1A2A45 !important;
-    color: #7EB3F7 !important;
-    border-color: #2D5AA0 !important;
-}
-[data-theme="dark"] [data-testid="stDownloadButton"] > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* Cabeçalho títulos dark */
-[data-theme="dark"] .stApp h1 { color: #E8EDF5 !important; }
-[data-theme="dark"] .stApp h2 { color: #A8C4E8 !important; }
-[data-theme="dark"] .stApp h3 { color: #8AADD4 !important; }
-
-
-/* ── Mobile (≤768px): layout compacto ── */
-@media (max-width: 768px) {
-
-    /* Cards da home: 4 colunas proporcionais no mobile */
-    div.home-grid > div[data-testid="stHorizontalBlock"] {
-        gap: 4px !important;
-        overflow-x: hidden !important;
-    }
-    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        min-width: 0 !important;
-        flex: 1 1 0 !important;
-        padding: 0 2px !important;
-    }
-
-    /* Filtros: esconder barra de labels (captions) no mobile */
-    .filter-header-bar { display: none !important; }
-
-    /* Colunas de filtros: empilhar verticalmente no mobile */
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"]) {
-        flex-wrap: wrap !important;
-    }
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"])
-        > div[data-testid="stVerticalBlock"] {
-        width: calc(50% - 4px) !important;
-        min-width: calc(50% - 4px) !important;
-        flex: 0 0 calc(50% - 4px) !important;
-    }
-
-    /* Sidebar: fundo sólido no mobile — cores explícitas */
-    section[data-testid="stSidebar"],
-    section[data-testid="stSidebar"] > div,
-    section[data-testid="stSidebar"] > div:first-child {
-        background-color: #FFFFFF !important;
-        background: #FFFFFF !important;
-    }
-    /* Dark mode sidebar mobile */
-    @media (prefers-color-scheme: dark) {
-        section[data-testid="stSidebar"],
-        section[data-testid="stSidebar"] > div,
-        section[data-testid="stSidebar"] > div:first-child {
-            background-color: #1A1D24 !important;
-            background: #1A1D24 !important;
-        }
-    }
-
-    /* Gráficos: garantir que caibam na tela */
-    div[data-testid="stPlotlyChart"] {
-        overflow-x: auto !important;
-    }
-}
-
-/* ── Expander de filtros discreto ── */
-div[data-testid="stExpander"] details {
-    border: 1px solid rgba(128,128,128,0.15) !important;
-    border-radius: 8px !important;
-    background: transparent !important;
-    margin-bottom: 8px !important;
-}
-div[data-testid="stExpander"] details summary {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    color: #8A96A8 !important;
-    padding: 6px 12px !important;
-}
-div[data-testid="stExpander"] details summary:hover {
-    color: #4A7BC8 !important;
-}
-
-
-/* ── Dark mode via prefers-color-scheme (mais confiável no Streamlit) ── */
-@media (prefers-color-scheme: dark) {
-    .stApp h1, .stApp h2, .stApp h3 { color: #7EB3F7 !important; }
-    [data-testid="stMetricValue"]    { color: #E8EDF5 !important; }
-    [data-testid="stMetricLabel"] p  { color: #8A96A8 !important; }
-    [data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-        color: #7EB3F7 !important;
-    }
-    /* Títulos dos módulos (h2 inline) */
-    .stMarkdown h2 { color: #7EB3F7 !important; }
-    /* Texto padrão */
-    .stMarkdown p  { color: #C4CDD9 !important; }
-    /* Cards */
-    [data-testid="stMetric"] { background: var(--secondary-background-color) !important; }
-    /* Breadcrumb */
-    [data-testid="stSidebar"] { background: var(--secondary-background-color) !important; }
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -625,7 +421,7 @@ GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def listar_planilhas_github():
     """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
@@ -685,7 +481,7 @@ def listar_planilhas_github():
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
         return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
     """Carrega planilha diretamente do GitHub"""
     try:
@@ -743,7 +539,7 @@ def check_password():
                 <img src="https://i.imgur.com/gt3rgyL.png" height="52"
                      style="border-radius:8px;" onerror="this.style.display='none'"/>
             </div>
-            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#4A7BC8;margin-bottom:4px;">
+            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
                 Medtextil BI
             </div>
             <div style="text-align:center;font-size:0.85rem;color:#6C757D;margin-bottom:8px;">
@@ -1166,6 +962,7 @@ def aplicar_layout_grafico(fig, height=None):
     fig.update_layout(**layout_kwargs)
     return fig
 
+@st.cache_data
 def processar_dados(df):
     """Aplica as regras de negócio nos dados"""
     df['Valor_Real'] = df.apply(
@@ -1277,6 +1074,7 @@ def formatar_dataframe_moeda(df, colunas_moeda):
             df_formatado[col] = df_formatado[col].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
     return df_formatado
 
+@st.cache_data
 def processar_inadimplencia(df):
     """Processa dados de inadimplência"""
     # Padronizar nomes das colunas
@@ -1597,34 +1395,6 @@ def gerar_proposta_pdf_historico(cliente_info_dict, historico_df, vendas_resumo)
         buffer.seek(0)
         return buffer.getvalue()
 
-
-# ====================== FILTROS DE DATA LOCAIS ======================
-def renderizar_filtros_locais(key_prefix, label="📅 Ajustar Período"):
-    """
-    Expander compacto com date_inputs lado a lado.
-    Retorna (data_inicial, data_final) — None se não preenchido.
-    Usa key_prefix para evitar conflito de keys entre módulos.
-    """
-    data_ini = None
-    data_fim = None
-    with st.expander(label, expanded=False):
-        c1, c2 = st.columns(2)
-        with c1:
-            data_ini = st.date_input(
-                "De", value=None,
-                key=f"local_ini_{key_prefix}",
-                format="DD/MM/YYYY",
-                label_visibility="visible"
-            )
-        with c2:
-            data_fim = st.date_input(
-                "Até", value=None,
-                key=f"local_fim_{key_prefix}",
-                format="DD/MM/YYYY",
-                label_visibility="visible"
-            )
-    return data_ini, data_fim
-
 # ====================== INÍCIO DO APP ======================
 if not check_password():
     st.stop()
@@ -1643,7 +1413,7 @@ with st.sidebar:
         <img src="https://i.imgur.com/gt3rgyL.png" height="56"
              style="border-radius:10px;box-shadow:0 2px 8px rgba(31,71,136,0.18);"
              onerror="this.style.display='none'"/>
-        <div style="font-size:0.8rem;font-weight:800;color:#4A7BC8;letter-spacing:0.1em;
+        <div style="font-size:0.8rem;font-weight:800;color:#1F4788;letter-spacing:0.1em;
                     text-transform:uppercase;margin-top:10px;">Medtextil</div>
         <div style="font-size:0.65rem;color:#ADB5BD;letter-spacing:0.06em;margin-top:1px;">
             BI Dashboard 2.0
@@ -1653,7 +1423,7 @@ with st.sidebar:
     # ── Badge do usuário ──
     st.markdown(f"""
     <div style="background:linear-gradient(135deg,#F0F4FF,#E8EFFD);border:1px solid #C5D5F0;
-                border-radius:10px;padding:10px 14px;font-size:0.83rem;color:#4A7BC8;
+                border-radius:10px;padding:10px 14px;font-size:0.83rem;color:#1F4788;
                 font-weight:600;text-align:center;margin-bottom:6px;">
         👤 &nbsp;{nome_usuario}
     </div>
@@ -1741,32 +1511,45 @@ else:
     df['Comissao'] = ''
 ''
 
-# ── Filtros Globais — dentro de expander único ───────────────────────────
-with st.expander("⚙️ Filtros", expanded=False):
-    # Linha 1: Datas lado a lado
-    fc1, fc2 = st.columns(2)
-    with fc1:
-        data_inicial = st.date_input("📅 Data Inicial", value=None,
-                                     key="data_ini", format="DD/MM/YYYY")
-    with fc2:
-        data_final = st.date_input("📅 Data Final", value=None,
-                                   key="data_fim", format="DD/MM/YYYY")
-    # Linha 2: Vendedor e Estado lado a lado
-    fc3, fc4 = st.columns(2)
-    with fc3:
-        vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
-        vendedor_filtro = st.selectbox("👤 Vendedor", vendedores, key="vend_global")
-    with fc4:
-        estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
-        estado_filtro = st.selectbox("🗺️ Estado", estados, key="est_global")
-    # Linha 3: Mês e Ano lado a lado
-    fc5, fc6 = st.columns(2)
-    with fc5:
-        meses_opcoes = ['Todos'] + list(range(1, 13))
-        mes_filtro = st.selectbox("📆 Mês", meses_opcoes, key="mes_global")
-    with fc6:
-        anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
-        ano_filtro = st.selectbox("🗓️ Ano", anos_opcoes, key="ano_global")
+# ── Barra de Filtros Compactos ────────────────────────────────────────────
+st.markdown("""
+<div style="background:#F2F5FA;border-radius:10px;padding:8px 14px 2px 14px;
+            margin-bottom:14px;border:1px solid #DDE3EE;">
+    <span style="font-size:0.68rem;font-weight:700;color:#8A96A8;letter-spacing:0.1em;
+                 text-transform:uppercase;">Filtros de Período e Segmentação</span>
+</div>
+""", unsafe_allow_html=True)
+
+fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.1, 1.1, 1.6, 1.6, 0.9, 0.9])
+with fc1:
+    data_inicial = st.date_input("Di", value=None, key="data_ini", format="DD/MM/YYYY",
+                                  label_visibility="collapsed")
+    st.caption("📅 Data Inicial")
+with fc2:
+    data_final = st.date_input("Df", value=None, key="data_fim", format="DD/MM/YYYY",
+                                label_visibility="collapsed")
+    st.caption("📅 Data Final")
+with fc3:
+    vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
+    vendedor_filtro = st.selectbox("V", vendedores, key="vend_global",
+                                    label_visibility="collapsed")
+    st.caption("👤 Vendedor")
+with fc4:
+    estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
+    estado_filtro = st.selectbox("E", estados, key="est_global",
+                                  label_visibility="collapsed")
+    st.caption("🗺️ Estado")
+with fc5:
+    meses_opcoes = ['Todos'] + list(range(1, 13))
+    mes_filtro = st.selectbox("M", meses_opcoes, key="mes_global",
+                               label_visibility="collapsed")
+    st.caption("📆 Mês")
+with fc6:
+    anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
+    ano_filtro = st.selectbox("A", anos_opcoes, key="ano_global",
+                               label_visibility="collapsed")
+    st.caption("🗓️ Ano")
+
 df_filtrado = df.copy()
 
 if data_inicial:
@@ -1801,7 +1584,7 @@ _DESC = {
 _INFO_CARD = {}  # preenchido depois dos dados
 
 if 'menu_option' not in st.session_state:
-    st.session_state.menu_option = 'Dashboard'
+    st.session_state.menu_option = '__home__'
 
 modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Dashboard","Positivação","Inadimplência","Clientes sem Compra",
@@ -1819,7 +1602,7 @@ st.markdown("""
 
 /* ── Base ── */
 html, body, [class*="css"] { font-family: 'Inter','Segoe UI',sans-serif !important; }
-.stApp { background-color: var(--background-color) !important; }
+.stApp { background-color: #F8F9FA !important; }
 
 /* ── Remove padding padrão das colunas (alinha cards) ── */
 div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
@@ -1832,8 +1615,8 @@ div[data-testid="column"] { padding: 0 !important; }
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background: var(--secondary-background-color) !important;
-    border-right: 1px solid rgba(128,128,128,0.2) !important;
+    background: #FFFFFF !important;
+    border-right: 1px solid #E9ECEF !important;
 }
 section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
 section[data-testid="stSidebar"] .stRadio > div {
@@ -1847,14 +1630,14 @@ section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
     transition: all 0.15s !important; align-items: center !important;
 }
 section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
-    background: rgba(31,71,136,0.08) !important; border-left-color: #8EB3E8 !important;
+    background: #F4F7FD !important; border-left-color: #8EB3E8 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
     background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
-    border-left-color: #4A7BC8 !important;
+    border-left-color: #1F4788 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #4A7BC8 !important; font-weight: 600 !important;
+    color: #1F4788 !important; font-weight: 600 !important;
 }
 section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"],
 section[data-testid="stSidebar"] .stRadio div[class*="RadioMarkFill"],
@@ -1902,11 +1685,11 @@ div.med-card .mc-icon {
     width: 38px; height: 38px;
     background: #EEF3FC; border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
-    margin-bottom: 11px; color: #4A7BC8; font-size: 16px;
+    margin-bottom: 11px; color: #1F4788; font-size: 16px;
 }
 div.med-card .mc-title {
     font-size: 0.94rem; font-weight: 700;
-    color: #2C5AA0; margin-bottom: 4px; letter-spacing: -0.01em;
+    color: #1A2F52; margin-bottom: 4px; letter-spacing: -0.01em;
 }
 div.med-card .mc-desc {
     font-size: 0.75rem; color: #6C757D; line-height: 1.4; margin-bottom: 9px;
@@ -1936,7 +1719,7 @@ div.med-card-col div[data-testid="stButton"] > button {
 
 /* ── Métricas ── */
 [data-testid="stMetric"] {
-    background: var(--secondary-background-color) !important; border-radius: 12px !important;
+    background: #FFFFFF !important; border-radius: 12px !important;
     padding: 16px 18px !important; border-left: 4px solid #1F4788 !important;
     box-shadow: 0 1px 6px rgba(31,71,136,0.07) !important;
 }
@@ -1946,7 +1729,7 @@ div.med-card-col div[data-testid="stButton"] > button {
     color: #8A96A8 !important;
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.4rem !important; font-weight: 700 !important; color: #2C5AA0 !important;
+    font-size: 1.4rem !important; font-weight: 700 !important; color: #1A2F52 !important;
 }
 
 /* ── Botões gerais ── */
@@ -1986,7 +1769,7 @@ with st.sidebar:
     # Botão Início
     if st.button("🏠  Início", key="nav_home", use_container_width=True, 
                  type="primary" if st.session_state.menu_option == '__home__' else "secondary"):
-        st.session_state.menu_option = 'Dashboard'
+        st.session_state.menu_option = '__home__'
         st.rerun()
     
     # Botões dos módulos
@@ -2002,7 +1785,125 @@ with st.sidebar:
             st.rerun()
 
 # ── Tela Home ─────────────────────────────────────────────────────────────
+if st.session_state.menu_option == '__home__':
+    usuario_info = st.session_state.get("usuario", {})
 
+    try:
+        vendas_mes = notas_unicas[
+            (notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) &
+            (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)
+        ]['Valor_Real'].sum()
+    except:
+        vendas_mes = 0
+    try:
+        total_clientes = len(df['RazaoSocial'].unique())
+    except:
+        total_clientes = 0
+
+    cards_data = [
+        {'nome':'Dashboard',          'info':f'R$ {vendas_mes:,.0f} no mês atual'},
+        {'nome':'Positivação',         'info':f'{total_clientes} clientes na base'},
+        {'nome':'Inadimplência',       'info':'Títulos em aberto e atrasos'},
+        {'nome':'Clientes sem Compra', 'info':'Identificar inativos'},
+        {'nome':'Histórico',           'info':'Por cliente ou vendedor'},
+        {'nome':'Preço Médio',         'info':'Análise por produto'},
+        {'nome':'Pedidos Pendentes',   'info':'Aguardando faturamento'},
+        {'nome':'Rankings',            'info':'Top vendedores e clientes'},
+    ]
+    cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
+
+    st.markdown(f"""
+    <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
+        <div style="font-size:1.45rem;font-weight:600;color:#1A2F52;margin-bottom:3px;">
+            Olá, {usuario_info.get('nome','Usuário')}
+        </div>
+        <div style="color:#8A96A8;font-size:0.87rem;">
+            Selecione um módulo abaixo para iniciar a análise.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Grid 4 colunas — cards com overlay invisível CORRETO
+    for row_start in range(0, len(cards_visiveis), 4):
+        row = cards_visiveis[row_start:row_start+4]
+        cols = st.columns(4)
+        for j, card in enumerate(row):
+            with cols[j]:
+                nome = card['nome']
+                desc = _DESC.get(nome, '')
+                info = card['info']
+                ic   = _ICONES_CARD.get(nome, '•')
+
+                # Container que empilha card + botão
+                container = st.container()
+                
+                with container:
+                    # Card visual HTML
+                    st.markdown(f"""
+                    <div class="card-wrapper" style="position: relative;">
+                        <div class="med-card"
+                             onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
+                             onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
+                            <div class="mc-icon">{ic}</div>
+                            <div class="mc-title">{nome}</div>
+                            <div class="mc-desc">{desc}</div>
+                            <div class="mc-info">{info}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Botão overlay TRANSPARENTE (position absolute via CSS)
+                    if st.button("​", key=f"card_{nome}", use_container_width=True):
+                        st.session_state.menu_option = nome
+                        st.rerun()
+                    
+                    # CSS para fazer o botão ficar SOBRE o card com position absolute
+                    st.markdown(f"""
+                    <style>
+                    /* Wrapper do card */
+                    .card-wrapper {{
+                        position: relative;
+                        width: 100%;
+                    }}
+                    
+                    /* Botão overlay invisível - position absolute */
+                    .card-wrapper + div[data-testid="stButton"] {{
+                        position: absolute !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        z-index: 10 !important;
+                    }}
+                    
+                    .card-wrapper + div[data-testid="stButton"] button {{
+                        position: absolute !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        width: 100% !important;
+                        height: 138px !important;
+                        background: transparent !important;
+                        color: transparent !important;
+                        border: none !important;
+                        opacity: 1 !important;
+                        cursor: pointer !important;
+                        z-index: 10 !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                    }}
+                    
+                    .card-wrapper + div[data-testid="stButton"] button:hover {{
+                        background: transparent !important;
+                    }}
+                    </style>
+                    """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    
+
+    st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
 menu = st.session_state.menu_option
@@ -2010,7 +1911,9 @@ menu = st.session_state.menu_option
 st.markdown(f"""
 <div style="font-size:0.74rem;color:#ADB5BD;margin-bottom:14px;
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
-    <span style="color:#4A7BC8;font-weight:600;">{menu}</span>
+    <span style="color:#6C757D;">Início</span>
+    <span style="margin:0 6px;color:#D0D5DE;">›</span>
+    <span style="color:#1F4788;font-weight:600;">{menu}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -2023,140 +1926,185 @@ if menu not in modulos_permitidos:
     st.stop()
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    # ── KPIs — 4 por linha ───────────────────────────────────────────────
-    col1,col2,col3,col4 = st.columns(4)
+    # KPIs principais com cards customizados
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
         render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
+    
     with col2:
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
         render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
+    
     with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
         render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
+    
     with col4:
         total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
         render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
-
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-    col1b,col2b,col3b,col4b = st.columns(4)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Segunda linha de KPIs
+    col1b, col2b, col3b, col4b = st.columns(4)
+    
     with col1b:
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#6B7280")
+        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
+    
     with col2b:
         ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#6B7280")
+        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
+    
     with col3b:
         qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#6B7280")
+        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
+    
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#6B7280")
-
+        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
+    
     st.markdown("---")
-
-    # ── Linha 1 de gráficos: 4 colunas ───────────────────────────────────
-    g1, g2, g3, g4 = st.columns(4)
-
-    with g1:
-        st.markdown("**Evolução de Vendas**")
-        vendas_tempo = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
+    
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        st.subheader("📈 Evolução de Vendas Brutas")
+        # Filtra apenas vendas (sem devoluções) para o gráfico
+        vendas_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        vendas_tempo = vendas_apenas.groupby('MesAno')['TotalProduto'].sum().reset_index()
+        vendas_tempo = vendas_tempo.sort_values('MesAno')
+        
         if len(vendas_tempo) > 0:
-            fig = px.line(vendas_tempo, x='MesAno', y='TotalProduto',
-                          labels={'MesAno':'Período','TotalProduto':'R$'})
-            fig.update_traces(line_color='#1F4788', line_width=2, mode='lines+markers', marker=dict(size=4))
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with g2:
-        st.markdown("**Top 10 Estados**")
-        vendas_estado = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
-        if len(vendas_estado) > 0:
-            fig = px.bar(vendas_estado, x='Estado', y='TotalProduto',
-                         labels={'Estado':'','TotalProduto':'R$'},
-                         color_discrete_sequence=['#1F4788'])
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with g3:
-        st.markdown("**Top 10 Vendedores**")
-        vendas_vend = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
-        if len(vendas_vend) > 0:
-            fig = px.bar(vendas_vend, x='TotalProduto', y='Vendedor', orientation='h',
-                         labels={'Vendedor':'','TotalProduto':'R$'},
-                         color_discrete_sequence=['#2E86AB'])
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with g4:
-        st.markdown("**Top 10 Clientes**")
-        vendas_cli = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('RazaoSocial')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
-        if len(vendas_cli) > 0:
-            fig = px.bar(vendas_cli, x='TotalProduto', y='RazaoSocial', orientation='h',
-                         labels={'RazaoSocial':'','TotalProduto':'R$'},
-                         color_discrete_sequence=['#4A7BC8'])
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("---")
-
-    # ── Linha 2 de gráficos: 4 colunas ───────────────────────────────────
-    g5, g6, g7, g8 = st.columns(4)
-
-    with g5:
-        st.markdown("**Positivação por Vendedor**")
-        atendidos = df_filtrado[df_filtrado['TipoMov']=='NF Venda'].groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
-        atendidos.columns = ['Vendedor','Clientes']
-        atendidos = atendidos.sort_values('Clientes', ascending=False).head(10)
-        if len(atendidos) > 0:
-            fig = px.bar(atendidos, x='Vendedor', y='Clientes',
-                         labels={'Vendedor':'','Clientes':'Clientes'},
-                         color_discrete_sequence=['#163561'])
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with g6:
-        st.markdown("**Clientes sem Compra**")
-        clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov']=='NF Venda']['CPF_CNPJ'].unique())
-        todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-        valor_historico = df[df['TipoMov']=='NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
-        valor_historico.columns = ['CPF_CNPJ','ValorHistorico']
-        todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left').fillna(0)
-        clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)].sort_values('ValorHistorico', ascending=False).head(10)
-        if len(clientes_sem_compra) > 0:
-            fig = px.bar(clientes_sem_compra, x='ValorHistorico', y='RazaoSocial', orientation='h',
-                         labels={'RazaoSocial':'','ValorHistorico':'R$'},
-                         color_discrete_sequence=['#F59E0B'])
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with g7:
-        st.markdown("**Ranking de Vendedores (Valor)**")
-        rank_vend = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
-        if len(rank_vend) > 0:
-            fig = px.bar(rank_vend, x='TotalProduto', y='Vendedor', orientation='h',
-                         labels={'Vendedor':'','TotalProduto':'R$'},
-                         color_discrete_sequence=['#6366F1'])
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with g8:
-        st.markdown("**Devoluções por Período**")
-        dev_tempo = notas_unicas[notas_unicas['TipoMov']=='NF Dev.Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
-        if len(dev_tempo) > 0:
-            fig = px.bar(dev_tempo, x='MesAno', y='TotalProduto',
-                         labels={'MesAno':'Período','TotalProduto':'R$'},
-                         color_discrete_sequence=['#EF4444'])
-            fig = aplicar_layout_grafico(fig, height=220)
-            st.plotly_chart(fig, use_container_width=True)
+            fig_linha = px.line(
+                vendas_tempo, 
+                x='MesAno', 
+                y='TotalProduto',
+                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'}
+            )
+            fig_linha.update_traces(line_color='#1F4788', line_width=3, mode='lines+markers', marker=dict(size=6, color='#1F4788'))
+            fig_linha.update_layout(
+                xaxis_title="Período",
+                yaxis_title="Valor (R$)",
+                hovermode='x unified'
+            )
+            fig_linha = aplicar_layout_grafico(fig_linha)
+            st.plotly_chart(fig_linha, use_container_width=True)
         else:
-            st.info("Sem devoluções no período")
-
+            st.info("Sem dados para exibir no período selecionado")
+    
+    with col6:
+        st.subheader("🗺️ Top 10 Estados")
+        # Filtra apenas vendas (sem devoluções)
+        vendas_estado_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        vendas_estado = vendas_estado_apenas.groupby('Estado')['TotalProduto'].sum().reset_index()
+        vendas_estado = vendas_estado.sort_values('TotalProduto', ascending=False).head(10)
+        
+        fig_bar = px.bar(
+            vendas_estado, 
+            x='Estado', 
+            y='TotalProduto',
+            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
+            color='TotalProduto',
+            color_discrete_sequence=['#2E86AB']
+        )
+        fig_bar = aplicar_layout_grafico(fig_bar)
+        st.plotly_chart(fig_bar, use_container_width=True)
+    
+    st.markdown("---")
+    
+    col7, col8 = st.columns(2)
+    
+    with col7:
+        st.subheader("👥 Positivação por Vendedor")
+        vendas_periodo = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']
+        atendidos = vendas_periodo.groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
+        atendidos.columns = ['Vendedor', 'Clientes']
+        atendidos = atendidos.sort_values('Clientes', ascending=False).head(10)
+        
+        fig_posit = px.bar(
+            atendidos,
+            x='Vendedor',
+            y='Clientes',
+            labels={'Vendedor': 'Vendedor', 'Clientes': 'Clientes Atendidos'},
+            color='Clientes',
+            color_discrete_sequence=['#1F4788']
+        )
+        fig_posit = aplicar_layout_grafico(fig_posit)
+        st.plotly_chart(fig_posit, use_container_width=True)
+    
+    with col8:
+        st.subheader("🏆 Top 10 Clientes")
+        # Filtra apenas vendas
+        vendas_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        ranking_clientes = vendas_clientes.groupby('RazaoSocial')['TotalProduto'].sum().reset_index()
+        ranking_clientes = ranking_clientes.sort_values('TotalProduto', ascending=False).head(10)
+        
+        fig_clientes = px.bar(
+            ranking_clientes,
+            x='TotalProduto',
+            y='RazaoSocial',
+            orientation='h',
+            labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
+            color='TotalProduto',
+            color_discrete_sequence=['#4A7BC8']
+        )
+        fig_clientes = aplicar_layout_grafico(fig_clientes)
+        st.plotly_chart(fig_clientes, use_container_width=True)
+    
+    st.markdown("---")
+    
+    col9, col10 = st.columns(2)
+    
+    with col9:
+        st.subheader("⚠️ Clientes sem Compra (Top 10)")
+        clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
+        todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+        valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+        valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
+        
+        todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
+        todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
+        
+        clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
+        clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False).head(10)
+        
+        fig_churn = px.bar(
+            clientes_sem_compra,
+            x='ValorHistorico',
+            y='RazaoSocial',
+            orientation='h',
+            labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
+            color='ValorHistorico',
+            color_discrete_sequence=['#1F4788']
+        )
+        fig_churn = aplicar_layout_grafico(fig_churn)
+        st.plotly_chart(fig_churn, use_container_width=True)
+    
+    with col10:
+        st.subheader("📊 Ranking de Vendedores")
+        # Filtra apenas vendas
+        vendas_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
+        ranking_vendedores = vendas_vendedores.groupby('Vendedor')['TotalProduto'].sum().reset_index()
+        ranking_vendedores = ranking_vendedores.sort_values('TotalProduto', ascending=False).head(10)
+        
+        fig_rank_vend = px.bar(
+            ranking_vendedores,
+            x='TotalProduto',
+            y='Vendedor',
+            orientation='h',
+            labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
+            color='TotalProduto',
+            color_discrete_sequence=['#163561']
+        )
+        fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
+        st.plotly_chart(fig_rank_vend, use_container_width=True)
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado"])
     
@@ -2300,7 +2248,7 @@ elif menu == "Positivação":
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Inadimplência</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Inadimplência</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha de inadimplência existe
     if not planilhas_disponiveis['inadimplencia']:
@@ -2320,7 +2268,7 @@ elif menu == "Inadimplência":
         
         # ========== FILTROS ==========
         st.subheader("🔍 Filtros")
-        col_f1, col_f2 = st.columns(2)
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
         
         with col_f1:
             vendedores_inad = ['Todos'] + sorted(df_inadimplencia['Vendedor'].dropna().unique().tolist())
@@ -2330,7 +2278,21 @@ elif menu == "Inadimplência":
             estados_inad = ['Todos'] + sorted(df_inadimplencia['Estado'].dropna().unique().tolist())
             estado_inad_filtro = st.selectbox("Estado", estados_inad, key="est_inad")
         
-        data_inicial_inad, data_final_inad = renderizar_filtros_locais("inad", "📅 Ajustar Período de Vencimento")
+        with col_f3:
+            data_inicial_inad = st.date_input(
+                "Vencimento De", 
+                value=None, 
+                key="data_ini_inad",
+                format="DD/MM/YYYY"
+            )
+        
+        with col_f4:
+            data_final_inad = st.date_input(
+                "Vencimento Até", 
+                value=None, 
+                key="data_fim_inad",
+                format="DD/MM/YYYY"
+            )
         
         # Aplicar filtros
         df_inad_filtrado = df_inadimplencia.copy()
@@ -2506,7 +2468,7 @@ elif menu == "Inadimplência":
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
@@ -2611,7 +2573,7 @@ elif menu == "Clientes sem Compra":
 
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor", "📝 Pedidos"])
     
@@ -2750,7 +2712,7 @@ elif menu == "Histórico":
                 st.markdown("""
                 <div style="background:#F0F4FF;border:1px solid #C5D5F0;border-radius:10px;
                             padding:14px 18px;margin-bottom:8px;">
-                    <div style="font-size:0.88rem;font-weight:700;color:#4A7BC8;margin-bottom:4px;">
+                    <div style="font-size:0.88rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
                         Gerar Proposta Comercial PDF
                     </div>
                     <div style="font-size:0.78rem;color:#6C757D;">
@@ -2817,13 +2779,27 @@ elif menu == "Histórico":
         st.subheader("Histórico de Vendas por Vendedor")
         
         # Filtros
-        col_f1, = st.columns(1)
+        col_f1, col_f2, col_f3 = st.columns(3)
         
         with col_f1:
             vendedores_hist = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
             vendedor_hist_filtro = st.selectbox("Vendedor", vendedores_hist, key="vend_hist")
         
-        data_inicial_hist, data_final_hist = renderizar_filtros_locais("hist_vend", "📅 Ajustar Período")
+        with col_f2:
+            data_inicial_hist = st.date_input(
+                "Data Inicial", 
+                value=None, 
+                key="data_ini_hist",
+                format="DD/MM/YYYY"
+            )
+        
+        with col_f3:
+            data_final_hist = st.date_input(
+                "Data Final", 
+                value=None, 
+                key="data_fim_hist",
+                format="DD/MM/YYYY"
+            )
         
         # Aplicar filtros
         df_hist_vendedor = df[df['TipoMov'] == 'NF Venda'].copy()
@@ -3198,7 +3174,7 @@ elif menu == "Histórico":
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
     
     # Verificar se as planilhas necessárias existem
     if not planilhas_disponiveis['vendas_produto']:
@@ -3515,7 +3491,7 @@ elif menu == "Preço Médio":
 
 # ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha existe
     if not planilhas_disponiveis.get('pedidos_pendentes'):
@@ -3784,7 +3760,7 @@ elif menu == "Pedidos Pendentes":
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Vendedores", "👥 Clientes"])
     
@@ -3864,6 +3840,6 @@ st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
 <div style="text-align:center;color:#ADB5BD;font-size:0.78rem;padding-bottom:16px;">
     Dashboard BI Medtextil 2.0 &nbsp;·&nbsp; Desenvolvido com Streamlit
-    &nbsp;·&nbsp; <span style="color:#4A7BC8;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
+    &nbsp;·&nbsp; <span style="color:#1F4788;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
 </div>
 """, unsafe_allow_html=True)
