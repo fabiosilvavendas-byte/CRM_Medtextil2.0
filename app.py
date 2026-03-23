@@ -60,19 +60,19 @@ html, body, [class*="css"] {
 
 /* ── Fundo cinza muito claro ── */
 .stApp {
-    background-color: #F8F9FA !important;
+    background-color: var(--background-color) !important;
 }
 
 /* ── Sidebar limpa e profissional ── */
 [data-testid="stSidebar"] {
-    background: #FFFFFF !important;
-    border-right: 1px solid #E9ECEF !important;
+    background: var(--secondary-background-color) !important;
+    border-right: 1px solid rgba(128,128,128,0.2) !important;
     box-shadow: 2px 0 8px rgba(0,0,0,0.04) !important;
 }
 [data-testid="stSidebar"] .stMarkdown h1,
 [data-testid="stSidebar"] .stMarkdown h2,
 [data-testid="stSidebar"] .stMarkdown h3 {
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
 }
 
 /* ── Botões de navegação da sidebar estilizados ── */
@@ -96,14 +96,14 @@ html, body, [class*="css"] {
 
 [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
     background: #EEF2F7 !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     transform: translateX(3px) !important;
 }
 
 /* Botão selecionado na sidebar */
 [data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
     background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     color: white !important;
     font-weight: 600 !important;
     box-shadow: 0 2px 8px rgba(31, 71, 136, 0.2) !important;
@@ -116,7 +116,7 @@ html, body, [class*="css"] {
 
 /* ── Cards de métricas (st.metric) ── */
 [data-testid="stMetric"] {
-    background: #FFFFFF !important;
+    background: var(--secondary-background-color) !important;
     border-radius: 12px !important;
     padding: 18px 20px !important;
     border-left: 4px solid #1F4788 !important;
@@ -137,7 +137,7 @@ html, body, [class*="css"] {
 [data-testid="stMetricValue"] {
     font-size: 1.5rem !important;
     font-weight: 700 !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
 }
 
 /* ── Cor alternada para cards de destaque ── */
@@ -158,8 +158,8 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
     font-size: 0.875rem !important;
     padding: 0.5rem 1.25rem !important;
     border: 1.5px solid #1F4788 !important;
-    color: #1F4788 !important;
-    background: #FFFFFF !important;
+    color: #4A7BC8 !important;
+    background: var(--secondary-background-color) !important;
     transition: all 0.2s ease !important;
     box-shadow: 0 1px 4px rgba(31, 71, 136, 0.10) !important;
     letter-spacing: 0.01em !important;
@@ -167,14 +167,14 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 .stButton > button:hover {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     box-shadow: 0 4px 12px rgba(31, 71, 136, 0.25) !important;
     transform: translateY(-1px) !important;
 }
 .stButton > button[kind="primary"] {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
 }
 .stButton > button[kind="primary"]:hover {
     background: #163561 !important;
@@ -185,8 +185,8 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 [data-testid="stDownloadButton"] > button {
     border-radius: 8px !important;
     font-weight: 600 !important;
-    background: #F0F4FF !important;
-    color: #1F4788 !important;
+    background: var(--secondary-background-color) !important;
+    color: #4A7BC8 !important;
     border: 1.5px solid #1F4788 !important;
 }
 [data-testid="stDownloadButton"] > button:hover {
@@ -201,13 +201,13 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 
 /* ── Títulos de página ── */
 .stApp h1 {
-    color: #1A2F52 !important;
+    color: #2C5AA0 !important;
     font-weight: 700 !important;
     font-size: 1.75rem !important;
     letter-spacing: -0.02em !important;
 }
 .stApp h2 {
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     font-weight: 600 !important;
     font-size: 1.3rem !important;
 }
@@ -227,13 +227,13 @@ div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
 }
 .stSelectbox > div > div:focus-within,
 .stTextInput > div > div:focus-within {
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
     box-shadow: 0 0 0 2px rgba(31, 71, 136, 0.15) !important;
 }
 
 /* ── Tabs ── */
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: #F0F4FF !important;
+    background: var(--secondary-background-color) !important;
     border-radius: 10px !important;
     padding: 4px !important;
     border-bottom: none !important;
@@ -285,7 +285,7 @@ hr {
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 0.85rem;
-    color: #1F4788;
+    color: #4A7BC8;
     font-weight: 600;
     width: 100%;
     text-align: center;
@@ -332,12 +332,12 @@ hr {
 .stRadio > div label:has(input:checked) {
     background: #1F4788 !important;
     color: #FFFFFF !important;
-    border-color: #1F4788 !important;
+    border-color: #4A7BC8 !important;
 }
 
 /* ── Spinner ── */
 .stSpinner > div {
-    border-top-color: #1F4788 !important;
+    border-top-color: #4A7BC8 !important;
 }
 
 /* ── Sidebar navigation radio ── */
@@ -359,7 +359,7 @@ hr {
 }
 [data-testid="stSidebar"] .stRadio > div label:has(input:checked) {
     background: linear-gradient(135deg, #F0F4FF, #E4EDFC) !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     border-left: 4px solid #1F4788 !important;
     border-radius: 0 10px 10px 0 !important;
     font-weight: 700 !important;
@@ -367,7 +367,7 @@ hr {
 }
 [data-testid="stSidebar"] .stRadio > div label:hover {
     background: #F4F7FD !important;
-    color: #1F4788 !important;
+    color: #4A7BC8 !important;
     transform: translateX(2px) !important;
 }
 
@@ -388,7 +388,7 @@ hr {
 [data-testid="stMetricValue"] {
     font-size: 1.45rem !important;
     font-weight: 700 !important;
-    color: #1A2F52 !important;
+    color: #2C5AA0 !important;
 }
 
 /* ── Subheaders sem emoji weight ── */
@@ -411,6 +411,213 @@ h2, h3 {
     margin-top: -4px !important;
     font-weight: 500 !important;
     letter-spacing: 0.03em !important;
+}
+
+
+/* ══════════════════════════════════════════════════════
+   DARK MODE — sobrescreve cores fixas quando o tema
+   escuro está ativo. Usa prefers-color-scheme E o
+   atributo data-theme que o Streamlit injeta no <body>.
+   ══════════════════════════════════════════════════════ */
+
+/* Detectar dark mode via atributo do Streamlit */
+@media (prefers-color-scheme: dark) {
+    .stApp { background-color: #0E1117 !important; }
+}
+
+/* Streamlit injeta data-theme="dark" no root quando tema escuro ativo */
+[data-theme="dark"] .stApp,
+.stApp[data-theme="dark"] {
+    background-color: #0E1117 !important;
+}
+
+/* Sidebar dark */
+[data-theme="dark"] section[data-testid="stSidebar"],
+[data-theme="dark"] [data-testid="stSidebar"] {
+    background: #1A1D24 !important;
+    border-right-color: #2D3139 !important;
+}
+
+/* Métricas dark */
+[data-theme="dark"] [data-testid="stMetric"] {
+    background: #1A1D24 !important;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.3) !important;
+}
+[data-theme="dark"] [data-testid="stMetricLabel"] p {
+    color: #8A96A8 !important;
+}
+[data-theme="dark"] [data-testid="stMetricValue"] {
+    color: #E8EDF5 !important;
+}
+
+/* Filtros dark */
+[data-theme="dark"] div[style*="background:#F2F5FA"],
+[data-theme="dark"] div[style*="background: #F2F5FA"] {
+    background: #1A1D24 !important;
+    border-color: #2D3139 !important;
+}
+
+/* Botões gerais dark */
+[data-theme="dark"] .stButton > button {
+    background: #1A1D24 !important;
+    color: #A8C4E8 !important;
+    border-color: #2D5AA0 !important;
+}
+[data-theme="dark"] .stButton > button:hover {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+}
+
+/* Expander dark */
+[data-theme="dark"] [data-testid="stExpander"] {
+    background: #1A1D24 !important;
+    border-color: #2D3139 !important;
+}
+
+/* Dataframes dark */
+[data-theme="dark"] [data-testid="stDataFrame"] {
+    background: #1A1D24 !important;
+}
+
+/* Tabs dark */
+[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: #1A1D24 !important;
+}
+[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab"] {
+    color: #8A96A8 !important;
+}
+
+/* Radio sidebar dark */
+[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
+    color: #A8B4C4 !important;
+}
+[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
+    background: linear-gradient(90deg,#1A2A45,#1F3560) !important;
+    border-left-color: #4A7BC8 !important;
+}
+[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
+    color: #7EB3F7 !important;
+}
+
+/* Breadcrumb e textos de apoio dark */
+[data-theme="dark"] .stMarkdown p {
+    color: #C4CDD9 !important;
+}
+
+/* Inputs dark */
+[data-theme="dark"] .stSelectbox > div > div,
+[data-theme="dark"] .stTextInput > div > div > input,
+[data-theme="dark"] .stDateInput > div > div > input {
+    background: #1A1D24 !important;
+    border-color: #2D3139 !important;
+    color: #E0E6EF !important;
+}
+
+/* Download button dark */
+[data-theme="dark"] [data-testid="stDownloadButton"] > button {
+    background: #1A2A45 !important;
+    color: #7EB3F7 !important;
+    border-color: #2D5AA0 !important;
+}
+[data-theme="dark"] [data-testid="stDownloadButton"] > button:hover {
+    background: #1F4788 !important;
+    color: #FFFFFF !important;
+}
+
+/* Cabeçalho títulos dark */
+[data-theme="dark"] .stApp h1 { color: #E8EDF5 !important; }
+[data-theme="dark"] .stApp h2 { color: #A8C4E8 !important; }
+[data-theme="dark"] .stApp h3 { color: #8AADD4 !important; }
+
+
+/* ── Mobile (≤768px): layout compacto ── */
+@media (max-width: 768px) {
+
+    /* Cards da home: 2 por linha no mobile — seletor correto */
+    div.home-grid > div[data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        display: flex !important;
+        gap: 6px !important;
+    }
+    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        width: calc(50% - 3px) !important;
+        min-width: calc(50% - 3px) !important;
+        max-width: calc(50% - 3px) !important;
+        flex: 0 0 calc(50% - 3px) !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Filtros: esconder barra de labels (captions) no mobile */
+    .filter-header-bar { display: none !important; }
+
+    /* Colunas de filtros: empilhar verticalmente no mobile */
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"]) {
+        flex-wrap: wrap !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"])
+        > div[data-testid="stVerticalBlock"] {
+        width: calc(50% - 4px) !important;
+        min-width: calc(50% - 4px) !important;
+        flex: 0 0 calc(50% - 4px) !important;
+    }
+
+    /* Sidebar: fundo sólido no mobile — cores explícitas */
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] > div:first-child {
+        background-color: #FFFFFF !important;
+        background: #FFFFFF !important;
+    }
+    /* Dark mode sidebar mobile */
+    @media (prefers-color-scheme: dark) {
+        section[data-testid="stSidebar"],
+        section[data-testid="stSidebar"] > div,
+        section[data-testid="stSidebar"] > div:first-child {
+            background-color: #1A1D24 !important;
+            background: #1A1D24 !important;
+        }
+    }
+
+    /* Gráficos: garantir que caibam na tela */
+    div[data-testid="stPlotlyChart"] {
+        overflow-x: auto !important;
+    }
+}
+
+/* ── Expander de filtros discreto ── */
+div[data-testid="stExpander"] details {
+    border: 1px solid rgba(128,128,128,0.15) !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    margin-bottom: 8px !important;
+}
+div[data-testid="stExpander"] details summary {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: #8A96A8 !important;
+    padding: 6px 12px !important;
+}
+div[data-testid="stExpander"] details summary:hover {
+    color: #4A7BC8 !important;
+}
+
+
+/* ── Dark mode via prefers-color-scheme (mais confiável no Streamlit) ── */
+@media (prefers-color-scheme: dark) {
+    .stApp h1, .stApp h2, .stApp h3 { color: #7EB3F7 !important; }
+    [data-testid="stMetricValue"]    { color: #E8EDF5 !important; }
+    [data-testid="stMetricLabel"] p  { color: #8A96A8 !important; }
+    [data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
+        color: #7EB3F7 !important;
+    }
+    /* Títulos dos módulos (h2 inline) */
+    .stMarkdown h2 { color: #7EB3F7 !important; }
+    /* Texto padrão */
+    .stMarkdown p  { color: #C4CDD9 !important; }
+    /* Cards */
+    [data-testid="stMetric"] { background: var(--secondary-background-color) !important; }
+    /* Breadcrumb */
+    [data-testid="stSidebar"] { background: var(--secondary-background-color) !important; }
 }
 
 </style>
@@ -539,7 +746,7 @@ def check_password():
                 <img src="https://i.imgur.com/gt3rgyL.png" height="52"
                      style="border-radius:8px;" onerror="this.style.display='none'"/>
             </div>
-            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
+            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#4A7BC8;margin-bottom:4px;">
                 Medtextil BI
             </div>
             <div style="text-align:center;font-size:0.85rem;color:#6C757D;margin-bottom:8px;">
@@ -1395,6 +1602,34 @@ def gerar_proposta_pdf_historico(cliente_info_dict, historico_df, vendas_resumo)
         buffer.seek(0)
         return buffer.getvalue()
 
+
+# ====================== FILTROS DE DATA LOCAIS ======================
+def renderizar_filtros_locais(key_prefix, label="📅 Ajustar Período"):
+    """
+    Expander compacto com date_inputs lado a lado.
+    Retorna (data_inicial, data_final) — None se não preenchido.
+    Usa key_prefix para evitar conflito de keys entre módulos.
+    """
+    data_ini = None
+    data_fim = None
+    with st.expander(label, expanded=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            data_ini = st.date_input(
+                "De", value=None,
+                key=f"local_ini_{key_prefix}",
+                format="DD/MM/YYYY",
+                label_visibility="visible"
+            )
+        with c2:
+            data_fim = st.date_input(
+                "Até", value=None,
+                key=f"local_fim_{key_prefix}",
+                format="DD/MM/YYYY",
+                label_visibility="visible"
+            )
+    return data_ini, data_fim
+
 # ====================== INÍCIO DO APP ======================
 if not check_password():
     st.stop()
@@ -1413,7 +1648,7 @@ with st.sidebar:
         <img src="https://i.imgur.com/gt3rgyL.png" height="56"
              style="border-radius:10px;box-shadow:0 2px 8px rgba(31,71,136,0.18);"
              onerror="this.style.display='none'"/>
-        <div style="font-size:0.8rem;font-weight:800;color:#1F4788;letter-spacing:0.1em;
+        <div style="font-size:0.8rem;font-weight:800;color:#4A7BC8;letter-spacing:0.1em;
                     text-transform:uppercase;margin-top:10px;">Medtextil</div>
         <div style="font-size:0.65rem;color:#ADB5BD;letter-spacing:0.06em;margin-top:1px;">
             BI Dashboard 2.0
@@ -1423,7 +1658,7 @@ with st.sidebar:
     # ── Badge do usuário ──
     st.markdown(f"""
     <div style="background:linear-gradient(135deg,#F0F4FF,#E8EFFD);border:1px solid #C5D5F0;
-                border-radius:10px;padding:10px 14px;font-size:0.83rem;color:#1F4788;
+                border-radius:10px;padding:10px 14px;font-size:0.83rem;color:#4A7BC8;
                 font-weight:600;text-align:center;margin-bottom:6px;">
         👤 &nbsp;{nome_usuario}
     </div>
@@ -1511,45 +1746,32 @@ else:
     df['Comissao'] = ''
 ''
 
-# ── Barra de Filtros Compactos ────────────────────────────────────────────
-st.markdown("""
-<div style="background:#F2F5FA;border-radius:10px;padding:8px 14px 2px 14px;
-            margin-bottom:14px;border:1px solid #DDE3EE;">
-    <span style="font-size:0.68rem;font-weight:700;color:#8A96A8;letter-spacing:0.1em;
-                 text-transform:uppercase;">Filtros de Período e Segmentação</span>
-</div>
-""", unsafe_allow_html=True)
-
-fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([1.1, 1.1, 1.6, 1.6, 0.9, 0.9])
-with fc1:
-    data_inicial = st.date_input("Di", value=None, key="data_ini", format="DD/MM/YYYY",
-                                  label_visibility="collapsed")
-    st.caption("📅 Data Inicial")
-with fc2:
-    data_final = st.date_input("Df", value=None, key="data_fim", format="DD/MM/YYYY",
-                                label_visibility="collapsed")
-    st.caption("📅 Data Final")
-with fc3:
-    vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
-    vendedor_filtro = st.selectbox("V", vendedores, key="vend_global",
-                                    label_visibility="collapsed")
-    st.caption("👤 Vendedor")
-with fc4:
-    estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
-    estado_filtro = st.selectbox("E", estados, key="est_global",
-                                  label_visibility="collapsed")
-    st.caption("🗺️ Estado")
-with fc5:
-    meses_opcoes = ['Todos'] + list(range(1, 13))
-    mes_filtro = st.selectbox("M", meses_opcoes, key="mes_global",
-                               label_visibility="collapsed")
-    st.caption("📆 Mês")
-with fc6:
-    anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
-    ano_filtro = st.selectbox("A", anos_opcoes, key="ano_global",
-                               label_visibility="collapsed")
-    st.caption("🗓️ Ano")
-
+# ── Filtros Globais — dentro de expander único ───────────────────────────
+with st.expander("⚙️ Filtros", expanded=False):
+    # Linha 1: Datas lado a lado
+    fc1, fc2 = st.columns(2)
+    with fc1:
+        data_inicial = st.date_input("📅 Data Inicial", value=None,
+                                     key="data_ini", format="DD/MM/YYYY")
+    with fc2:
+        data_final = st.date_input("📅 Data Final", value=None,
+                                   key="data_fim", format="DD/MM/YYYY")
+    # Linha 2: Vendedor e Estado lado a lado
+    fc3, fc4 = st.columns(2)
+    with fc3:
+        vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
+        vendedor_filtro = st.selectbox("👤 Vendedor", vendedores, key="vend_global")
+    with fc4:
+        estados = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
+        estado_filtro = st.selectbox("🗺️ Estado", estados, key="est_global")
+    # Linha 3: Mês e Ano lado a lado
+    fc5, fc6 = st.columns(2)
+    with fc5:
+        meses_opcoes = ['Todos'] + list(range(1, 13))
+        mes_filtro = st.selectbox("📆 Mês", meses_opcoes, key="mes_global")
+    with fc6:
+        anos_opcoes = ['Todos'] + sorted(df['Ano'].dropna().unique().tolist(), reverse=True)
+        ano_filtro = st.selectbox("🗓️ Ano", anos_opcoes, key="ano_global")
 df_filtrado = df.copy()
 
 if data_inicial:
@@ -1602,7 +1824,7 @@ st.markdown("""
 
 /* ── Base ── */
 html, body, [class*="css"] { font-family: 'Inter','Segoe UI',sans-serif !important; }
-.stApp { background-color: #F8F9FA !important; }
+.stApp { background-color: var(--background-color) !important; }
 
 /* ── Remove padding padrão das colunas (alinha cards) ── */
 div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
@@ -1615,8 +1837,8 @@ div[data-testid="column"] { padding: 0 !important; }
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background: #FFFFFF !important;
-    border-right: 1px solid #E9ECEF !important;
+    background: var(--secondary-background-color) !important;
+    border-right: 1px solid rgba(128,128,128,0.2) !important;
 }
 section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
 section[data-testid="stSidebar"] .stRadio > div {
@@ -1630,14 +1852,14 @@ section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
     transition: all 0.15s !important; align-items: center !important;
 }
 section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
-    background: #F4F7FD !important; border-left-color: #8EB3E8 !important;
+    background: rgba(31,71,136,0.08) !important; border-left-color: #8EB3E8 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
     background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
-    border-left-color: #1F4788 !important;
+    border-left-color: #4A7BC8 !important;
 }
 section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #1F4788 !important; font-weight: 600 !important;
+    color: #4A7BC8 !important; font-weight: 600 !important;
 }
 section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"],
 section[data-testid="stSidebar"] .stRadio div[class*="RadioMarkFill"],
@@ -1685,11 +1907,11 @@ div.med-card .mc-icon {
     width: 38px; height: 38px;
     background: #EEF3FC; border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
-    margin-bottom: 11px; color: #1F4788; font-size: 16px;
+    margin-bottom: 11px; color: #4A7BC8; font-size: 16px;
 }
 div.med-card .mc-title {
     font-size: 0.94rem; font-weight: 700;
-    color: #1A2F52; margin-bottom: 4px; letter-spacing: -0.01em;
+    color: #2C5AA0; margin-bottom: 4px; letter-spacing: -0.01em;
 }
 div.med-card .mc-desc {
     font-size: 0.75rem; color: #6C757D; line-height: 1.4; margin-bottom: 9px;
@@ -1719,7 +1941,7 @@ div.med-card-col div[data-testid="stButton"] > button {
 
 /* ── Métricas ── */
 [data-testid="stMetric"] {
-    background: #FFFFFF !important; border-radius: 12px !important;
+    background: var(--secondary-background-color) !important; border-radius: 12px !important;
     padding: 16px 18px !important; border-left: 4px solid #1F4788 !important;
     box-shadow: 0 1px 6px rgba(31,71,136,0.07) !important;
 }
@@ -1729,7 +1951,7 @@ div.med-card-col div[data-testid="stButton"] > button {
     color: #8A96A8 !important;
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.4rem !important; font-weight: 700 !important; color: #1A2F52 !important;
+    font-size: 1.4rem !important; font-weight: 700 !important; color: #2C5AA0 !important;
 }
 
 /* ── Botões gerais ── */
@@ -1814,7 +2036,7 @@ if st.session_state.menu_option == '__home__':
 
     st.markdown(f"""
     <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
-        <div style="font-size:1.45rem;font-weight:600;color:#1A2F52;margin-bottom:3px;">
+        <div style="font-size:1.45rem;font-weight:600;color:#2C5AA0;margin-bottom:3px;">
             Olá, {usuario_info.get('nome','Usuário')}
         </div>
         <div style="color:#8A96A8;font-size:0.87rem;">
@@ -1823,86 +2045,100 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — cards com overlay invisível CORRETO
-    for row_start in range(0, len(cards_visiveis), 4):
-        row = cards_visiveis[row_start:row_start+4]
-        cols = st.columns(4)
-        for j, card in enumerate(row):
+    # Grid 4 colunas — técnica de botão overlay que FUNCIONA
+    try:
+        from streamlit_card import card as st_card
+        _USE_CARD_LIB = True
+    except ImportError:
+        _USE_CARD_LIB = False
+
+    # ── Detectar mobile via streamlit-js-eval ───────────────────────────
+    try:
+        from streamlit_js_eval import streamlit_js_eval
+        _screen_width = streamlit_js_eval(
+            js_expressions="window.innerWidth",
+            key="screen_width"
+        )
+        _is_mobile = bool(_screen_width and int(_screen_width) <= 768)
+    except Exception:
+        _is_mobile = False
+
+    _n_cols = 2 if _is_mobile else 4
+
+    for row_start in range(0, len(cards_visiveis), _n_cols):
+        row = cards_visiveis[row_start:row_start+_n_cols]
+        cols = st.columns(_n_cols)
+        for j, c in enumerate(row):
             with cols[j]:
-                nome = card['nome']
+                nome = c['nome']
                 desc = _DESC.get(nome, '')
-                info = card['info']
+                info = c['info']
                 ic   = _ICONES_CARD.get(nome, '•')
 
-                # Container que empilha card + botão
-                container = st.container()
-                
-                with container:
-                    # Card visual HTML
-                    st.markdown(f"""
-                    <div class="card-wrapper" style="position: relative;">
-                        <div class="med-card"
-                             onmouseover="this.style.borderColor='#B8CDF0';this.style.boxShadow='0 7px 22px rgba(31,71,136,.14)';this.style.transform='translateY(-3px)'"
-                             onmouseout="this.style.borderColor='#E4E9F0';this.style.boxShadow='0 1px 5px rgba(31,71,136,.06)';this.style.transform='translateY(0)'">
-                            <div class="mc-icon">{ic}</div>
-                            <div class="mc-title">{nome}</div>
-                            <div class="mc-desc">{desc}</div>
-                            <div class="mc-info">{info}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Botão overlay TRANSPARENTE (position absolute via CSS)
-                    if st.button("​", key=f"card_{nome}", use_container_width=True):
+                if _USE_CARD_LIB:
+                    clicked = st_card(
+                        title=f"{ic}  {nome}",
+                        text=[desc, info],
+                        key=f"hc_{nome}",
+                        styles={
+                            "card": {
+                                "width": "100%",
+                                "height": "190px",
+                                "background-color": "var(--secondary-background-color)",
+                                "border": "1px solid #E4E9F0",
+                                "border-radius": "14px",
+                                "box-shadow": "0 1px 6px rgba(31,71,136,0.07)",
+                                "cursor": "pointer",
+                                "padding": "22px 20px 18px 20px",
+                                "transition": "box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease",
+                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
+                                "margin": "0",
+                            },
+                            "title": {
+                                "font-size": "1rem",
+                                "font-weight": "700",
+                                "color": "#2C5AA0",
+                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
+                                "letter-spacing": "-0.01em",
+                                "margin-bottom": "6px",
+                                "white-space": "nowrap",
+                                "overflow": "hidden",
+                                "text-overflow": "ellipsis",
+                            },
+                            "text": {
+                                "font-size": "0.78rem",
+                                "color": "#6C757D",
+                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
+                                "line-height": "1.45",
+                                "font-weight": "400",
+                            },
+                            "filter": {"background": "rgba(0,0,0,0)"},
+                        }
+                    )
+                    if clicked:
                         st.session_state.menu_option = nome
                         st.rerun()
-                    
-                    # CSS para fazer o botão ficar SOBRE o card com position absolute
+                else:
                     st.markdown(f"""
-                    <style>
-                    /* Wrapper do card */
-                    .card-wrapper {{
-                        position: relative;
-                        width: 100%;
-                    }}
-                    
-                    /* Botão overlay invisível - position absolute */
-                    .card-wrapper + div[data-testid="stButton"] {{
-                        position: absolute !important;
-                        top: 0 !important;
-                        left: 0 !important;
-                        width: 100% !important;
-                        height: 100% !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        z-index: 10 !important;
-                    }}
-                    
-                    .card-wrapper + div[data-testid="stButton"] button {{
-                        position: absolute !important;
-                        top: 0 !important;
-                        left: 0 !important;
-                        width: 100% !important;
-                        height: 138px !important;
-                        background: transparent !important;
-                        color: transparent !important;
-                        border: none !important;
-                        opacity: 1 !important;
-                        cursor: pointer !important;
-                        z-index: 10 !important;
-                        padding: 0 !important;
-                        margin: 0 !important;
-                    }}
-                    
-                    .card-wrapper + div[data-testid="stButton"] button:hover {{
-                        background: transparent !important;
-                    }}
-                    </style>
+                    <div style="background:var(--secondary-background-color);border:1px solid rgba(128,128,128,0.2);
+                                border-radius:14px;padding:20px 18px;min-height:148px;
+                                box-shadow:0 1px 6px rgba(31,71,136,0.07);
+                                font-family:'Inter','Segoe UI',sans-serif;">
+                        <div style="font-size:1rem;margin-bottom:10px;">{ic}</div>
+                        <div style="font-size:0.95rem;font-weight:700;color:#2C5AA0;
+                                    margin-bottom:5px;">{nome}</div>
+                        <div style="font-size:0.76rem;color:#6C757D;
+                                    margin-bottom:8px;">{desc}</div>
+                        <div style="font-size:0.70rem;color:#ADB5BD;
+                                    border-top:1px solid #F0F2F5;padding-top:7px;">{info}</div>
+                    </div>
                     """, unsafe_allow_html=True)
+                    if st.button(f"Abrir {nome}", key=f"hc_{nome}",
+                                 use_container_width=True):
+                        st.session_state.menu_option = nome
+                        st.rerun()
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    
-
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
@@ -1913,7 +2149,7 @@ st.markdown(f"""
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
     <span style="color:#6C757D;">Início</span>
     <span style="margin:0 6px;color:#D0D5DE;">›</span>
-    <span style="color:#1F4788;font-weight:600;">{menu}</span>
+    <span style="color:#4A7BC8;font-weight:600;">{menu}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -2104,7 +2340,7 @@ if menu == "Dashboard":
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado"])
     
@@ -2248,7 +2484,7 @@ elif menu == "Positivação":
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Inadimplência</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Inadimplência</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha de inadimplência existe
     if not planilhas_disponiveis['inadimplencia']:
@@ -2268,7 +2504,7 @@ elif menu == "Inadimplência":
         
         # ========== FILTROS ==========
         st.subheader("🔍 Filtros")
-        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        col_f1, col_f2 = st.columns(2)
         
         with col_f1:
             vendedores_inad = ['Todos'] + sorted(df_inadimplencia['Vendedor'].dropna().unique().tolist())
@@ -2278,21 +2514,7 @@ elif menu == "Inadimplência":
             estados_inad = ['Todos'] + sorted(df_inadimplencia['Estado'].dropna().unique().tolist())
             estado_inad_filtro = st.selectbox("Estado", estados_inad, key="est_inad")
         
-        with col_f3:
-            data_inicial_inad = st.date_input(
-                "Vencimento De", 
-                value=None, 
-                key="data_ini_inad",
-                format="DD/MM/YYYY"
-            )
-        
-        with col_f4:
-            data_final_inad = st.date_input(
-                "Vencimento Até", 
-                value=None, 
-                key="data_fim_inad",
-                format="DD/MM/YYYY"
-            )
+        data_inicial_inad, data_final_inad = renderizar_filtros_locais("inad", "📅 Ajustar Período de Vencimento")
         
         # Aplicar filtros
         df_inad_filtrado = df_inadimplencia.copy()
@@ -2468,7 +2690,7 @@ elif menu == "Inadimplência":
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
@@ -2573,7 +2795,7 @@ elif menu == "Clientes sem Compra":
 
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["👤 Por Cliente", "🧑‍💼 Por Vendedor", "📝 Pedidos"])
     
@@ -2712,7 +2934,7 @@ elif menu == "Histórico":
                 st.markdown("""
                 <div style="background:#F0F4FF;border:1px solid #C5D5F0;border-radius:10px;
                             padding:14px 18px;margin-bottom:8px;">
-                    <div style="font-size:0.88rem;font-weight:700;color:#1F4788;margin-bottom:4px;">
+                    <div style="font-size:0.88rem;font-weight:700;color:#4A7BC8;margin-bottom:4px;">
                         Gerar Proposta Comercial PDF
                     </div>
                     <div style="font-size:0.78rem;color:#6C757D;">
@@ -2779,27 +3001,13 @@ elif menu == "Histórico":
         st.subheader("Histórico de Vendas por Vendedor")
         
         # Filtros
-        col_f1, col_f2, col_f3 = st.columns(3)
+        col_f1, = st.columns(1)
         
         with col_f1:
             vendedores_hist = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
             vendedor_hist_filtro = st.selectbox("Vendedor", vendedores_hist, key="vend_hist")
         
-        with col_f2:
-            data_inicial_hist = st.date_input(
-                "Data Inicial", 
-                value=None, 
-                key="data_ini_hist",
-                format="DD/MM/YYYY"
-            )
-        
-        with col_f3:
-            data_final_hist = st.date_input(
-                "Data Final", 
-                value=None, 
-                key="data_fim_hist",
-                format="DD/MM/YYYY"
-            )
+        data_inicial_hist, data_final_hist = renderizar_filtros_locais("hist_vend", "📅 Ajustar Período")
         
         # Aplicar filtros
         df_hist_vendedor = df[df['TipoMov'] == 'NF Venda'].copy()
@@ -3174,7 +3382,7 @@ elif menu == "Histórico":
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
     
     # Verificar se as planilhas necessárias existem
     if not planilhas_disponiveis['vendas_produto']:
@@ -3491,7 +3699,7 @@ elif menu == "Preço Médio":
 
 # ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
     
     # Verificar se a planilha existe
     if not planilhas_disponiveis.get('pedidos_pendentes'):
@@ -3760,7 +3968,7 @@ elif menu == "Pedidos Pendentes":
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
-    st.markdown('<h2 style="color:#1F4788;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["📊 Vendedores", "👥 Clientes"])
     
@@ -3840,6 +4048,6 @@ st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
 <div style="text-align:center;color:#ADB5BD;font-size:0.78rem;padding-bottom:16px;">
     Dashboard BI Medtextil 2.0 &nbsp;·&nbsp; Desenvolvido com Streamlit
-    &nbsp;·&nbsp; <span style="color:#1F4788;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
+    &nbsp;·&nbsp; <span style="color:#4A7BC8;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
 </div>
 """, unsafe_allow_html=True)
