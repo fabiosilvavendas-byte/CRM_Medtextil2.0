@@ -1801,7 +1801,7 @@ _DESC = {
 _INFO_CARD = {}  # preenchido depois dos dados
 
 if 'menu_option' not in st.session_state:
-    st.session_state.menu_option = '__home__'
+    st.session_state.menu_option = 'Dashboard'
 
 modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Dashboard","Positivação","Inadimplência","Clientes sem Compra",
@@ -1986,7 +1986,7 @@ with st.sidebar:
     # Botão Início
     if st.button("🏠  Início", key="nav_home", use_container_width=True, 
                  type="primary" if st.session_state.menu_option == '__home__' else "secondary"):
-        st.session_state.menu_option = '__home__'
+        st.session_state.menu_option = 'Dashboard'
         st.rerun()
     
     # Botões dos módulos
@@ -2002,191 +2002,7 @@ with st.sidebar:
             st.rerun()
 
 # ── Tela Home ─────────────────────────────────────────────────────────────
-if st.session_state.menu_option == '__home__':
-    usuario_info = st.session_state.get("usuario", {})
 
-    try:
-        vendas_mes = notas_unicas[
-            (notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) &
-            (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)
-        ]['Valor_Real'].sum()
-    except:
-        vendas_mes = 0
-    try:
-        total_clientes = len(df['RazaoSocial'].unique())
-    except:
-        total_clientes = 0
-
-    cards_data = [
-        {'nome':'Dashboard',          'info':f'R$ {vendas_mes:,.0f} no mês atual'},
-        {'nome':'Positivação',         'info':f'{total_clientes} clientes na base'},
-        {'nome':'Inadimplência',       'info':'Títulos em aberto e atrasos'},
-        {'nome':'Clientes sem Compra', 'info':'Identificar inativos'},
-        {'nome':'Histórico',           'info':'Por cliente ou vendedor'},
-        {'nome':'Preço Médio',         'info':'Análise por produto'},
-        {'nome':'Pedidos Pendentes',   'info':'Aguardando faturamento'},
-        {'nome':'Rankings',            'info':'Top vendedores e clientes'},
-    ]
-    cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
-
-    st.markdown(f"""
-    <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
-        <div style="font-size:1.45rem;font-weight:600;color:#2C5AA0;margin-bottom:3px;">
-            Olá, {usuario_info.get('nome','Usuário')}
-        </div>
-        <div style="color:#8A96A8;font-size:0.87rem;">
-            Selecione um módulo abaixo para iniciar a análise.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Grid 4 colunas — técnica de botão overlay que FUNCIONA
-    _USE_CARD_LIB = False  # streamlit-card substituído por st.button nativo
-
-    # ── Saudação ─────────────────────────────────────────────────────────
-    st.markdown(f"""
-    <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #E9ECEF;">
-        <div style="font-size:1.3rem;font-weight:600;color:#2C5AA0;margin-bottom:2px;">
-            Olá, {usuario_info.get('nome','Usuário')}
-        </div>
-        <div style="color:#8A96A8;font-size:0.82rem;">Resumo executivo — dados do período selecionado</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════
-    # BLOCO 1 — KPIs principais (4 por linha)
-    # ══════════════════════════════════════════════════════
-    vendas_brutas     = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-    fat_liquido       = notas_unicas['Valor_Real'].sum()
-    clientes_unicos   = df_filtrado['CPF_CNPJ'].nunique()
-    total_notas       = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-    total_dev         = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-    ticket_medio      = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-    taxa_dev          = (total_dev / vendas_brutas * 100) if vendas_brutas > 0 else 0
-
-    k1,k2,k3,k4 = st.columns(4)
-    with k1: render_kpi_card("Faturamento Bruto",   f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
-    with k2: render_kpi_card("Faturamento Líquido", f"R$ {fat_liquido:,.0f}",   icon="💵", color="#10B981")
-    with k3: render_kpi_card("Clientes Únicos",     f"{clientes_unicos:,}",     icon="👥", color="#F59E0B")
-    with k4: render_kpi_card("Notas de Venda",      f"{total_notas:,}",         icon="📄", color="#EF4444")
-
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-    k5,k6,k7,k8 = st.columns(4)
-    with k5: render_kpi_card("Devoluções",     f"R$ {total_dev:,.0f}",   icon="↩️", color="#6B7280")
-    with k6: render_kpi_card("Ticket Médio",   f"R$ {ticket_medio:,.0f}", icon="🎯", color="#6B7280")
-    with k7:
-        notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        render_kpi_card("Notas Devolução", f"{notas_dev:,}", icon="📋", color="#6B7280")
-    with k8: render_kpi_card("Taxa Devolução", f"{taxa_dev:.1f}%", icon="📊", color="#6B7280")
-
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════
-    # BLOCO 2 — Gráficos mini (4 por linha)
-    # ══════════════════════════════════════════════════════
-    g1, g2, g3, g4 = st.columns(4)
-
-    # Gráfico 1: Evolução de vendas
-    with g1:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Evolução de Vendas</div>", unsafe_allow_html=True)
-        _vt = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
-        if len(_vt) > 0:
-            _fig = px.line(_vt, x='MesAno', y='TotalProduto', labels={'MesAno':'','TotalProduto':''})
-            _fig.update_traces(line_color='#1F4788', line_width=2)
-            _fig = aplicar_layout_grafico(_fig, height=180)
-            _fig.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(showticklabels=False))
-            st.plotly_chart(_fig, use_container_width=True, config={'displayModeBar': False})
-
-    # Gráfico 2: Top 5 Estados
-    with g2:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Top 5 Estados</div>", unsafe_allow_html=True)
-        _ve = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(5)
-        if len(_ve) > 0:
-            _fig2 = px.bar(_ve, x='TotalProduto', y='Estado', orientation='h', labels={'Estado':'','TotalProduto':''}, color_discrete_sequence=['#1F4788'])
-            _fig2 = aplicar_layout_grafico(_fig2, height=180)
-            _fig2.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
-            st.plotly_chart(_fig2, use_container_width=True, config={'displayModeBar': False})
-
-    # Gráfico 3: Top 5 Vendedores
-    with g3:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Top 5 Vendedores</div>", unsafe_allow_html=True)
-        _vv = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(5)
-        if len(_vv) > 0:
-            _fig3 = px.bar(_vv, x='TotalProduto', y='Vendedor', orientation='h', labels={'Vendedor':'','TotalProduto':''}, color_discrete_sequence=['#2E86AB'])
-            _fig3 = aplicar_layout_grafico(_fig3, height=180)
-            _fig3.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
-            st.plotly_chart(_fig3, use_container_width=True, config={'displayModeBar': False})
-
-    # Gráfico 4: Top 5 Clientes
-    with g4:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Top 5 Clientes</div>", unsafe_allow_html=True)
-        _vc = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('RazaoSocial')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(5)
-        if len(_vc) > 0:
-            _fig4 = px.bar(_vc, x='TotalProduto', y='RazaoSocial', orientation='h', labels={'RazaoSocial':'','TotalProduto':''}, color_discrete_sequence=['#4A7BC8'])
-            _fig4 = aplicar_layout_grafico(_fig4, height=180)
-            _fig4.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
-            st.plotly_chart(_fig4, use_container_width=True, config={'displayModeBar': False})
-
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════
-    # BLOCO 3 — Segunda linha de gráficos (4 por linha)
-    # ══════════════════════════════════════════════════════
-    g5, g6, g7, g8 = st.columns(4)
-
-    # Gráfico 5: Positivação por vendedor
-    with g5:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Positivação por Vendedor</div>", unsafe_allow_html=True)
-        _vp = df_filtrado[df_filtrado['TipoMov']=='NF Venda'].groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
-        _vp.columns = ['Vendedor','Clientes']
-        _vp = _vp.sort_values('Clientes', ascending=False).head(5)
-        if len(_vp) > 0:
-            _fig5 = px.bar(_vp, x='Clientes', y='Vendedor', orientation='h', labels={'Vendedor':'','Clientes':''}, color_discrete_sequence=['#163561'])
-            _fig5 = aplicar_layout_grafico(_fig5, height=180)
-            _fig5.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
-            st.plotly_chart(_fig5, use_container_width=True, config={'displayModeBar': False})
-
-    # Gráfico 6: Devoluções por mês
-    with g6:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Devoluções por Mês</div>", unsafe_allow_html=True)
-        _vd = notas_unicas[notas_unicas['TipoMov']=='NF Dev.Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
-        if len(_vd) > 0:
-            _fig6 = px.bar(_vd, x='MesAno', y='TotalProduto', labels={'MesAno':'','TotalProduto':''}, color_discrete_sequence=['#EF4444'])
-            _fig6 = aplicar_layout_grafico(_fig6, height=180)
-            _fig6.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(showticklabels=False))
-            st.plotly_chart(_fig6, use_container_width=True, config={'displayModeBar': False})
-        else:
-            st.markdown("<div style='height:180px;display:flex;align-items:center;justify-content:center;color:#ADB5BD;font-size:0.75rem;'>Sem devoluções</div>", unsafe_allow_html=True)
-
-    # Gráfico 7: Distribuição por estado (pizza)
-    with g7:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Distribuição por Estado</div>", unsafe_allow_html=True)
-        _vpe = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(6)
-        if len(_vpe) > 0:
-            _fig7 = px.pie(_vpe, values='TotalProduto', names='Estado',
-                           color_discrete_sequence=['#1F4788','#2E86AB','#4A7BC8','#6B9FD4','#8CB8E0','#AED1EC'])
-            _fig7.update_traces(textinfo='none', hovertemplate='%{label}: R$ %{value:,.0f}')
-            _fig7 = aplicar_layout_grafico(_fig7, height=180)
-            _fig7.update_layout(margin=dict(l=0,r=0,t=4,b=0), showlegend=False)
-            st.plotly_chart(_fig7, use_container_width=True, config={'displayModeBar': False})
-
-    # Gráfico 8: Clientes sem compra (top 5)
-    with g8:
-        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Clientes sem Compra</div>", unsafe_allow_html=True)
-        _cc = set(df_filtrado[df_filtrado['TipoMov']=='NF Venda']['CPF_CNPJ'].unique())
-        _tc = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-        _vh = df[df['TipoMov']=='NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
-        _vh.columns = ['CPF_CNPJ','ValorHist']
-        _tc = pd.merge(_tc, _vh, on='CPF_CNPJ', how='left').fillna(0)
-        _sc = _tc[~_tc['CPF_CNPJ'].isin(_cc)].sort_values('ValorHist', ascending=False).head(5)
-        if len(_sc) > 0:
-            _fig8 = px.bar(_sc, x='ValorHist', y='RazaoSocial', orientation='h',
-                           labels={'RazaoSocial':'','ValorHist':''}, color_discrete_sequence=['#F59E0B'])
-            _fig8 = aplicar_layout_grafico(_fig8, height=180)
-            _fig8.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
-            st.plotly_chart(_fig8, use_container_width=True, config={'displayModeBar': False})
-    st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
 menu = st.session_state.menu_option
@@ -2194,8 +2010,6 @@ menu = st.session_state.menu_option
 st.markdown(f"""
 <div style="font-size:0.74rem;color:#ADB5BD;margin-bottom:14px;
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
-    <span style="color:#6C757D;">Início</span>
-    <span style="margin:0 6px;color:#D0D5DE;">›</span>
     <span style="color:#4A7BC8;font-weight:600;">{menu}</span>
 </div>
 """, unsafe_allow_html=True)
@@ -2209,181 +2023,136 @@ if menu not in modulos_permitidos:
     st.stop()
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    # KPIs principais com cards customizados
-    col1, col2, col3, col4 = st.columns(4)
-    
+    # ── KPIs — 4 por linha ───────────────────────────────────────────────
+    col1,col2,col3,col4 = st.columns(4)
     with col1:
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
         render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
-    
     with col2:
         faturamento_liquido = notas_unicas['Valor_Real'].sum()
         render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
-    
     with col3:
         clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
         render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
-    
     with col4:
         total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
         render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Segunda linha de KPIs
-    col1b, col2b, col3b, col4b = st.columns(4)
-    
+
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+    col1b,col2b,col3b,col4b = st.columns(4)
     with col1b:
         total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
-    
+        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#6B7280")
     with col2b:
         ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
-    
+        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#6B7280")
     with col3b:
         qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
-    
+        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#6B7280")
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
-    
+        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#6B7280")
+
     st.markdown("---")
-    
-    col5, col6 = st.columns(2)
-    
-    with col5:
-        st.subheader("📈 Evolução de Vendas Brutas")
-        # Filtra apenas vendas (sem devoluções) para o gráfico
-        vendas_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        vendas_tempo = vendas_apenas.groupby('MesAno')['TotalProduto'].sum().reset_index()
-        vendas_tempo = vendas_tempo.sort_values('MesAno')
-        
+
+    # ── Linha 1 de gráficos: 4 colunas ───────────────────────────────────
+    g1, g2, g3, g4 = st.columns(4)
+
+    with g1:
+        st.markdown("**Evolução de Vendas**")
+        vendas_tempo = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
         if len(vendas_tempo) > 0:
-            fig_linha = px.line(
-                vendas_tempo, 
-                x='MesAno', 
-                y='TotalProduto',
-                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'}
-            )
-            fig_linha.update_traces(line_color='#1F4788', line_width=3, mode='lines+markers', marker=dict(size=6, color='#1F4788'))
-            fig_linha.update_layout(
-                xaxis_title="Período",
-                yaxis_title="Valor (R$)",
-                hovermode='x unified'
-            )
-            fig_linha = aplicar_layout_grafico(fig_linha)
-            st.plotly_chart(fig_linha, use_container_width=True)
-        else:
-            st.info("Sem dados para exibir no período selecionado")
-    
-    with col6:
-        st.subheader("🗺️ Top 10 Estados")
-        # Filtra apenas vendas (sem devoluções)
-        vendas_estado_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        vendas_estado = vendas_estado_apenas.groupby('Estado')['TotalProduto'].sum().reset_index()
-        vendas_estado = vendas_estado.sort_values('TotalProduto', ascending=False).head(10)
-        
-        fig_bar = px.bar(
-            vendas_estado, 
-            x='Estado', 
-            y='TotalProduto',
-            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
-            color='TotalProduto',
-            color_discrete_sequence=['#2E86AB']
-        )
-        fig_bar = aplicar_layout_grafico(fig_bar)
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
+            fig = px.line(vendas_tempo, x='MesAno', y='TotalProduto',
+                          labels={'MesAno':'Período','TotalProduto':'R$'})
+            fig.update_traces(line_color='#1F4788', line_width=2, mode='lines+markers', marker=dict(size=4))
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with g2:
+        st.markdown("**Top 10 Estados**")
+        vendas_estado = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        if len(vendas_estado) > 0:
+            fig = px.bar(vendas_estado, x='Estado', y='TotalProduto',
+                         labels={'Estado':'','TotalProduto':'R$'},
+                         color_discrete_sequence=['#1F4788'])
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with g3:
+        st.markdown("**Top 10 Vendedores**")
+        vendas_vend = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        if len(vendas_vend) > 0:
+            fig = px.bar(vendas_vend, x='TotalProduto', y='Vendedor', orientation='h',
+                         labels={'Vendedor':'','TotalProduto':'R$'},
+                         color_discrete_sequence=['#2E86AB'])
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with g4:
+        st.markdown("**Top 10 Clientes**")
+        vendas_cli = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('RazaoSocial')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        if len(vendas_cli) > 0:
+            fig = px.bar(vendas_cli, x='TotalProduto', y='RazaoSocial', orientation='h',
+                         labels={'RazaoSocial':'','TotalProduto':'R$'},
+                         color_discrete_sequence=['#4A7BC8'])
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+
     st.markdown("---")
-    
-    col7, col8 = st.columns(2)
-    
-    with col7:
-        st.subheader("👥 Positivação por Vendedor")
-        vendas_periodo = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']
-        atendidos = vendas_periodo.groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
-        atendidos.columns = ['Vendedor', 'Clientes']
+
+    # ── Linha 2 de gráficos: 4 colunas ───────────────────────────────────
+    g5, g6, g7, g8 = st.columns(4)
+
+    with g5:
+        st.markdown("**Positivação por Vendedor**")
+        atendidos = df_filtrado[df_filtrado['TipoMov']=='NF Venda'].groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
+        atendidos.columns = ['Vendedor','Clientes']
         atendidos = atendidos.sort_values('Clientes', ascending=False).head(10)
-        
-        fig_posit = px.bar(
-            atendidos,
-            x='Vendedor',
-            y='Clientes',
-            labels={'Vendedor': 'Vendedor', 'Clientes': 'Clientes Atendidos'},
-            color='Clientes',
-            color_discrete_sequence=['#1F4788']
-        )
-        fig_posit = aplicar_layout_grafico(fig_posit)
-        st.plotly_chart(fig_posit, use_container_width=True)
-    
-    with col8:
-        st.subheader("🏆 Top 10 Clientes")
-        # Filtra apenas vendas
-        vendas_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        ranking_clientes = vendas_clientes.groupby('RazaoSocial')['TotalProduto'].sum().reset_index()
-        ranking_clientes = ranking_clientes.sort_values('TotalProduto', ascending=False).head(10)
-        
-        fig_clientes = px.bar(
-            ranking_clientes,
-            x='TotalProduto',
-            y='RazaoSocial',
-            orientation='h',
-            labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
-            color='TotalProduto',
-            color_discrete_sequence=['#4A7BC8']
-        )
-        fig_clientes = aplicar_layout_grafico(fig_clientes)
-        st.plotly_chart(fig_clientes, use_container_width=True)
-    
-    st.markdown("---")
-    
-    col9, col10 = st.columns(2)
-    
-    with col9:
-        st.subheader("⚠️ Clientes sem Compra (Top 10)")
-        clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
+        if len(atendidos) > 0:
+            fig = px.bar(atendidos, x='Vendedor', y='Clientes',
+                         labels={'Vendedor':'','Clientes':'Clientes'},
+                         color_discrete_sequence=['#163561'])
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with g6:
+        st.markdown("**Clientes sem Compra**")
+        clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov']=='NF Venda']['CPF_CNPJ'].unique())
         todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-        valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
-        valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
-        
-        todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
-        todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
-        
-        clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-        clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False).head(10)
-        
-        fig_churn = px.bar(
-            clientes_sem_compra,
-            x='ValorHistorico',
-            y='RazaoSocial',
-            orientation='h',
-            labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
-            color='ValorHistorico',
-            color_discrete_sequence=['#1F4788']
-        )
-        fig_churn = aplicar_layout_grafico(fig_churn)
-        st.plotly_chart(fig_churn, use_container_width=True)
-    
-    with col10:
-        st.subheader("📊 Ranking de Vendedores")
-        # Filtra apenas vendas
-        vendas_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        ranking_vendedores = vendas_vendedores.groupby('Vendedor')['TotalProduto'].sum().reset_index()
-        ranking_vendedores = ranking_vendedores.sort_values('TotalProduto', ascending=False).head(10)
-        
-        fig_rank_vend = px.bar(
-            ranking_vendedores,
-            x='TotalProduto',
-            y='Vendedor',
-            orientation='h',
-            labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
-            color='TotalProduto',
-            color_discrete_sequence=['#163561']
-        )
-        fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
-        st.plotly_chart(fig_rank_vend, use_container_width=True)
+        valor_historico = df[df['TipoMov']=='NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+        valor_historico.columns = ['CPF_CNPJ','ValorHistorico']
+        todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left').fillna(0)
+        clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)].sort_values('ValorHistorico', ascending=False).head(10)
+        if len(clientes_sem_compra) > 0:
+            fig = px.bar(clientes_sem_compra, x='ValorHistorico', y='RazaoSocial', orientation='h',
+                         labels={'RazaoSocial':'','ValorHistorico':'R$'},
+                         color_discrete_sequence=['#F59E0B'])
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with g7:
+        st.markdown("**Ranking de Vendedores (Valor)**")
+        rank_vend = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        if len(rank_vend) > 0:
+            fig = px.bar(rank_vend, x='TotalProduto', y='Vendedor', orientation='h',
+                         labels={'Vendedor':'','TotalProduto':'R$'},
+                         color_discrete_sequence=['#6366F1'])
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with g8:
+        st.markdown("**Devoluções por Período**")
+        dev_tempo = notas_unicas[notas_unicas['TipoMov']=='NF Dev.Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
+        if len(dev_tempo) > 0:
+            fig = px.bar(dev_tempo, x='MesAno', y='TotalProduto',
+                         labels={'MesAno':'Período','TotalProduto':'R$'},
+                         color_discrete_sequence=['#EF4444'])
+            fig = aplicar_layout_grafico(fig, height=220)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Sem devoluções no período")
+
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
