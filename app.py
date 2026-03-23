@@ -2043,89 +2043,149 @@ if st.session_state.menu_option == '__home__':
     # Grid 4 colunas — técnica de botão overlay que FUNCIONA
     _USE_CARD_LIB = False  # streamlit-card substituído por st.button nativo
 
-    # ── CSS dos cards home (st.button nativo — sem iframe) ─────────────
-    st.markdown("""
-    <style>
-    /* Grade responsiva: 4 colunas desktop, 2 no mobile */
-    div.home-nav div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 10px !important;
-    }
-    @media (max-width: 768px) {
-        div.home-nav div[data-testid="stHorizontalBlock"] {
-            flex-wrap: wrap !important;
-        }
-        div.home-nav div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            width: calc(50% - 5px) !important;
-            flex: 1 1 calc(50% - 5px) !important;
-            min-width: calc(50% - 5px) !important;
-            max-width: calc(50% - 5px) !important;
-            box-sizing: border-box !important;
-        }
-    }
-    /* Botão estilizado como card azul institucional */
-    div.home-nav div[data-testid="stButton"] > button {
-        background: #1F4788 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        border-radius: 12px !important;
-        padding: 18px 14px !important;
-        min-height: 130px !important;
-        height: auto !important;
-        width: 100% !important;
-        text-align: left !important;
-        white-space: pre-wrap !important;
-        font-family: 'Inter', 'Segoe UI', sans-serif !important;
-        font-size: 0.88rem !important;
-        font-weight: 400 !important;
-        line-height: 1.5 !important;
-        box-shadow: 0 2px 8px rgba(31,71,136,0.20) !important;
-        transition: all 0.18s ease !important;
-        cursor: pointer !important;
-        box-sizing: border-box !important;
-    }
-    div.home-nav div[data-testid="stButton"] > button:hover {
-        background: #163561 !important;
-        box-shadow: 0 6px 20px rgba(31,71,136,0.35) !important;
-        transform: translateY(-2px) !important;
-    }
-    div.home-nav div[data-testid="stButton"] > button p {
-        color: #FFFFFF !important;
-        white-space: pre-wrap !important;
-        text-align: left !important;
-        margin: 0 !important;
-        font-size: 0.88rem !important;
-        line-height: 1.5 !important;
-    }
-    @media (max-width: 768px) {
-        div.home-nav div[data-testid="stButton"] > button {
-            padding: 14px 10px !important;
-            min-height: 110px !important;
-            font-size: 0.78rem !important;
-        }
-    }
-    </style>
+    # ── Saudação ─────────────────────────────────────────────────────────
+    st.markdown(f"""
+    <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #E9ECEF;">
+        <div style="font-size:1.3rem;font-weight:600;color:#2C5AA0;margin-bottom:2px;">
+            Olá, {usuario_info.get('nome','Usuário')}
+        </div>
+        <div style="color:#8A96A8;font-size:0.82rem;">Resumo executivo — dados do período selecionado</div>
+    </div>
     """, unsafe_allow_html=True)
 
-    # ── Grid 4 colunas (CSS faz wrap para 2 no mobile) ────────────────────
-    st.markdown('<div class="home-nav">', unsafe_allow_html=True)
-    for row_start in range(0, len(cards_visiveis), 4):
-        row = cards_visiveis[row_start:row_start+4]
-        cols = st.columns(4, gap="small")
-        for j, c in enumerate(row):
-            with cols[j]:
-                nome = c['nome']
-                desc = _DESC.get(nome, '')
-                info = c['info']
-                ic   = _ICONES_CARD.get(nome, '•')
-                lbl  = f"{ic}  {nome}\n{desc}\n\n{info}"
-                if st.button(lbl, key=f"hc_{nome}", use_container_width=True):
-                    st.session_state.menu_option = nome
-                    st.rerun()
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    # ══════════════════════════════════════════════════════
+    # BLOCO 1 — KPIs principais (4 por linha)
+    # ══════════════════════════════════════════════════════
+    vendas_brutas     = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
+    fat_liquido       = notas_unicas['Valor_Real'].sum()
+    clientes_unicos   = df_filtrado['CPF_CNPJ'].nunique()
+    total_notas       = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
+    total_dev         = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
+    ticket_medio      = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
+    taxa_dev          = (total_dev / vendas_brutas * 100) if vendas_brutas > 0 else 0
+
+    k1,k2,k3,k4 = st.columns(4)
+    with k1: render_kpi_card("Faturamento Bruto",   f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
+    with k2: render_kpi_card("Faturamento Líquido", f"R$ {fat_liquido:,.0f}",   icon="💵", color="#10B981")
+    with k3: render_kpi_card("Clientes Únicos",     f"{clientes_unicos:,}",     icon="👥", color="#F59E0B")
+    with k4: render_kpi_card("Notas de Venda",      f"{total_notas:,}",         icon="📄", color="#EF4444")
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    k5,k6,k7,k8 = st.columns(4)
+    with k5: render_kpi_card("Devoluções",     f"R$ {total_dev:,.0f}",   icon="↩️", color="#6B7280")
+    with k6: render_kpi_card("Ticket Médio",   f"R$ {ticket_medio:,.0f}", icon="🎯", color="#6B7280")
+    with k7:
+        notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
+        render_kpi_card("Notas Devolução", f"{notas_dev:,}", icon="📋", color="#6B7280")
+    with k8: render_kpi_card("Taxa Devolução", f"{taxa_dev:.1f}%", icon="📊", color="#6B7280")
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════
+    # BLOCO 2 — Gráficos mini (4 por linha)
+    # ══════════════════════════════════════════════════════
+    g1, g2, g3, g4 = st.columns(4)
+
+    # Gráfico 1: Evolução de vendas
+    with g1:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Evolução de Vendas</div>", unsafe_allow_html=True)
+        _vt = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
+        if len(_vt) > 0:
+            _fig = px.line(_vt, x='MesAno', y='TotalProduto', labels={'MesAno':'','TotalProduto':''})
+            _fig.update_traces(line_color='#1F4788', line_width=2)
+            _fig = aplicar_layout_grafico(_fig, height=180)
+            _fig.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(showticklabels=False))
+            st.plotly_chart(_fig, use_container_width=True, config={'displayModeBar': False})
+
+    # Gráfico 2: Top 5 Estados
+    with g2:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Top 5 Estados</div>", unsafe_allow_html=True)
+        _ve = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(5)
+        if len(_ve) > 0:
+            _fig2 = px.bar(_ve, x='TotalProduto', y='Estado', orientation='h', labels={'Estado':'','TotalProduto':''}, color_discrete_sequence=['#1F4788'])
+            _fig2 = aplicar_layout_grafico(_fig2, height=180)
+            _fig2.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
+            st.plotly_chart(_fig2, use_container_width=True, config={'displayModeBar': False})
+
+    # Gráfico 3: Top 5 Vendedores
+    with g3:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Top 5 Vendedores</div>", unsafe_allow_html=True)
+        _vv = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(5)
+        if len(_vv) > 0:
+            _fig3 = px.bar(_vv, x='TotalProduto', y='Vendedor', orientation='h', labels={'Vendedor':'','TotalProduto':''}, color_discrete_sequence=['#2E86AB'])
+            _fig3 = aplicar_layout_grafico(_fig3, height=180)
+            _fig3.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
+            st.plotly_chart(_fig3, use_container_width=True, config={'displayModeBar': False})
+
+    # Gráfico 4: Top 5 Clientes
+    with g4:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Top 5 Clientes</div>", unsafe_allow_html=True)
+        _vc = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('RazaoSocial')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(5)
+        if len(_vc) > 0:
+            _fig4 = px.bar(_vc, x='TotalProduto', y='RazaoSocial', orientation='h', labels={'RazaoSocial':'','TotalProduto':''}, color_discrete_sequence=['#4A7BC8'])
+            _fig4 = aplicar_layout_grafico(_fig4, height=180)
+            _fig4.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
+            st.plotly_chart(_fig4, use_container_width=True, config={'displayModeBar': False})
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════
+    # BLOCO 3 — Segunda linha de gráficos (4 por linha)
+    # ══════════════════════════════════════════════════════
+    g5, g6, g7, g8 = st.columns(4)
+
+    # Gráfico 5: Positivação por vendedor
+    with g5:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Positivação por Vendedor</div>", unsafe_allow_html=True)
+        _vp = df_filtrado[df_filtrado['TipoMov']=='NF Venda'].groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
+        _vp.columns = ['Vendedor','Clientes']
+        _vp = _vp.sort_values('Clientes', ascending=False).head(5)
+        if len(_vp) > 0:
+            _fig5 = px.bar(_vp, x='Clientes', y='Vendedor', orientation='h', labels={'Vendedor':'','Clientes':''}, color_discrete_sequence=['#163561'])
+            _fig5 = aplicar_layout_grafico(_fig5, height=180)
+            _fig5.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
+            st.plotly_chart(_fig5, use_container_width=True, config={'displayModeBar': False})
+
+    # Gráfico 6: Devoluções por mês
+    with g6:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Devoluções por Mês</div>", unsafe_allow_html=True)
+        _vd = notas_unicas[notas_unicas['TipoMov']=='NF Dev.Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
+        if len(_vd) > 0:
+            _fig6 = px.bar(_vd, x='MesAno', y='TotalProduto', labels={'MesAno':'','TotalProduto':''}, color_discrete_sequence=['#EF4444'])
+            _fig6 = aplicar_layout_grafico(_fig6, height=180)
+            _fig6.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(showticklabels=False))
+            st.plotly_chart(_fig6, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.markdown("<div style='height:180px;display:flex;align-items:center;justify-content:center;color:#ADB5BD;font-size:0.75rem;'>Sem devoluções</div>", unsafe_allow_html=True)
+
+    # Gráfico 7: Distribuição por estado (pizza)
+    with g7:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Distribuição por Estado</div>", unsafe_allow_html=True)
+        _vpe = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(6)
+        if len(_vpe) > 0:
+            _fig7 = px.pie(_vpe, values='TotalProduto', names='Estado',
+                           color_discrete_sequence=['#1F4788','#2E86AB','#4A7BC8','#6B9FD4','#8CB8E0','#AED1EC'])
+            _fig7.update_traces(textinfo='none', hovertemplate='%{label}: R$ %{value:,.0f}')
+            _fig7 = aplicar_layout_grafico(_fig7, height=180)
+            _fig7.update_layout(margin=dict(l=0,r=0,t=4,b=0), showlegend=False)
+            st.plotly_chart(_fig7, use_container_width=True, config={'displayModeBar': False})
+
+    # Gráfico 8: Clientes sem compra (top 5)
+    with g8:
+        st.markdown("<div style='font-size:0.75rem;font-weight:600;color:#6C757D;margin-bottom:4px;'>Clientes sem Compra</div>", unsafe_allow_html=True)
+        _cc = set(df_filtrado[df_filtrado['TipoMov']=='NF Venda']['CPF_CNPJ'].unique())
+        _tc = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+        _vh = df[df['TipoMov']=='NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+        _vh.columns = ['CPF_CNPJ','ValorHist']
+        _tc = pd.merge(_tc, _vh, on='CPF_CNPJ', how='left').fillna(0)
+        _sc = _tc[~_tc['CPF_CNPJ'].isin(_cc)].sort_values('ValorHist', ascending=False).head(5)
+        if len(_sc) > 0:
+            _fig8 = px.bar(_sc, x='ValorHist', y='RazaoSocial', orientation='h',
+                           labels={'RazaoSocial':'','ValorHist':''}, color_discrete_sequence=['#F59E0B'])
+            _fig8 = aplicar_layout_grafico(_fig8, height=180)
+            _fig8.update_layout(margin=dict(l=0,r=0,t=4,b=0), xaxis=dict(showticklabels=False), yaxis=dict(tickfont=dict(size=9)))
+            st.plotly_chart(_fig8, use_container_width=True, config={'displayModeBar': False})
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
