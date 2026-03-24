@@ -2162,120 +2162,75 @@ if menu not in modulos_permitidos:
     st.stop()
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    # KPIs principais com cards customizados
+
+    # ================= KPI NOVO (LINHA 1) =================
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-        render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
-    
+        render_kpi_card("Faturamento", f"R$ {vendas_brutas:,.0f}", icon="💰")
+
     with col2:
-        faturamento_liquido = notas_unicas['Valor_Real'].sum()
-        render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
-    
+        base_clientes = df['CPF_CNPJ'].nunique()
+        vendas_mes = df_filtrado[
+            (df_filtrado['TipoMov'] == 'NF Venda') &
+            (df_filtrado['DataEmissao'].dt.month == pd.Timestamp.now().month) &
+            (df_filtrado['DataEmissao'].dt.year == pd.Timestamp.now().year)
+        ]
+        clientes_mes = vendas_mes['CPF_CNPJ'].nunique()
+
+        render_kpi_card("Positivação", f"{clientes_mes}", f"Base: {base_clientes}", icon="📈")
+
     with col3:
-        clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-        render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
-    
-    with col4:
-        total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-        render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Segunda linha de KPIs
-    col1b, col2b, col3b, col4b = st.columns(4)
-    
-    with col1b:
-        total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
-        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
-    
-    with col2b:
-        ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
-    
-    with col3b:
-        qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
-        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
-    
-    with col4b:
-        taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
-        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
-    
-    st.markdown("---")
-
-    # Linha 1: 3 gráficos
-    col5, col6, col7 = st.columns(3)
-
-    with col5:
-        st.subheader("📈 Evolução de Vendas")
-        vendas_tempo = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
-        if len(vendas_tempo) > 0:
-            fig_linha = px.line(vendas_tempo, x='MesAno', y='TotalProduto',
-                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'})
-            fig_linha.update_traces(line_color='#1F4788', line_width=3, mode='lines+markers', marker=dict(size=5, color='#1F4788'))
-            fig_linha.update_layout(xaxis_title="Período", yaxis_title="Valor (R$)", hovermode='x unified')
-            fig_linha = aplicar_layout_grafico(fig_linha)
-            st.plotly_chart(fig_linha, use_container_width=True)
+        if 'ValorAberto' in df.columns:
+            inad_total = df['ValorAberto'].sum()
+            inad_clientes = df[df['ValorAberto'] > 0]['CPF_CNPJ'].nunique()
         else:
-            st.info("Sem dados para exibir")
+            inad_total = 0
+            inad_clientes = 0
 
-    with col6:
-        st.subheader("🗺️ Top 10 Estados")
-        vendas_estado = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
-        fig_bar = px.bar(vendas_estado, x='Estado', y='TotalProduto',
-            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
-            color_discrete_sequence=['#2E86AB'])
-        fig_bar = aplicar_layout_grafico(fig_bar)
-        st.plotly_chart(fig_bar, use_container_width=True)
+        render_kpi_card("Inadimplência", f"R$ {inad_total:,.0f}", f"{inad_clientes} clientes", icon="⚠️")
 
-    with col7:
-        st.subheader("👥 Positivação por Vendedor")
-        atendidos = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
-        atendidos.columns = ['Vendedor', 'Clientes']
-        atendidos = atendidos.sort_values('Clientes', ascending=False).head(10)
-        fig_posit = px.bar(atendidos, x='Vendedor', y='Clientes',
-            labels={'Vendedor': 'Vendedor', 'Clientes': 'Clientes Atendidos'},
-            color_discrete_sequence=['#1F4788'])
-        fig_posit = aplicar_layout_grafico(fig_posit)
-        st.plotly_chart(fig_posit, use_container_width=True)
+    with col4:
+        data_limite = pd.Timestamp.now() - pd.DateOffset(months=6)
+        ultima_compra = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['DataEmissao'].max().reset_index()
+        inativos = ultima_compra[ultima_compra['DataEmissao'] < data_limite]
+
+        render_kpi_card("Sem Compra 6M+", f"{len(inativos)}", icon="⏳")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col1b, col2b, col3b, col4b = st.columns(4)
+
+    with col1b:
+        total_notas = len(notas_unicas)
+        render_kpi_card("Histórico", f"{total_notas}", icon="📄")
+
+    with col2b:
+        preco_medio = notas_unicas['Valor_Real'].mean()
+        render_kpi_card("Preço Médio", f"R$ {preco_medio:,.2f}", icon="💲")
+
+    with col3b:
+        if 'Status' in df.columns:
+            pendentes = df[df['Status'] == 'Pendente']
+            valor_pendente = pendentes['Valor_Real'].sum()
+            qtd_clientes = pendentes['CPF_CNPJ'].nunique()
+        else:
+            valor_pendente = 0
+            qtd_clientes = 0
+
+        render_kpi_card("Pedidos Pendentes", f"R$ {valor_pendente:,.0f}", f"{qtd_clientes} clientes", icon="📦")
+
+    with col4b:
+        ranking = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'] \
+            .groupby('Vendedor')['TotalProduto'].sum() \
+            .sort_values(ascending=False).head(3)
+
+        ranking_texto = " | ".join([f"{i+1}º {v}" for i, v in enumerate(ranking.index)])
+
+        render_kpi_card("Top Vendedores", f"R$ {ranking.sum():,.0f}", ranking_texto, icon="🏆")
 
     st.markdown("---")
-
-    # Linha 2: 3 gráficos
-    col8, col9, col10 = st.columns(3)
-
-    with col8:
-        st.subheader("🏆 Top 10 Clientes")
-        ranking_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('RazaoSocial')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
-        fig_clientes = px.bar(ranking_clientes, x='TotalProduto', y='RazaoSocial', orientation='h',
-            labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
-            color_discrete_sequence=['#4A7BC8'])
-        fig_clientes = aplicar_layout_grafico(fig_clientes)
-        st.plotly_chart(fig_clientes, use_container_width=True)
-
-    with col9:
-        st.subheader("⚠️ Clientes sem Compra")
-        _com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-        _todos = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-        _vhist = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
-        _vhist.columns = ['CPF_CNPJ', 'ValorHistorico']
-        _todos = pd.merge(_todos, _vhist, on='CPF_CNPJ', how='left').fillna(0)
-        _sem = _todos[~_todos['CPF_CNPJ'].isin(_com_venda)].sort_values('ValorHistorico', ascending=False).head(10)
-        fig_churn = px.bar(_sem, x='ValorHistorico', y='RazaoSocial', orientation='h',
-            labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
-            color_discrete_sequence=['#1F4788'])
-        fig_churn = aplicar_layout_grafico(fig_churn)
-        st.plotly_chart(fig_churn, use_container_width=True)
-
-    with col10:
-        st.subheader("📊 Ranking de Vendedores")
-        ranking_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
-        fig_rank_vend = px.bar(ranking_vendedores, x='TotalProduto', y='Vendedor', orientation='h',
-            labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
-            color_discrete_sequence=['#163561'])
-        fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
-        st.plotly_chart(fig_rank_vend, use_container_width=True)
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
@@ -2683,6 +2638,8 @@ elif menu == "Clientes sem Compra":
         )
 
     # ── Lógica de período ─────────────────────────────────────────────────
+    # Se filtro de data ativo: usa o período definido pelo usuário
+    # Padrão (sem filtro): usa o mês vigente
     if data_inicial and data_final:
         _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
         _df_periodo = df[
@@ -2696,6 +2653,7 @@ elif menu == "Clientes sem Compra":
         _label_periodo = f"Até {data_final.strftime('%d/%m/%Y')}"
         _df_periodo = df[df['DataEmissao'] <= pd.to_datetime(data_final)]
     else:
+        # Padrão: mês vigente
         _mes_now = pd.Timestamp.now().month
         _ano_now = pd.Timestamp.now().year
         _label_periodo = f"Mês vigente ({_mes_now:02d}/{_ano_now})"
@@ -2706,11 +2664,9 @@ elif menu == "Clientes sem Compra":
 
     st.info(f"📅 Período analisado: **{_label_periodo}** — clientes da base que não realizaram compras neste período")
 
+    # Clientes que COMPRARAM no período definido
     clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-    
-    # Pegamos a última compra de cada cliente (DataEmissao)
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-    
     valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
     valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
     
@@ -2718,29 +2674,25 @@ elif menu == "Clientes sem Compra":
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
     
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    
-    # ADICIONADO: DataEmissao incluída na seleção de colunas
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'DataEmissao']]
+    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico']]
     
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
     if estado_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
     
+    # Filtro de busca por nome do cliente
     if busca_cliente_churn and len(busca_cliente_churn) >= 2:
         clientes_sem_compra = clientes_sem_compra[
             clientes_sem_compra['RazaoSocial'].str.contains(busca_cliente_churn, case=False, na=False)
         ]
     
-    # Lógica de Ordenação
     if ordem == "Valor Histórico (Maior)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
     elif ordem == "Valor Histórico (Menor)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=True)
     elif ordem == "Nome (A-Z)":
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
-    elif ordem == "Última Compra (Mais Recente)":
-        clientes_sem_compra = clientes_sem_compra.sort_values('DataEmissao', ascending=False)
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -2766,11 +2718,8 @@ elif menu == "Clientes sem Compra":
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
     
-    # Preparar visualização
+    # Formatar para exibição
     clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
-    
-    # ADICIONADO: Formatação da data para o padrão brasileiro
-    clientes_sem_compra_display['DataEmissao'] = pd.to_datetime(clientes_sem_compra_display['DataEmissao']).dt.strftime('%d/%m/%Y')
     
     # Renomear colunas para exibição
     clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
@@ -2779,8 +2728,7 @@ elif menu == "Clientes sem Compra":
         'Vendedor': 'Vendedor',
         'Cidade': 'Cidade',
         'Estado': 'Estado',
-        'ValorHistorico': 'Valor Histórico',
-        'DataEmissao': 'Última Compra'  # Coluna renomeada para a tabela
+        'ValorHistorico': 'Valor Histórico'
     })
     
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
@@ -2791,6 +2739,7 @@ elif menu == "Clientes sem Compra":
         "clientes_sem_compra.xlsx",
         "application/vnd.ms-excel"
     )
+
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
