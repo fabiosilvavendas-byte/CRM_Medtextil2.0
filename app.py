@@ -2773,8 +2773,6 @@ elif menu == "Clientes sem Compra":
         )
 
     # ── Lógica de período ─────────────────────────────────────────────────
-    # Se filtro de data ativo: usa o período definido pelo usuário
-    # Padrão (sem filtro): usa o mês vigente
     if data_inicial and data_final:
         _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
         _df_periodo = df[
@@ -2788,7 +2786,6 @@ elif menu == "Clientes sem Compra":
         _label_periodo = f"Até {data_final.strftime('%d/%m/%Y')}"
         _df_periodo = df[df['DataEmissao'] <= pd.to_datetime(data_final)]
     else:
-        # Padrão: mês vigente
         _mes_now = pd.Timestamp.now().month
         _ano_now = pd.Timestamp.now().year
         _label_periodo = f"Mês vigente ({_mes_now:02d}/{_ano_now})"
@@ -2799,9 +2796,11 @@ elif menu == "Clientes sem Compra":
 
     st.info(f"📅 Período analisado: **{_label_periodo}** — clientes da base que não realizaram compras neste período")
 
-    # Clientes que COMPRARAM no período definido
     clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
+    
+    # Pegamos a última compra de cada cliente (DataEmissao)
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+    
     valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
     valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
     
@@ -2809,25 +2808,29 @@ elif menu == "Clientes sem Compra":
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
     
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico']]
+    
+    # ADICIONADO: DataEmissao incluída na seleção de colunas
+    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'DataEmissao']]
     
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
     if estado_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
     
-    # Filtro de busca por nome do cliente
     if busca_cliente_churn and len(busca_cliente_churn) >= 2:
         clientes_sem_compra = clientes_sem_compra[
             clientes_sem_compra['RazaoSocial'].str.contains(busca_cliente_churn, case=False, na=False)
         ]
     
+    # Lógica de Ordenação
     if ordem == "Valor Histórico (Maior)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
     elif ordem == "Valor Histórico (Menor)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=True)
     elif ordem == "Nome (A-Z)":
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
+    elif ordem == "Última Compra (Mais Recente)":
+        clientes_sem_compra = clientes_sem_compra.sort_values('DataEmissao', ascending=False)
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -2853,8 +2856,11 @@ elif menu == "Clientes sem Compra":
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
     
-    # Formatar para exibição
+    # Preparar visualização
     clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
+    
+    # ADICIONADO: Formatação da data para o padrão brasileiro
+    clientes_sem_compra_display['DataEmissao'] = pd.to_datetime(clientes_sem_compra_display['DataEmissao']).dt.strftime('%d/%m/%Y')
     
     # Renomear colunas para exibição
     clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
@@ -2863,7 +2869,8 @@ elif menu == "Clientes sem Compra":
         'Vendedor': 'Vendedor',
         'Cidade': 'Cidade',
         'Estado': 'Estado',
-        'ValorHistorico': 'Valor Histórico'
+        'ValorHistorico': 'Valor Histórico',
+        'DataEmissao': 'Última Compra'  # Coluna renomeada para a tabela
     })
     
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
