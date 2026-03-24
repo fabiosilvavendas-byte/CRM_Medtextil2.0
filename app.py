@@ -9,40 +9,52 @@ from github import Github
 
 # ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
 def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
-    """Renderiza card KPI profissional com HTML/CSS - substitui st.metric()"""
+    """Renderiza card KPI profissional com suporte a subtítulo"""
+    
     delta_html = ""
+    
     if delta:
-        delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
+        # Se for texto (ex: "12 clientes" ou "Base: 450"), não aplica cor de positivo/negativo
         try:
+            delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
             delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
         except:
-            delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
-        delta_html = f'<div style="color:{delta_color};font-size:0.875rem;font-weight:600;margin-top:0.5rem;">{delta}</div>'
+            # Texto normal (subtítulo)
+            delta_color = "#6B7280"
+
+        delta_html = f'''
+        <div style="
+            color:{delta_color};
+            font-size:0.8rem;
+            margin-top:0.4rem;
+            font-weight:500;
+        ">
+            {delta}
+        </div>
+        '''
     
     st.markdown(f"""
     <div style="background:white;padding:1.5rem;border-radius:15px;
                 box-shadow:0 4px 12px rgba(0,0,0,0.05);border-left:4px solid {color};
                 height:140px;display:flex;flex-direction:column;justify-content:space-between;">
+        
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <div style="font-size:0.8rem;color:#6B7280;font-weight:600;
-                        text-transform:uppercase;letter-spacing:0.05em;">{label}</div>
+                        text-transform:uppercase;letter-spacing:0.05em;">
+                {label}
+            </div>
             <div style="font-size:1.75rem;">{icon}</div>
         </div>
+
         <div>
-            <div style="font-size:1.75rem;font-weight:700;color:#1F2937;">{value}</div>
+            <div style="font-size:1.75rem;font-weight:700;color:#1F2937;">
+                {value}
+            </div>
             {delta_html}
         </div>
+
     </div>
     """, unsafe_allow_html=True)
-
-# Configuração da página
-st.set_page_config(
-    page_title="Dashboard BI Medtextil", 
-    layout="wide", 
-    initial_sidebar_state="expanded",
-    page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
-)
-
 # ====================== CONFIGURAÇÃO DO ÍCONE ======================
 # O Streamlit gerencia automaticamente o ícone via page_icon
 # Nenhuma configuração adicional é necessária
