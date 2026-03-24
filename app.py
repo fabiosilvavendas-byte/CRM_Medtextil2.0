@@ -9,52 +9,40 @@ from github import Github
 
 # ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
 def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
-    """Renderiza card KPI profissional com suporte a subtítulo"""
-    
+    """Renderiza card KPI profissional com HTML/CSS - substitui st.metric()"""
     delta_html = ""
-    
     if delta:
-        # Se for texto (ex: "12 clientes" ou "Base: 450"), não aplica cor de positivo/negativo
+        delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
         try:
-            delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
             delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
         except:
-            # Texto normal (subtítulo)
-            delta_color = "#6B7280"
-
-        delta_html = f'''
-        <div style="
-            color:{delta_color};
-            font-size:0.8rem;
-            margin-top:0.4rem;
-            font-weight:500;
-        ">
-            {delta}
-        </div>
-        '''
+            delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
+        delta_html = f'<div style="color:{delta_color};font-size:0.875rem;font-weight:600;margin-top:0.5rem;">{delta}</div>'
     
     st.markdown(f"""
     <div style="background:white;padding:1.5rem;border-radius:15px;
                 box-shadow:0 4px 12px rgba(0,0,0,0.05);border-left:4px solid {color};
                 height:140px;display:flex;flex-direction:column;justify-content:space-between;">
-        
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <div style="font-size:0.8rem;color:#6B7280;font-weight:600;
-                        text-transform:uppercase;letter-spacing:0.05em;">
-                {label}
-            </div>
+                        text-transform:uppercase;letter-spacing:0.05em;">{label}</div>
             <div style="font-size:1.75rem;">{icon}</div>
         </div>
-
         <div>
-            <div style="font-size:1.75rem;font-weight:700;color:#1F2937;">
-                {value}
-            </div>
+            <div style="font-size:1.75rem;font-weight:700;color:#1F2937;">{value}</div>
             {delta_html}
         </div>
-
     </div>
     """, unsafe_allow_html=True)
+
+# Configuração da página
+st.set_page_config(
+    page_title="Dashboard BI Medtextil", 
+    layout="wide", 
+    initial_sidebar_state="expanded",
+    page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
+)
+
 # ====================== CONFIGURAÇÃO DO ÍCONE ======================
 # O Streamlit gerencia automaticamente o ícone via page_icon
 # Nenhuma configuração adicional é necessária
@@ -2174,110 +2162,120 @@ if menu not in modulos_permitidos:
     st.stop()
 # ====================== DASHBOARD ======================
 if menu == "Dashboard":
-    # ================= KPI PRINCIPAIS =================
-        col1, col2, col3, col4 = st.columns(4)
+    # KPIs principais com cards customizados
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
+        render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
+    
+    with col2:
+        faturamento_liquido = notas_unicas['Valor_Real'].sum()
+        render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
+    
+    with col3:
+        clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
+        render_kpi_card("Clientes Únicos", f"{clientes_unicos:,}", icon="👥", color="#F59E0B")
+    
+    with col4:
+        total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
+        render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#EF4444")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Segunda linha de KPIs
+    col1b, col2b, col3b, col4b = st.columns(4)
+    
+    with col1b:
+        total_devolucoes = notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda']['TotalProduto'].sum()
+        render_kpi_card("Devoluções", f"R$ {total_devolucoes:,.0f}", icon="↩️", color="#E5E7EB")
+    
+    with col2b:
+        ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
+        render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
+    
+    with col3b:
+        qtd_notas_dev = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Dev.Venda'])
+        render_kpi_card("Notas Devolução", f"{qtd_notas_dev:,}", icon="📋", color="#E5E7EB")
+    
+    with col4b:
+        taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
+        render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
+    
+    st.markdown("---")
 
-        # ================= DASHBOARD (mantido) =================
-        with col1:
-            vendas_brutas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['TotalProduto'].sum()
-            render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
+    # Linha 1: 3 gráficos
+    col5, col6, col7 = st.columns(3)
 
-        # ================= POSITIVAÇÃO =================
-        with col2:
-            base_clientes = df['CPF_CNPJ'].nunique()
-            
-            df_mes = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']
-            clientes_mes = df_mes['CPF_CNPJ'].nunique()
-            
-            render_kpi_card(
-                "Positivação",
-                f"{clientes_mes:,}",
-                f"Base: {base_clientes:,}",
-                icon="📈",
-                color="#10B981"
-            )
+    with col5:
+        st.subheader("📈 Evolução de Vendas")
+        vendas_tempo = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
+        if len(vendas_tempo) > 0:
+            fig_linha = px.line(vendas_tempo, x='MesAno', y='TotalProduto',
+                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'})
+            fig_linha.update_traces(line_color='#1F4788', line_width=3, mode='lines+markers', marker=dict(size=5, color='#1F4788'))
+            fig_linha.update_layout(xaxis_title="Período", yaxis_title="Valor (R$)", hovermode='x unified')
+            fig_linha = aplicar_layout_grafico(fig_linha)
+            st.plotly_chart(fig_linha, use_container_width=True)
+        else:
+            st.info("Sem dados para exibir")
 
-        # ================= INADIMPLÊNCIA =================
-        with col3:
-            if 'ValorAberto' in df.columns:
-                inad_valor = df['ValorAberto'].sum()
-                inad_clientes = df[df['ValorAberto'] > 0]['CPF_CNPJ'].nunique()
-            else:
-                inad_valor = 0
-                inad_clientes = 0
+    with col6:
+        st.subheader("🗺️ Top 10 Estados")
+        vendas_estado = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        fig_bar = px.bar(vendas_estado, x='Estado', y='TotalProduto',
+            labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
+            color_discrete_sequence=['#2E86AB'])
+        fig_bar = aplicar_layout_grafico(fig_bar)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-            render_kpi_card(
-                "Inadimplência",
-                f"R$ {inad_valor:,.0f}",
-                f"{inad_clientes} clientes",
-                icon="⚠️",
-                color="#EF4444"
-            )
+    with col7:
+        st.subheader("👥 Positivação por Vendedor")
+        atendidos = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
+        atendidos.columns = ['Vendedor', 'Clientes']
+        atendidos = atendidos.sort_values('Clientes', ascending=False).head(10)
+        fig_posit = px.bar(atendidos, x='Vendedor', y='Clientes',
+            labels={'Vendedor': 'Vendedor', 'Clientes': 'Clientes Atendidos'},
+            color_discrete_sequence=['#1F4788'])
+        fig_posit = aplicar_layout_grafico(fig_posit)
+        st.plotly_chart(fig_posit, use_container_width=True)
 
-        # ================= CLIENTES SEM COMPRA =================
-        with col4:
-            ultima_compra = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['DataEmissao'].max().reset_index()
-            corte = pd.Timestamp.today() - pd.DateOffset(months=6)
-            inativos = ultima_compra[ultima_compra['DataEmissao'] < corte]
-            
-            render_kpi_card(
-                "Clientes +6M sem compra",
-                f"{inativos.shape[0]:,}",
-                icon="⏳",
-                color="#F59E0B"
-            )
+    st.markdown("---")
 
-        st.markdown("<br>", unsafe_allow_html=True)
+    # Linha 2: 3 gráficos
+    col8, col9, col10 = st.columns(3)
 
-        # ================= SEGUNDA LINHA =================
-        col1b, col2b, col3b, col4b = st.columns(4)
+    with col8:
+        st.subheader("🏆 Top 10 Clientes")
+        ranking_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('RazaoSocial')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        fig_clientes = px.bar(ranking_clientes, x='TotalProduto', y='RazaoSocial', orientation='h',
+            labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
+            color_discrete_sequence=['#4A7BC8'])
+        fig_clientes = aplicar_layout_grafico(fig_clientes)
+        st.plotly_chart(fig_clientes, use_container_width=True)
 
-        # ================= PEDIDOS PENDENTES =================
-        with col1b:
-            if 'Status' in df.columns:
-                pendentes = df[df['Status'] == 'Pendente']
-                valor_pendente = pendentes['TotalProduto'].sum()
-                clientes_pendentes = pendentes['CPF_CNPJ'].nunique()
-            else:
-                valor_pendente = 0
-                clientes_pendentes = 0
+    with col9:
+        st.subheader("⚠️ Clientes sem Compra")
+        _com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
+        _todos = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+        _vhist = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+        _vhist.columns = ['CPF_CNPJ', 'ValorHistorico']
+        _todos = pd.merge(_todos, _vhist, on='CPF_CNPJ', how='left').fillna(0)
+        _sem = _todos[~_todos['CPF_CNPJ'].isin(_com_venda)].sort_values('ValorHistorico', ascending=False).head(10)
+        fig_churn = px.bar(_sem, x='ValorHistorico', y='RazaoSocial', orientation='h',
+            labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
+            color_discrete_sequence=['#1F4788'])
+        fig_churn = aplicar_layout_grafico(fig_churn)
+        st.plotly_chart(fig_churn, use_container_width=True)
 
-            render_kpi_card(
-                "Pedidos Pendentes",
-                f"R$ {valor_pendente:,.0f}",
-                f"{clientes_pendentes} clientes",
-                icon="📦",
-                color="#6366F1"
-            )
-
-        # ================= PREÇO MÉDIO (mantido como ticket) =================
-        with col2b:
-            clientes_unicos = df_filtrado['CPF_CNPJ'].nunique()
-            ticket_medio = vendas_brutas / clientes_unicos if clientes_unicos > 0 else 0
-            
-            render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.0f}", icon="🎯", color="#E5E7EB")
-
-        # ================= HISTÓRICO (mantido como notas) =================
-        with col3b:
-            total_notas = len(notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'])
-            render_kpi_card("Notas de Venda", f"{total_notas:,}", icon="📄", color="#E5E7EB")
-
-        # ================= RANKING TOP 3 =================
-        with col4b:
-            ranking_v = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'] \
-                .groupby('Vendedor')['TotalProduto'] \
-                .sum() \
-                .sort_values(ascending=False) \
-                .head(3)
-
-            texto_ranking = " | ".join([f"{v}: R${valor/1000:.1f}k" for v, valor in ranking_v.items()])
-
-            render_kpi_card(
-                "Top 3 Vendedores",
-                texto_ranking if len(ranking_v) > 0 else "-",
-                icon="🏆",
-                color="#163561"
-            )
+    with col10:
+        st.subheader("📊 Ranking de Vendedores")
+        ranking_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        fig_rank_vend = px.bar(ranking_vendedores, x='TotalProduto', y='Vendedor', orientation='h',
+            labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
+            color_discrete_sequence=['#163561'])
+        fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
+        st.plotly_chart(fig_rank_vend, use_container_width=True)
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
