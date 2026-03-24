@@ -2099,9 +2099,15 @@ if st.session_state.menu_option == '__home__':
     except:
         _info_pend = "Aguardando faturamento"
 
-    # Rankings — top 3 vendedores
+    # Rankings — top 3 vendedores DO MÊS ATUAL
     try:
-        _rank = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().nlargest(3)
+        # Filtrar apenas vendas do mês atual (mesma lógica do Dashboard)
+        vendas_mes_atual = notas_unicas[
+            (notas_unicas['TipoMov'] == 'NF Venda') &
+            (notas_unicas['DataEmissao'].dt.month == _mes) &
+            (notas_unicas['DataEmissao'].dt.year == _ano)
+        ]
+        _rank = vendas_mes_atual.groupby('Vendedor')['TotalProduto'].sum().nlargest(3)
         _info_rank = " · ".join([f"{v.split()[0]} R${r:,.0f}" for v,r in _rank.items()])
     except:
         _info_rank = "Top vendedores e clientes"
