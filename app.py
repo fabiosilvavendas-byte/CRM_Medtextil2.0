@@ -2010,27 +2010,111 @@ with st.sidebar:
 if st.session_state.menu_option == '__home__':
     usuario_info = st.session_state.get("usuario", {})
 
+    # ── Calcular previews dos cards ──────────────────────────────────────
+    _now   = pd.Timestamp.now()
+    _mes   = _now.month
+    _ano   = _now.year
+    _6m    = _now - pd.DateOffset(months=6)
+
+    # Dashboard
     try:
         vendas_mes = notas_unicas[
-            (notas_unicas['DataEmissao'].dt.month == pd.Timestamp.now().month) &
-            (notas_unicas['DataEmissao'].dt.year == pd.Timestamp.now().year)
+            (notas_unicas['DataEmissao'].dt.month == _mes) &
+            (notas_unicas['DataEmissao'].dt.year  == _ano)
         ]['Valor_Real'].sum()
     except:
         vendas_mes = 0
+
+    # Positivação
     try:
-        total_clientes = len(df['RazaoSocial'].unique())
+        _base_total   = df['CPF_CNPJ'].nunique()
+        _posit_mes    = df[
+            (df['TipoMov']=='NF Venda') &
+            (df['DataEmissao'].dt.month==_mes) &
+            (df['DataEmissao'].dt.year==_ano)
+        ]['CPF_CNPJ'].nunique()
+        _info_posit   = f"{_base_total:,} na base · {_posit_mes:,} positivados no mês"
     except:
-        total_clientes = 0
+        _info_posit   = "Base de clientes"
+
+    # Inadimplência — carregada separadamente, usar placeholder se não disponível
+    try:
+        if planilhas_disponiveis.get('inadimplencia'):
+            _df_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
+            if _df_inad is not None:
+                _df_inad = processar_inadimplencia(_df_inad)
+                _val_inad = _df_inad['ValorLiquido'].sum()
+                _cli_inad = _df_inad['Cliente'].nunique()
+                _info_inad = f"R$ {_val_inad:,.0f} · {_cli_inad:,} clientes"
+            else:
+                _info_inad = "Dados não disponíveis"
+        else:
+            _info_inad = "Planilha não configurada"
+    except:
+        _info_inad = "Títulos em aberto e atrasos"
+
+    # Clientes sem compra há mais de 6 meses
+    try:
+        _ultima_compra = df[df['TipoMov']=='NF Venda'].groupby('CPF_CNPJ')['DataEmissao'].max()
+        _sem_6m = (_ultima_compra < _6m).sum()
+        _info_churn = f"{_sem_6m:,} clientes sem compra há +6 meses"
+    except:
+        _info_churn = "Clientes inativos"
+
+    # Pedidos pendentes — carregado separadamente
+    try:
+        if planilhas_disponiveis.get('pedidos_pendentes'):
+            _resp = requests.get(planilhas_disponiveis['pedidos_pendentes']['url'], timeout=15)
+            import zipfile, xml.etree.ElementTree as ET
+            from io import BytesIO as _BytesIO
+            _ef = _BytesIO(_resp.content)
+            with zipfile.ZipFile(_ef) as _z:
+                with _z.open('xl/sharedStrings.xml') as _f:
+                    _st = ET.parse(_f)
+                    _ns = {'ss':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                    _ss = [s.text or '' for s in _st.findall('.//ss:t',_ns)]
+                with _z.open('xl/worksheets/sheet1.xml') as _f:
+                    _sh = ET.parse(_f)
+                    _val_pend = 0.0; _cli_pend = set()
+                    for _row in _sh.findall('.//ss:row',_ns):
+                        _rd = {}
+                        for _c in _row.findall('.//ss:c',_ns):
+                            _ref=''.join([x for x in _c.get('r','') if x.isalpha()])
+                            _v=_c.find('.//ss:v',_ns)
+                            if _v is not None and _v.text:
+                                _rd[_ref]=_ss[int(_v.text)] if _c.get('t')=='s' else _v.text
+                        _ca=_rd.get('A',''); _cb=_rd.get('B','')
+                        if _ca and not _cb and 'N° do pedido' not in _ca:
+                            _cur_cli=_ca
+                        elif 'N° do pedido' in _ca:
+                            try:
+                                _qc=float(_rd.get('D',0)); _vu=float(_rd.get('E',0))
+                                _qe=float(_rd.get('H',0)); _qp=_qc-_qe
+                                _val_pend+=_qp*_vu
+                                if hasattr(_cur_cli,'__len__'): _cli_pend.add(_cur_cli)
+                            except: pass
+            _info_pend = f"R$ {_val_pend:,.0f} · {len(_cli_pend):,} clientes"
+        else:
+            _info_pend = "Aguardando faturamento"
+    except:
+        _info_pend = "Aguardando faturamento"
+
+    # Rankings — top 3 vendedores
+    try:
+        _rank = notas_unicas[notas_unicas['TipoMov']=='NF Venda'].groupby('Vendedor')['TotalProduto'].sum().nlargest(3)
+        _info_rank = " · ".join([f"{v.split()[0]} R${r:,.0f}" for v,r in _rank.items()])
+    except:
+        _info_rank = "Top vendedores e clientes"
 
     cards_data = [
         {'nome':'Dashboard',          'info':f'R$ {vendas_mes:,.0f} no mês atual'},
-        {'nome':'Positivação',         'info':f'{total_clientes} clientes na base'},
-        {'nome':'Inadimplência',       'info':'Títulos em aberto e atrasos'},
-        {'nome':'Clientes sem Compra', 'info':'Identificar inativos'},
+        {'nome':'Positivação',         'info':_info_posit},
+        {'nome':'Inadimplência',       'info':_info_inad},
+        {'nome':'Clientes sem Compra', 'info':_info_churn},
         {'nome':'Histórico',           'info':'Por cliente ou vendedor'},
         {'nome':'Preço Médio',         'info':'Análise por produto'},
-        {'nome':'Pedidos Pendentes',   'info':'Aguardando faturamento'},
-        {'nome':'Rankings',            'info':'Top vendedores e clientes'},
+        {'nome':'Pedidos Pendentes',   'info':_info_pend},
+        {'nome':'Rankings',            'info':_info_rank},
     ]
     cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
 
@@ -2683,6 +2767,8 @@ elif menu == "Clientes sem Compra":
         )
 
     # ── Lógica de período ─────────────────────────────────────────────────
+    # Se filtro de data ativo: usa o período definido pelo usuário
+    # Padrão (sem filtro): usa o mês vigente
     if data_inicial and data_final:
         _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
         _df_periodo = df[
@@ -2696,6 +2782,7 @@ elif menu == "Clientes sem Compra":
         _label_periodo = f"Até {data_final.strftime('%d/%m/%Y')}"
         _df_periodo = df[df['DataEmissao'] <= pd.to_datetime(data_final)]
     else:
+        # Padrão: mês vigente
         _mes_now = pd.Timestamp.now().month
         _ano_now = pd.Timestamp.now().year
         _label_periodo = f"Mês vigente ({_mes_now:02d}/{_ano_now})"
@@ -2706,11 +2793,9 @@ elif menu == "Clientes sem Compra":
 
     st.info(f"📅 Período analisado: **{_label_periodo}** — clientes da base que não realizaram compras neste período")
 
+    # Clientes que COMPRARAM no período definido
     clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-    
-    # Pegamos a última compra de cada cliente (DataEmissao)
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-    
     valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
     valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
     
@@ -2718,29 +2803,25 @@ elif menu == "Clientes sem Compra":
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
     
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    
-    # ADICIONADO: DataEmissao incluída na seleção de colunas
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'DataEmissao']]
+    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico']]
     
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
     if estado_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
     
+    # Filtro de busca por nome do cliente
     if busca_cliente_churn and len(busca_cliente_churn) >= 2:
         clientes_sem_compra = clientes_sem_compra[
             clientes_sem_compra['RazaoSocial'].str.contains(busca_cliente_churn, case=False, na=False)
         ]
     
-    # Lógica de Ordenação
     if ordem == "Valor Histórico (Maior)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
     elif ordem == "Valor Histórico (Menor)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=True)
     elif ordem == "Nome (A-Z)":
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
-    elif ordem == "Última Compra (Mais Recente)":
-        clientes_sem_compra = clientes_sem_compra.sort_values('DataEmissao', ascending=False)
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -2766,11 +2847,8 @@ elif menu == "Clientes sem Compra":
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
     
-    # Preparar visualização
+    # Formatar para exibição
     clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
-    
-    # ADICIONADO: Formatação da data para o padrão brasileiro
-    clientes_sem_compra_display['DataEmissao'] = pd.to_datetime(clientes_sem_compra_display['DataEmissao']).dt.strftime('%d/%m/%Y')
     
     # Renomear colunas para exibição
     clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
@@ -2779,8 +2857,7 @@ elif menu == "Clientes sem Compra":
         'Vendedor': 'Vendedor',
         'Cidade': 'Cidade',
         'Estado': 'Estado',
-        'ValorHistorico': 'Valor Histórico',
-        'DataEmissao': 'Última Compra'  # Coluna renomeada para a tabela
+        'ValorHistorico': 'Valor Histórico'
     })
     
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
@@ -2791,6 +2868,7 @@ elif menu == "Clientes sem Compra":
         "clientes_sem_compra.xlsx",
         "application/vnd.ms-excel"
     )
+
 # ====================== HISTÓRICO ======================
 elif menu == "Histórico":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Histórico de Vendas</h2>', unsafe_allow_html=True)
