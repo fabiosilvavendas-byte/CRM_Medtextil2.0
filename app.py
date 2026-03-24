@@ -2203,145 +2203,109 @@ if menu == "Dashboard":
         render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
     
     st.markdown("---")
-    
-    col5, col6 = st.columns(2)
-    
+
+    # Linha 1: 3 gráficos
+    col5, col6, col7 = st.columns(3)
+
     with col5:
-        st.subheader("📈 Evolução de Vendas Brutas")
-        # Filtra apenas vendas (sem devoluções) para o gráfico
-        vendas_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        vendas_tempo = vendas_apenas.groupby('MesAno')['TotalProduto'].sum().reset_index()
-        vendas_tempo = vendas_tempo.sort_values('MesAno')
-        
+        st.subheader("📈 Evolução de Vendas")
+        vendas_tempo = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('MesAno')['TotalProduto'].sum().reset_index().sort_values('MesAno')
         if len(vendas_tempo) > 0:
-            fig_linha = px.line(
-                vendas_tempo, 
-                x='MesAno', 
-                y='TotalProduto',
-                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'}
-            )
-            fig_linha.update_traces(line_color='#1F4788', line_width=3, mode='lines+markers', marker=dict(size=6, color='#1F4788'))
-            fig_linha.update_layout(
-                xaxis_title="Período",
-                yaxis_title="Valor (R$)",
-                hovermode='x unified'
-            )
+            fig_linha = px.line(vendas_tempo, x='MesAno', y='TotalProduto',
+                labels={'MesAno': 'Período', 'TotalProduto': 'Valor (R$)'})
+            fig_linha.update_traces(line_color='#1F4788', line_width=3, mode='lines+markers', marker=dict(size=5, color='#1F4788'))
+            fig_linha.update_layout(xaxis_title="Período", yaxis_title="Valor (R$)", hovermode='x unified')
             fig_linha = aplicar_layout_grafico(fig_linha)
             st.plotly_chart(fig_linha, use_container_width=True)
         else:
-            st.info("Sem dados para exibir no período selecionado")
-    
+            st.info("Sem dados para exibir")
+
     with col6:
         st.subheader("🗺️ Top 10 Estados")
-        # Filtra apenas vendas (sem devoluções)
-        vendas_estado_apenas = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        vendas_estado = vendas_estado_apenas.groupby('Estado')['TotalProduto'].sum().reset_index()
-        vendas_estado = vendas_estado.sort_values('TotalProduto', ascending=False).head(10)
-        
-        fig_bar = px.bar(
-            vendas_estado, 
-            x='Estado', 
-            y='TotalProduto',
+        vendas_estado = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('Estado')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        fig_bar = px.bar(vendas_estado, x='Estado', y='TotalProduto',
             labels={'Estado': 'Estado', 'TotalProduto': 'Valor (R$)'},
-            color='TotalProduto',
-            color_discrete_sequence=['#2E86AB']
-        )
+            color_discrete_sequence=['#2E86AB'])
         fig_bar = aplicar_layout_grafico(fig_bar)
         st.plotly_chart(fig_bar, use_container_width=True)
-    
-    st.markdown("---")
-    
-    col7, col8 = st.columns(2)
-    
+
     with col7:
         st.subheader("👥 Positivação por Vendedor")
-        vendas_periodo = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']
-        atendidos = vendas_periodo.groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
+        atendidos = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
         atendidos.columns = ['Vendedor', 'Clientes']
         atendidos = atendidos.sort_values('Clientes', ascending=False).head(10)
-        
-        fig_posit = px.bar(
-            atendidos,
-            x='Vendedor',
-            y='Clientes',
+        fig_posit = px.bar(atendidos, x='Vendedor', y='Clientes',
             labels={'Vendedor': 'Vendedor', 'Clientes': 'Clientes Atendidos'},
-            color='Clientes',
-            color_discrete_sequence=['#1F4788']
-        )
+            color_discrete_sequence=['#1F4788'])
         fig_posit = aplicar_layout_grafico(fig_posit)
         st.plotly_chart(fig_posit, use_container_width=True)
-    
+
+    st.markdown("---")
+
+    # Linha 2: 3 gráficos
+    col8, col9, col10 = st.columns(3)
+
     with col8:
         st.subheader("🏆 Top 10 Clientes")
-        # Filtra apenas vendas
-        vendas_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        ranking_clientes = vendas_clientes.groupby('RazaoSocial')['TotalProduto'].sum().reset_index()
-        ranking_clientes = ranking_clientes.sort_values('TotalProduto', ascending=False).head(10)
-        
-        fig_clientes = px.bar(
-            ranking_clientes,
-            x='TotalProduto',
-            y='RazaoSocial',
-            orientation='h',
+        ranking_clientes = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('RazaoSocial')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        fig_clientes = px.bar(ranking_clientes, x='TotalProduto', y='RazaoSocial', orientation='h',
             labels={'RazaoSocial': 'Cliente', 'TotalProduto': 'Valor (R$)'},
-            color='TotalProduto',
-            color_discrete_sequence=['#4A7BC8']
-        )
+            color_discrete_sequence=['#4A7BC8'])
         fig_clientes = aplicar_layout_grafico(fig_clientes)
         st.plotly_chart(fig_clientes, use_container_width=True)
-    
-    st.markdown("---")
-    
-    col9, col10 = st.columns(2)
-    
+
     with col9:
-        st.subheader("⚠️ Clientes sem Compra (Top 10)")
-        clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-        todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-        valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
-        valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
-        
-        todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
-        todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
-        
-        clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-        clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False).head(10)
-        
-        fig_churn = px.bar(
-            clientes_sem_compra,
-            x='ValorHistorico',
-            y='RazaoSocial',
-            orientation='h',
+        st.subheader("⚠️ Clientes sem Compra")
+        _com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
+        _todos = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+        _vhist = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+        _vhist.columns = ['CPF_CNPJ', 'ValorHistorico']
+        _todos = pd.merge(_todos, _vhist, on='CPF_CNPJ', how='left').fillna(0)
+        _sem = _todos[~_todos['CPF_CNPJ'].isin(_com_venda)].sort_values('ValorHistorico', ascending=False).head(10)
+        fig_churn = px.bar(_sem, x='ValorHistorico', y='RazaoSocial', orientation='h',
             labels={'RazaoSocial': 'Cliente', 'ValorHistorico': 'Valor Histórico (R$)'},
-            color='ValorHistorico',
-            color_discrete_sequence=['#1F4788']
-        )
+            color_discrete_sequence=['#1F4788'])
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
-    
+
     with col10:
         st.subheader("📊 Ranking de Vendedores")
-        # Filtra apenas vendas
-        vendas_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']
-        ranking_vendedores = vendas_vendedores.groupby('Vendedor')['TotalProduto'].sum().reset_index()
-        ranking_vendedores = ranking_vendedores.sort_values('TotalProduto', ascending=False).head(10)
-        
-        fig_rank_vend = px.bar(
-            ranking_vendedores,
-            x='TotalProduto',
-            y='Vendedor',
-            orientation='h',
+        ranking_vendedores = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda'].groupby('Vendedor')['TotalProduto'].sum().reset_index().sort_values('TotalProduto', ascending=False).head(10)
+        fig_rank_vend = px.bar(ranking_vendedores, x='TotalProduto', y='Vendedor', orientation='h',
             labels={'Vendedor': 'Vendedor', 'TotalProduto': 'Valor Total (R$)'},
-            color='TotalProduto',
-            color_discrete_sequence=['#163561']
-        )
+            color_discrete_sequence=['#163561'])
         fig_rank_vend = aplicar_layout_grafico(fig_rank_vend)
         st.plotly_chart(fig_rank_vend, use_container_width=True)
 
 # ====================== POSITIVAÇÃO ======================
 elif menu == "Positivação":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Relatório de Positivação</h2>', unsafe_allow_html=True)
-    
+
+    # ── KPIs do mês vigente no topo ───────────────────────────────────────
+    _mes_atual = pd.Timestamp.now().month
+    _ano_atual = pd.Timestamp.now().year
+    _vendas_mes = df_filtrado[
+        (df_filtrado['TipoMov'] == 'NF Venda') &
+        (df_filtrado['DataEmissao'].dt.month == _mes_atual) &
+        (df_filtrado['DataEmissao'].dt.year == _ano_atual)
+    ]
+    _posit_mes    = _vendas_mes['CPF_CNPJ'].nunique()
+    _total_base   = df['CPF_CNPJ'].nunique()
+    _perc_posit   = (_posit_mes / _total_base * 100) if _total_base > 0 else 0
+
+    _kp1, _kp2, _kp3 = st.columns(3)
+    with _kp1:
+        st.metric("Positivados no Mês", f"{_posit_mes:,} clientes",
+                  help="Clientes com ao menos uma compra no mês vigente")
+    with _kp2:
+        st.metric("Total da Base", f"{_total_base:,} clientes",
+                  help="Total de clientes únicos na base")
+    with _kp3:
+        st.metric("% da Base Positivada", f"{_perc_posit:.1f}%",
+                  help="Percentual da base que comprou no mês vigente")
+
+    st.markdown("---")
+
     tab1, tab2 = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado"])
     
     with tab1:
@@ -2690,8 +2654,8 @@ elif menu == "Inadimplência":
 
 # ====================== CLIENTES SEM COMPRA ======================
 elif menu == "Clientes sem Compra":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">️ Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
-    
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
+
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         vendedor_churn_filtro = st.selectbox(
@@ -2717,8 +2681,36 @@ elif menu == "Clientes sem Compra":
             placeholder="Digite o nome...",
             key="busca_churn"
         )
-    
-    clientes_com_venda = set(df_filtrado[df_filtrado['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
+
+    # ── Lógica de período ─────────────────────────────────────────────────
+    # Se filtro de data ativo: usa o período definido pelo usuário
+    # Padrão (sem filtro): usa o mês vigente
+    if data_inicial and data_final:
+        _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
+        _df_periodo = df[
+            (df['DataEmissao'] >= pd.to_datetime(data_inicial)) &
+            (df['DataEmissao'] <= pd.to_datetime(data_final))
+        ]
+    elif data_inicial:
+        _label_periodo = f"A partir de {data_inicial.strftime('%d/%m/%Y')}"
+        _df_periodo = df[df['DataEmissao'] >= pd.to_datetime(data_inicial)]
+    elif data_final:
+        _label_periodo = f"Até {data_final.strftime('%d/%m/%Y')}"
+        _df_periodo = df[df['DataEmissao'] <= pd.to_datetime(data_final)]
+    else:
+        # Padrão: mês vigente
+        _mes_now = pd.Timestamp.now().month
+        _ano_now = pd.Timestamp.now().year
+        _label_periodo = f"Mês vigente ({_mes_now:02d}/{_ano_now})"
+        _df_periodo = df[
+            (df['DataEmissao'].dt.month == _mes_now) &
+            (df['DataEmissao'].dt.year == _ano_now)
+        ]
+
+    st.info(f"📅 Período analisado: **{_label_periodo}** — clientes da base que não realizaram compras neste período")
+
+    # Clientes que COMPRARAM no período definido
+    clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
     todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
     valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
     valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
