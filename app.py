@@ -4332,39 +4332,42 @@ elif menu == "Consulta Clientes":
                                        format="%.2f",
                                        key="cc_val_neg")
 
-        # ── Calcular comissão sobre o valor negociado ─────────────────────
-        # Usa a mesma regra do histórico: compara com preco_base (tabela padrão)
-        if _val_neg > 0 and _preco_base > 0:
-            _comissao_calc = calcular_comissao(_val_neg, _preco_base)
-            _variacao = round(((_val_neg - _preco_base) / _preco_base) * 100, 2)
+       # ── Calcular comissão sobre o valor negociado ─────────────────────
+        # Ajustado: Usa a tabela do estado (_tab_3pct) como base de cálculo
+        if '_estado_sel' in locals() and _estado_sel:
+            if _val_neg > 0 and _tab_3pct > 0:
+                _comissao_calc = calcular_comissao(_val_neg, _tab_3pct)
+                _variacao = round(((_val_neg - _tab_3pct) / _tab_3pct) * 100, 2)
 
-            if _comissao_calc == '4%':
-                _cor = "#10B981"; _msg = f"Comissão **4%** — valor {_variacao:+.1f}% acima da tabela base"
-            elif _comissao_calc == '3%':
-                _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela base"
-            elif _comissao_calc == '2,5%':
-                _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
-            elif _comissao_calc == '2%':
-                _cor = "#EF4444"; _msg = f"Comissão **2%** — valor {abs(_variacao):.1f}% abaixo (acima de 3%)"
+                if _comissao_calc == '4%':
+                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor {_variacao:+.1f}% acima da tabela do estado"
+                elif _comissao_calc == '3%':
+                    _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela do estado"
+                elif _comissao_calc == '2,5%':
+                    _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
+                elif _comissao_calc == '2%':
+                    _cor = "#EF4444"; _msg = f"Comissão **2%** — valor {abs(_variacao):.1f}% abaixo (acima de 3%)"
+                else:
+                    _cor = "#6B7280"; _msg = "Comissão não calculada"
+
+                st.markdown(f"""
+                <div style="background:{_cor}15;border-left:4px solid {_cor};
+                            border-radius:8px;padding:12px 16px;margin-top:8px;">
+                    <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
+                        Comissão: {_comissao_calc}
+                    </div>
+                    <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
+                    <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
+                        Valor negociado: R$ {_val_neg:,.2f} &nbsp;·&nbsp;
+                        Tabela base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
+                        Tabela 3%: R$ {_tab_3pct:,.2f}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                _cor = "#6B7280"; _msg = "Comissão não calculada"
-
-            st.markdown(f"""
-            <div style="background:{_cor}15;border-left:4px solid {_cor};
-                        border-radius:8px;padding:12px 16px;margin-top:8px;">
-                <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
-                    Comissão: {_comissao_calc}
-                </div>
-                <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
-                <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
-                    Valor negociado: R$ {_val_neg:,.2f} &nbsp;·&nbsp;
-                    Tabela base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
-                    Tabela 3%: R$ {_tab_3pct:,.2f}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                st.info("Insira o valor negociado para calcular a comissão.")
         else:
-            st.info("Insira o valor negociado para calcular a comissão.")
+            st.warning("Selecione um Estado para habilitar o cálculo de comissão.")
     else:
         if _cod_sel:
             st.warning(f"Produto {_cod_sel} não encontrado na tabela.")
