@@ -720,7 +720,7 @@ def check_password():
         "admin123": {
             "tipo": "administrador",
             "nome": "Administrador",
-            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Consulta Clientes"]
+            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
         },
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
@@ -4183,26 +4183,53 @@ elif menu == "Consulta Clientes":
 
     # ── Carregar tabela de preços ─────────────────────────────────────────
     _df_tabela = None
-    if planilhas_disponiveis.get('tabela_ne'):
-        with st.spinner("Carregando tabela de preços..."):
-            # CORREÇÃO: A planilha TABELA_NE tem cabeçalhos nas primeiras linhas
-            response = requests.get(planilhas_disponiveis['tabela_ne']['url'], timeout=15)
-            _df_tabela = pd.read_excel(
-                io.BytesIO(response.content),
-                skiprows=2  # Pula as 2 primeiras linhas de título
-            )
-        if _df_tabela is not None:
-            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
-            _df_tabela = _df_tabela.dropna(how='all')  # Remove linhas vazias
-            
-    elif planilhas_disponiveis.get('produtos_agrupados'):
-        # Fallback: usar tabela de produtos agrupados
-        _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-        if _df_tabela is not None:
-            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+    
+    # Tentar carregar produtos_agrupados primeiro (mais confiável)
+    if planilhas_disponiveis.get('produtos_agrupados'):
+        with st.spinner("Carregando catálogo de produtos..."):
+            _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+            if _df_tabela is not None:
+                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+                st.success("✅ Usando: Produtos Agrupados")
+    
+    # Se não conseguiu, tentar tabela_ne
+    if _df_tabela is None and planilhas_disponiveis.get('tabela_ne'):
+        with st.spinner("Carregando tabela NE..."):
+            try:
+                response = requests.get(planilhas_disponiveis['tabela_ne']['url'], timeout=15)
+                content = io.BytesIO(response.content)
+                
+                # Tentar diferentes skiprows para encontrar o cabeçalho correto
+                for skip in range(0, 10):
+                    try:
+                        df_test = pd.read_excel(content, skiprows=skip, nrows=5)
+                        content.seek(0)  # Reset para próxima tentativa
+                        
+                        # Verificar se as colunas parecem ser cabeçalhos válidos
+                        cols_str = [str(c).upper() for c in df_test.columns]
+                        
+                        # Se não tem UNNAMED, provavelmente achou o cabeçalho
+                        if not any('UNNAMED' in c for c in cols_str):
+                            # Verificar se tem colunas relevantes
+                            has_code = any(x in ' '.join(cols_str) for x in ['COD', 'CODIGO', 'CÓDIGO'])
+                            has_price = any(x in ' '.join(cols_str) for x in ['PRECO', 'PREÇO', 'VALOR', 'PRICE'])
+                            
+                            if has_code or has_price or len(cols_str) > 3:
+                                # Parece ser o cabeçalho correto!
+                                content.seek(0)
+                                _df_tabela = pd.read_excel(content, skiprows=skip)
+                                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+                                _df_tabela = _df_tabela.dropna(how='all')
+                                st.success(f"✅ Usando: Tabela NE (skiprows={skip})")
+                                break
+                    except:
+                        continue
+            except Exception as e:
+                st.warning(f"Erro ao carregar tabela NE: {e}")
 
     if _df_tabela is None or len(_df_tabela) == 0:
-        st.error("Tabela de preços não encontrada ou vazia.")
+        st.error("❌ Tabela de preços não encontrada")
+        st.info("💡 Adicione 'Produtos_Agrupados_Completos_conciliados.xlsx' ou 'TABELA_NE_2026_CRM.xlsx' no GitHub")
         st.stop()
 
     # Verificar colunas disponíveis
@@ -4216,7 +4243,8 @@ elif menu == "Consulta Clientes":
     if not _cod_col or not _preco_col:
         st.error(f"❌ Colunas necessárias não encontradas")
         st.info(f"📋 Colunas disponíveis: {_cols}")
-        with st.expander("🔍 Ver dados da tabela"):
+        st.info(f"🔍 Procurando: Código (COD, CODIGO) e Preço (PRECO, PREÇO, VALOR)")
+        with st.expander("🔍 Debug: Ver primeiras linhas da tabela"):
             st.dataframe(_df_tabela.head(10))
         st.stop()
 
