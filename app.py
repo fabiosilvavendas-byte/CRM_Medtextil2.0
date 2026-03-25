@@ -4332,20 +4332,26 @@ elif menu == "Consulta Clientes":
                                        format="%.2f",
                                        key="cc_val_neg")
 
-     # ── Calcular comissão sobre o valor negociado ─────────────────────
-        # Ajuste: Arredondamos os valores para 2 casas decimais para evitar erros de "dígitos ocultos"
+    # ── Calcular comissão sobre o valor negociado ─────────────────────
+        # Solução definitiva: Uso de margem de tolerância para evitar erro de ponto flutuante (Ex: 7.77999 vs 7.78)
         if '_estado_sel' in locals() and _estado_sel:
-            # Forçamos o arredondamento para garantir que 7.779 seja tratado como 7.78
-            _v_neg_ajustado = round(_val_neg, 2)
-            _v_tab_ajustada = round(_tab_3pct, 2)
-
-            if _v_neg_ajustado > 0 and _v_tab_ajustada > 0:
-                # Agora a função recebe os valores exatamente como aparecem na tela
-                _comissao_calc = calcular_comissao(_v_neg_ajustado, _v_tab_ajustada)
-                _variacao = round(((_v_neg_ajustado - _v_tab_ajustada) / _v_tab_ajustada) * 100, 2)
+            if _val_neg > 0 and _tab_3pct > 0:
+                
+                # Definimos uma tolerância de quase zero para a comparação
+                # Isso garante que se o valor for 7.779999999, ele seja tratado como 7.78
+                _tolerancia = 1e-5 
+                
+                # Se o valor negociado + tolerância for >= que a tabela, ele assume o valor da tabela
+                # para o cálculo da comissão não cair na faixa inferior por milésimos.
+                _v_comparacao = _val_neg
+                if abs(_val_neg - _tab_3pct) < _tolerancia:
+                    _v_comparacao = _tab_3pct
+                
+                _comissao_calc = calcular_comissao(_v_comparacao, _tab_3pct)
+                _variacao = round(((_val_neg - _tab_3pct) / _tab_3pct) * 100, 2)
 
                 if _comissao_calc == '4%':
-                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor igual ou acima da tabela base"
+                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor atingiu o objetivo da tabela"
                 elif _comissao_calc == '3%':
                     _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela do estado"
                 elif _comissao_calc == '2,5%':
