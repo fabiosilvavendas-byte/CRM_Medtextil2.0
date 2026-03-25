@@ -4332,44 +4332,34 @@ elif menu == "Consulta Clientes":
                                        format="%.2f",
                                        key="cc_val_neg")
 
-        # ── Calcular comissão sobre o valor negociado (Dinâmico por Tabela) ──
-# Agora a base de comparação é o preço da tabela que o usuário selecionou
+       # ── Calcular comissão sobre o valor negociado (Dinâmico) ──────────
 if _val_neg > 0 and _preco_tabela_sel > 0:
-    # A função calcular_comissao agora recebe o valor negociado 
-    # e o preço da tabela selecionada como referência
+    # Agora a função usa a tabela selecionada como o "100%"
     _comissao_calc = calcular_comissao(_val_neg, _preco_tabela_sel)
     
-    # Variação calculada sobre a tabela escolhida (não apenas sobre a base fixa)
+    # Diferença percentual real contra a tabela escolhida
     _variacao = ((_val_neg - _preco_tabela_sel) / _preco_tabela_sel) * 100
 
-    # Definição visual baseada na performance contra a tabela selecionada
+    # Lógica de cores baseada na performance
     if _comissao_calc == '4%':
         _cor = "#10B981"; _msg = f"Comissão **4%** — {_variacao:+.2f}% acima da tabela selecionada."
     elif _comissao_calc == '3%':
         _cor = "#2C5AA0"; _msg = "Comissão **3%** — Valor conforme tabela selecionada."
     elif _comissao_calc == '2,5%':
-        _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — Desconto de {abs(_variacao):.2f}% sobre a tabela."
+        _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — Desconto de {abs(_variacao):.2f}% (limite 3%)."
     elif _comissao_calc == '2%':
-        _cor = "#EF4444"; _msg = f"Comissão **2%** — Desconto agressivo ({abs(_variacao):.2f}%) sobre a tabela."
+        _cor = "#EF4444"; _msg = f"Comissão **2%** — Desconto de {abs(_variacao):.2f}% (excedeu 3%)."
     else:
-        _cor = "#6B7280"; _msg = "Cálculo fora dos parâmetros da tabela."
+        _cor = "#6B7280"; _msg = "Valor fora da regra de comissionamento."
 
     st.markdown(f"""
-    <div style="background:{_cor}15; border-left:5px solid {_cor};
-                border-radius:10px; padding:15px 20px; margin-top:15px;">
-        <div style="font-size:1.2rem; font-weight:800; color:{_cor};">
-            COMISSÃO: {_comissao_calc}
-        </div>
-        <div style="font-size:0.9rem; color:#4B5563; margin-top:5px; font-weight:500;">
-            {_msg}
-        </div>
+    <div style="background:{_cor}15; border-left:5px solid {_cor}; border-radius:10px; padding:15px 20px;">
+        <div style="font-size:1.2rem; font-weight:800; color:{_cor};">COMISSÃO: {_comissao_calc}</div>
+        <div style="font-size:0.9rem; color:#4B5563; margin-top:5px;">{_msg}</div>
         <div style="height:1px; background:#E5E7EB; margin:10px 0;"></div>
-        <div style="display: flex; justify-content: space-between; font-family: monospace; font-size:0.85rem; color:#6B7280;">
+        <div style="display: flex; justify-content: space-between; font-family: monospace; font-size:0.82rem; color:#6B7280;">
             <span>NEGOCIADO: <b>R$ {_val_neg:,.2f}</b></span>
             <span>REF. TABELA: <b>R$ {_preco_tabela_sel:,.2f}</b></span>
-            <span>VARIAÇÃO: <b>{_variacao:+.2f}%</b></span>
         </div>
     </div>
     """, unsafe_allow_html=True)
-else:
-    st.info("💡 Insira o valor negociado para validar a comissão contra a tabela selecionada.")
