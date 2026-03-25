@@ -4185,29 +4185,39 @@ elif menu == "Consulta Clientes":
     _df_tabela = None
     if planilhas_disponiveis.get('tabela_ne'):
         with st.spinner("Carregando tabela de preços..."):
-            _df_tabela = carregar_planilha_github(planilhas_disponiveis['tabela_ne']['url'])
+            # CORREÇÃO: A planilha TABELA_NE tem cabeçalhos nas primeiras linhas
+            response = requests.get(planilhas_disponiveis['tabela_ne']['url'], timeout=15)
+            _df_tabela = pd.read_excel(
+                io.BytesIO(response.content),
+                skiprows=2  # Pula as 2 primeiras linhas de título
+            )
         if _df_tabela is not None:
             _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+            _df_tabela = _df_tabela.dropna(how='all')  # Remove linhas vazias
+            
     elif planilhas_disponiveis.get('produtos_agrupados'):
         # Fallback: usar tabela de produtos agrupados
         _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
         if _df_tabela is not None:
             _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
 
-    if _df_tabela is None:
-        st.error("Tabela de preços não encontrada. Verifique se TABELA_NE_2026_CRM.xlsx está no repositório.")
+    if _df_tabela is None or len(_df_tabela) == 0:
+        st.error("Tabela de preços não encontrada ou vazia.")
         st.stop()
 
     # Verificar colunas disponíveis
     _cols = _df_tabela.columns.tolist()
 
-    # Identificar coluna de código e preço
-    _cod_col   = next((c for c in _cols if 'ID_COD' in c or 'CODIGO' in c or 'COD' in c), None)
-    _preco_col = next((c for c in _cols if 'PRECO' in c or 'PREÇO' in c or 'PRICE' in c or 'VALOR' in c), None)
-    _desc_col  = next((c for c in _cols if 'DESCRI' in c or 'NOME' in c or 'PRODUTO' in c or 'GRUPO' in c), None)
+    # Identificar coluna de código e preço (busca mais flexível)
+    _cod_col   = next((c for c in _cols if any(x in c for x in ['ID_COD', 'CODIGO', 'CÓDIGO', 'COD', 'CÓD'])), None)
+    _preco_col = next((c for c in _cols if any(x in c for x in ['PRECO', 'PREÇO', 'PRICE', 'VALOR', 'VLR'])), None)
+    _desc_col  = next((c for c in _cols if any(x in c for x in ['DESCRI', 'DESCRIÇÃO', 'NOME', 'PRODUTO', 'GRUPO'])), None)
 
     if not _cod_col or not _preco_col:
-        st.error(f"Colunas necessárias não encontradas. Colunas disponíveis: {_cols}")
+        st.error(f"❌ Colunas necessárias não encontradas")
+        st.info(f"📋 Colunas disponíveis: {_cols}")
+        with st.expander("🔍 Ver dados da tabela"):
+            st.dataframe(_df_tabela.head(10))
         st.stop()
 
     # ── Seleção de Estado ─────────────────────────────────────────────────
