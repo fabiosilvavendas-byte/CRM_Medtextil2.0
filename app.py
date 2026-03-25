@@ -647,6 +647,7 @@ def listar_planilhas_github():
             'vendas_produto': None,
             'produtos_agrupados': None,
             'pedidos_pendentes': None,
+            'tabela_ne': None,
             'todas': []
         }
         
@@ -678,6 +679,10 @@ def listar_planilhas_github():
                 # Identificar planilha de pedidos pendentes
                 if 'PEDIDOSPENDENTES' in content.name.upper().replace(' ', '').replace('_', ''):
                     planilhas['pedidos_pendentes'] = info
+
+                # Identificar tabela NE
+                if 'TABELA_NE' in content.name.upper().replace(' ', '_'):
+                    planilhas['tabela_ne'] = info
         
         if not planilhas['todas']:
             st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
@@ -1028,7 +1033,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     elements.append(Spacer(1, 1*mm))
     
     # Cabeçalho da tabela de itens (cor azul igual ao modelo)
-    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA DE\nEMBARQUE', 'QTDE', 'VALOR', 'TOTAL', 'COMISSÃO%']
+    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA DE\nEMBARQUE', 'QTDE', 'VALOR', 'TOTAL']
     data_itens = [header_itens]
     
     # Adicionar itens
@@ -1045,8 +1050,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
             str(item.get('cx_embarque', '')),
             f"{item.get('quantidade', 0):.0f}",
             f"R$ {item.get('valor_unit', 0):.2f}",
-            f"R$ {item.get('total', 0):.2f}",
-            str(item.get('comissao', ''))
+            f"R$ {item.get('total', 0):.2f}"
         ])
     
     # Calcular totais
@@ -1054,9 +1058,9 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     total_valor = sum([item.get('total', 0) for item in itens_pedido])
     
     # Linha de total (sem bordas superiores, fundo cinza)
-    data_itens.append(['', '', '', '', f"{total_qtde:.0f}", '', f"R$ {total_valor:,.2f}", ''])
+    data_itens.append(['', '', '', '', f"{total_qtde:.0f}", '', f"R$ {total_valor:,.2f}"])
     
-    col_widths = [12*mm, 70*mm, 15*mm, 18*mm, 12*mm, 20*mm, 25*mm, 18*mm]
+    col_widths = [12*mm, 76*mm, 15*mm, 18*mm, 12*mm, 22*mm, 25*mm]
     table_itens = Table(data_itens, colWidths=col_widths)
     
     # Estilo da tabela de itens (azul igual ao modelo)
@@ -2005,6 +2009,15 @@ with st.sidebar:
                     type="primary" if is_selected else "secondary"):
             st.session_state.menu_option = modulo
             st.rerun()
+
+    st.sidebar.markdown("---")
+    _cons_sel = st.session_state.menu_option == 'Consulta Clientes'
+    if st.button("🔎  Consulta Clientes",
+                 key="nav_consulta_clientes",
+                 use_container_width=True,
+                 type="primary" if _cons_sel else "secondary"):
+        st.session_state.menu_option = 'Consulta Clientes'
+        st.rerun()
 
 # ── Tela Home ─────────────────────────────────────────────────────────────
 if st.session_state.menu_option == '__home__':
@@ -4132,6 +4145,194 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
+
+
+# ====================== CONSULTA CLIENTES ======================
+elif menu == "Consulta Clientes":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Consulta de Preços por Cliente</h2>', unsafe_allow_html=True)
+
+    # ── Percentuais adicionais por estado ────────────────────────────────
+    _PERC_ESTADO = {
+        'AC': 6, 'RR': 6, 'RO': 6, 'AP': 6,
+        'DF': 5, 'GO': 5,
+        'MT': 5, 'MS': 5, 'TO': 5, 'AM': 5,
+        'PA': 8,
+        'RJ': 6, 'SP': 6, 'PR': 6,
+        'RONDONIA': 20,
+        'PR_DIRETA': 35,
+    }
+    _ESTADOS_OPCOES = [
+        'Selecione o Estado',
+        'AC (6%)', 'RR (6%)', 'RO (6%)', 'AP (6%)',
+        'DF (5%)', 'GO (5%)',
+        'MT (5%)', 'MS (5%)', 'TO (5%)', 'AM (5%)',
+        'PA (8%)',
+        'RJ (6%)', 'SP (6%)', 'PR (6%)',
+        'RONDONIA (20%)',
+        'PR - Venda Direta (35%)',
+    ]
+    _ESTADO_KEY_MAP = {
+        'AC (6%)': ('AC', 6), 'RR (6%)': ('RR', 6), 'RO (6%)': ('RO', 6), 'AP (6%)': ('AP', 6),
+        'DF (5%)': ('DF', 5), 'GO (5%)': ('GO', 5),
+        'MT (5%)': ('MT', 5), 'MS (5%)': ('MS', 5), 'TO (5%)': ('TO', 5), 'AM (5%)': ('AM', 5),
+        'PA (8%)': ('PA', 8),
+        'RJ (6%)': ('RJ', 6), 'SP (6%)': ('SP', 6), 'PR (6%)': ('PR', 6),
+        'RONDONIA (20%)': ('RONDONIA', 20),
+        'PR - Venda Direta (35%)': ('PR_DIRETA', 35),
+    }
+
+    # ── Carregar tabela de preços ─────────────────────────────────────────
+    _df_tabela = None
+    if planilhas_disponiveis.get('tabela_ne'):
+        with st.spinner("Carregando tabela de preços..."):
+            _df_tabela = carregar_planilha_github(planilhas_disponiveis['tabela_ne']['url'])
+        if _df_tabela is not None:
+            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+    elif planilhas_disponiveis.get('produtos_agrupados'):
+        # Fallback: usar tabela de produtos agrupados
+        _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+        if _df_tabela is not None:
+            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+
+    if _df_tabela is None:
+        st.error("Tabela de preços não encontrada. Verifique se TABELA_NE_2026_CRM.xlsx está no repositório.")
+        st.stop()
+
+    # Verificar colunas disponíveis
+    _cols = _df_tabela.columns.tolist()
+
+    # Identificar coluna de código e preço
+    _cod_col   = next((c for c in _cols if 'ID_COD' in c or 'CODIGO' in c or 'COD' in c), None)
+    _preco_col = next((c for c in _cols if 'PRECO' in c or 'PREÇO' in c or 'PRICE' in c or 'VALOR' in c), None)
+    _desc_col  = next((c for c in _cols if 'DESCRI' in c or 'NOME' in c or 'PRODUTO' in c or 'GRUPO' in c), None)
+
+    if not _cod_col or not _preco_col:
+        st.error(f"Colunas necessárias não encontradas. Colunas disponíveis: {_cols}")
+        st.stop()
+
+    # ── Seleção de Estado ─────────────────────────────────────────────────
+    st.markdown("#### Selecione o Estado")
+    _estado_sel = st.selectbox(
+        "Estado / Tabela",
+        _ESTADOS_OPCOES,
+        key="cc_estado",
+        label_visibility="collapsed"
+    )
+
+    _perc_adicional = 0
+    _estado_sigla   = ""
+    if _estado_sel != 'Selecione o Estado':
+        _estado_sigla, _perc_adicional = _ESTADO_KEY_MAP.get(_estado_sel, ('', 0))
+        st.markdown(f"""
+        <div style="background:#EEF3FC;border-radius:8px;padding:10px 14px;
+                    margin-bottom:12px;font-size:0.85rem;color:#2C5AA0;">
+            <b>Estado:</b> {_estado_sigla} &nbsp;·&nbsp;
+            <b>Adicional:</b> {_perc_adicional}% &nbsp;·&nbsp;
+            <b>Tabela base + {_perc_adicional}% = Tabela 3% comissão</b>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("#### Consulta de Produto")
+
+    # ── Campo de código do produto ────────────────────────────────────────
+    _codigos_lista = [''] + sorted(_df_tabela[_cod_col].dropna().astype(str).unique().tolist())
+    _cc1, _cc2 = st.columns([1, 2])
+    with _cc1:
+        _cod_sel = st.selectbox("Código do Produto", _codigos_lista,
+                                key="cc_codigo", label_visibility="visible")
+
+    # ── Buscar produto e calcular preços ──────────────────────────────────
+    _prod_row = None
+    if _cod_sel:
+        _match = _df_tabela[_df_tabela[_cod_col].astype(str) == str(_cod_sel)]
+        if len(_match) > 0:
+            _prod_row = _match.iloc[0]
+
+    if _prod_row is not None:
+        # Descrição
+        _descricao = ""
+        if _desc_col:
+            _parts = []
+            for _dc in [c for c in _cols if any(x in c for x in ['GRUPO','DESCRI','LINHA','GRAMATURA'])]:
+                _v = str(_prod_row.get(_dc, '')).strip()
+                if _v and _v.lower() not in ('nan', ''):
+                    _parts.append(_v)
+            _descricao = ' '.join(_parts) if _parts else str(_prod_row.get(_desc_col, ''))
+
+        with _cc2:
+            st.text_input("Descrição", value=_descricao, disabled=True, key="cc_desc")
+
+        # Preço base da tabela
+        try:
+            _preco_base = float(_prod_row.get(_preco_col, 0))
+        except:
+            _preco_base = 0.0
+
+        # Tabela 3% comissão = preco_base * (1 + perc_adicional/100)
+        _tab_3pct = _preco_base * (1 + _perc_adicional / 100) if _estado_sel != 'Selecione o Estado' else _preco_base
+        # Tabela 4% comissão = tab_3pct * 1.06
+        _tab_4pct = _tab_3pct * 1.06
+
+        # Exibir preços calculados
+        _pc1, _pc2, _pc3, _pc4 = st.columns(4)
+        with _pc1:
+            st.metric("Tabela Base", f"R$ {_preco_base:,.2f}",
+                      help="Preço da tabela padrão sem adicional de estado")
+        with _pc2:
+            st.metric(f"Tabela 3% ({_perc_adicional}% estado)",
+                      f"R$ {_tab_3pct:,.2f}",
+                      help="Tabela base + percentual do estado = tabela comissão 3%")
+        with _pc3:
+            st.metric("Tabela 4%", f"R$ {_tab_4pct:,.2f}",
+                      help="Tabela 3% + 6% = tabela comissão 4%")
+
+        with _pc4:
+            _val_neg = st.number_input("Valor Negociado (R$)",
+                                       min_value=0.0,
+                                       value=float(_tab_3pct),
+                                       format="%.2f",
+                                       key="cc_val_neg")
+
+        # ── Calcular comissão sobre o valor negociado ─────────────────────
+        # Usa a mesma regra do histórico: compara com preco_base (tabela padrão)
+        if _val_neg > 0 and _preco_base > 0:
+            _comissao_calc = calcular_comissao(_val_neg, _preco_base)
+            _variacao = round(((_val_neg - _preco_base) / _preco_base) * 100, 2)
+
+            if _comissao_calc == '4%':
+                _cor = "#10B981"; _msg = f"Comissão **4%** — valor {_variacao:+.1f}% acima da tabela base"
+            elif _comissao_calc == '3%':
+                _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela base"
+            elif _comissao_calc == '2,5%':
+                _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
+            elif _comissao_calc == '2%':
+                _cor = "#EF4444"; _msg = f"Comissão **2%** — valor {abs(_variacao):.1f}% abaixo (acima de 3%)"
+            else:
+                _cor = "#6B7280"; _msg = "Comissão não calculada"
+
+            st.markdown(f"""
+            <div style="background:{_cor}15;border-left:4px solid {_cor};
+                        border-radius:8px;padding:12px 16px;margin-top:8px;">
+                <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
+                    Comissão: {_comissao_calc}
+                </div>
+                <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
+                <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
+                    Valor negociado: R$ {_val_neg:,.2f} &nbsp;·&nbsp;
+                    Tabela base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
+                    Tabela 3%: R$ {_tab_3pct:,.2f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("Insira o valor negociado para calcular a comissão.")
+    else:
+        if _cod_sel:
+            st.warning(f"Produto {_cod_sel} não encontrado na tabela.")
+        else:
+            st.info("Selecione um código de produto para consultar os preços.")
+
 
 st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
