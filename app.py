@@ -720,7 +720,7 @@ def check_password():
         "admin123": {
             "tipo": "administrador",
             "nome": "Administrador",
-            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Consulta CLientes]
+            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
         },
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
@@ -4183,69 +4183,31 @@ elif menu == "Consulta Clientes":
 
     # ── Carregar tabela de preços ─────────────────────────────────────────
     _df_tabela = None
-    
-    # Tentar carregar produtos_agrupados primeiro (mais confiável)
-    if planilhas_disponiveis.get('produtos_agrupados'):
-        with st.spinner("Carregando catálogo de produtos..."):
-            _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-            if _df_tabela is not None:
-                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
-                st.success("✅ Usando: Produtos Agrupados")
-    
-    # Se não conseguiu, tentar tabela_ne
-    if _df_tabela is None and planilhas_disponiveis.get('tabela_ne'):
-        with st.spinner("Carregando tabela NE..."):
-            try:
-                response = requests.get(planilhas_disponiveis['tabela_ne']['url'], timeout=15)
-                content = io.BytesIO(response.content)
-                
-                # Tentar diferentes skiprows para encontrar o cabeçalho correto
-                for skip in range(0, 10):
-                    try:
-                        df_test = pd.read_excel(content, skiprows=skip, nrows=5)
-                        content.seek(0)  # Reset para próxima tentativa
-                        
-                        # Verificar se as colunas parecem ser cabeçalhos válidos
-                        cols_str = [str(c).upper() for c in df_test.columns]
-                        
-                        # Se não tem UNNAMED, provavelmente achou o cabeçalho
-                        if not any('UNNAMED' in c for c in cols_str):
-                            # Verificar se tem colunas relevantes
-                            has_code = any(x in ' '.join(cols_str) for x in ['COD', 'CODIGO', 'CÓDIGO'])
-                            has_price = any(x in ' '.join(cols_str) for x in ['PRECO', 'PREÇO', 'VALOR', 'PRICE'])
-                            
-                            if has_code or has_price or len(cols_str) > 3:
-                                # Parece ser o cabeçalho correto!
-                                content.seek(0)
-                                _df_tabela = pd.read_excel(content, skiprows=skip)
-                                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
-                                _df_tabela = _df_tabela.dropna(how='all')
-                                st.success(f"✅ Usando: Tabela NE (skiprows={skip})")
-                                break
-                    except:
-                        continue
-            except Exception as e:
-                st.warning(f"Erro ao carregar tabela NE: {e}")
+    if planilhas_disponiveis.get('tabela_ne'):
+        with st.spinner("Carregando tabela de preços..."):
+            _df_tabela = carregar_planilha_github(planilhas_disponiveis['tabela_ne']['url'])
+        if _df_tabela is not None:
+            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+    elif planilhas_disponiveis.get('produtos_agrupados'):
+        # Fallback: usar tabela de produtos agrupados
+        _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+        if _df_tabela is not None:
+            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
 
-    if _df_tabela is None or len(_df_tabela) == 0:
-        st.error("❌ Tabela de preços não encontrada")
-        st.info("💡 Adicione 'Produtos_Agrupados_Completos_conciliados.xlsx' ou 'TABELA_NE_2026_CRM.xlsx' no GitHub")
+    if _df_tabela is None:
+        st.error("Tabela de preços não encontrada. Verifique se TABELA_NE_2026_CRM.xlsx está no repositório.")
         st.stop()
 
     # Verificar colunas disponíveis
     _cols = _df_tabela.columns.tolist()
 
-    # Identificar coluna de código e preço (busca mais flexível)
-    _cod_col   = next((c for c in _cols if any(x in c for x in ['ID_COD', 'CODIGO', 'CÓDIGO', 'COD', 'CÓD'])), None)
-    _preco_col = next((c for c in _cols if any(x in c for x in ['PRECO', 'PREÇO', 'PRICE', 'VALOR', 'VLR'])), None)
-    _desc_col  = next((c for c in _cols if any(x in c for x in ['DESCRI', 'DESCRIÇÃO', 'NOME', 'PRODUTO', 'GRUPO'])), None)
+    # Identificar coluna de código e preço
+    _cod_col   = next((c for c in _cols if 'ID_COD' in c or 'CODIGO' in c or 'COD' in c), None)
+    _preco_col = next((c for c in _cols if 'PRECO' in c or 'PREÇO' in c or 'PRICE' in c or 'VALOR' in c), None)
+    _desc_col  = next((c for c in _cols if 'DESCRI' in c or 'NOME' in c or 'PRODUTO' in c or 'GRUPO' in c), None)
 
     if not _cod_col or not _preco_col:
-        st.error(f"❌ Colunas necessárias não encontradas")
-        st.info(f"📋 Colunas disponíveis: {_cols}")
-        st.info(f"🔍 Procurando: Código (COD, CODIGO) e Preço (PRECO, PREÇO, VALOR)")
-        with st.expander("🔍 Debug: Ver primeiras linhas da tabela"):
-            st.dataframe(_df_tabela.head(10))
+        st.error(f"Colunas necessárias não encontradas. Colunas disponíveis: {_cols}")
         st.stop()
 
     # ── Seleção de Estado ─────────────────────────────────────────────────
@@ -4333,47 +4295,44 @@ elif menu == "Consulta Clientes":
                                        key="cc_val_neg")
 
         # ── Calcular comissão sobre o valor negociado ─────────────────────
-        # Agora utiliza a tabela do estado (_tab_3pct) como referência para o cálculo
-        if '_estado_sel' in locals() and _estado_sel:
-            if _val_neg > 0 and _tab_3pct > 0:
-                # O cálculo agora compara o valor negociado com a tabela de 3% do estado
-                _comissao_calc = calcular_comissao(_val_neg, _tab_3pct)
-                _variacao = round(((_val_neg - _tab_3pct) / _tab_3pct) * 100, 2)
+        # Usa a mesma regra do histórico: compara com preco_base (tabela padrão)
+        if _val_neg > 0 and _preco_base > 0:
+            _comissao_calc = calcular_comissao(_val_neg, _preco_base)
+            _variacao = round(((_val_neg - _preco_base) / _preco_base) * 100, 2)
 
-                if _comissao_calc == '4%':
-                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor {_variacao:+.1f}% acima da tabela do estado"
-                elif _comissao_calc == '3%':
-                    _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela do estado"
-                elif _comissao_calc == '2,5%':
-                    _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
-                elif _comissao_calc == '2%':
-                    _cor = "#EF4444"; _msg = f"Comissão **2%** — valor {abs(_variacao):.1f}% abaixo (acima de 3%)"
-                else:
-                    _cor = "#6B7280"; _msg = "Comissão não calculada"
-
-                st.markdown(f"""
-                <div style="background:{_cor}15;border-left:4px solid {_cor};
-                            border-radius:8px;padding:12px 16px;margin-top:8px;">
-                    <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
-                        Comissão: {_comissao_calc}
-                    </div>
-                    <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
-                    <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
-                        Valor negociado: R$ {_val_neg:,.2f} &nbsp;·&nbsp;
-                        Tabela Base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
-                        Tabela Estado (3%): R$ {_tab_3pct:,.2f}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            if _comissao_calc == '4%':
+                _cor = "#10B981"; _msg = f"Comissão **4%** — valor {_variacao:+.1f}% acima da tabela base"
+            elif _comissao_calc == '3%':
+                _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela base"
+            elif _comissao_calc == '2,5%':
+                _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
+            elif _comissao_calc == '2%':
+                _cor = "#EF4444"; _msg = f"Comissão **2%** — valor {abs(_variacao):.1f}% abaixo (acima de 3%)"
             else:
-                st.info("Insira o valor negociado para calcular a comissão.")
+                _cor = "#6B7280"; _msg = "Comissão não calculada"
+
+            st.markdown(f"""
+            <div style="background:{_cor}15;border-left:4px solid {_cor};
+                        border-radius:8px;padding:12px 16px;margin-top:8px;">
+                <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
+                    Comissão: {_comissao_calc}
+                </div>
+                <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
+                <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
+                    Valor negociado: R$ {_val_neg:,.2f} &nbsp;·&nbsp;
+                    Tabela base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
+                    Tabela 3%: R$ {_tab_3pct:,.2f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.warning("Selecione um Estado para habilitar o cálculo de comissão.")
+            st.info("Insira o valor negociado para calcular a comissão.")
     else:
         if _cod_sel:
             st.warning(f"Produto {_cod_sel} não encontrado na tabela.")
         else:
             st.info("Selecione um código de produto para consultar os preços.")
+
 
 st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
