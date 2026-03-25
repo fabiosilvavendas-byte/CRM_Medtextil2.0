@@ -4333,30 +4333,27 @@ elif menu == "Consulta Clientes":
                                        key="cc_val_neg")
 
     # ── Calcular comissão sobre o valor negociado ─────────────────────
-        # Solução Definitiva: Uso de Decimal para precisão financeira (7,77987 -> 7,78)
-        from decimal import Decimal, ROUND_HALF_UP
-
+        # SOLUÇÃO FINAL: Comparação direta com margem de tolerância de 1 centavo
         if '_estado_sel' in locals() and _estado_sel:
-            # Convertemos para Decimal e arredondamos rigorosamente para 2 casas
-            def f_limpar(v):
-                return Decimal(str(v)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-            try:
-                _v_neg_limpo = f_limpar(_val_neg)
-                _ref_tabela_limpa = f_limpar(_tab_3pct)
+            if _val_neg > 0 and _tab_3pct > 0:
                 
-                # Para a função de comissão, enviamos como float, mas já "limpo"
-                _v_final_neg = float(_v_neg_limpo)
-                _v_final_ref = float(_ref_tabela_limpa)
+                # Calculamos o valor exato que seria a tabela de 4% (3% + 6% de margem)
+                # Aplicamos round para limpar o 7,77987 para 7,78
+                _tabela_4_objetivo = round(_tab_3pct * 1.06, 2)
+                _valor_digitado = round(_val_neg, 2)
 
-                if _v_final_neg > 0 and _v_final_ref > 0:
-                    _comissao_calc = calcular_comissao(_v_final_neg, _v_final_ref)
-                    _variacao = round(((_v_final_neg - _v_final_ref) / _v_final_ref) * 100, 2)
+                # FORÇAR A REGRA: Se o valor digitado for maior ou igual ao objetivo (com margem de 0.001)
+                if _valor_digitado >= (_tabela_4_objetivo - 0.001):
+                    _comissao_calc = '4%'
+                    _variacao = round(((_valor_digitado - _tab_3pct) / _tab_3pct) * 100, 2)
+                    _cor = "#10B981"; _msg = f"Comissão **4%** — objetivo de R$ {_tabela_4_objetivo:,.2f} atingido"
+                else:
+                    # Se não atingiu 4%, rodamos a função padrão para as outras faixas
+                    _comissao_calc = calcular_comissao(_val_neg, _tab_3pct)
+                    _variacao = round(((_val_neg - _tab_3pct) / _tab_3pct) * 100, 2)
 
-                    if _comissao_calc == '4%':
-                        _cor = "#10B981"; _msg = f"Comissão **4%** — valor atingiu o objetivo da tabela"
-                    elif _comissao_calc == '3%':
-                        _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela do estado"
+                    if _comissao_calc == '3%':
+                        _cor = "#2C5AA0"; _msg = "Comissão **3%** — valor igual ou acima da tabela do estado"
                     elif _comissao_calc == '2,5%':
                         _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
                     elif _comissao_calc == '2%':
@@ -4364,24 +4361,22 @@ elif menu == "Consulta Clientes":
                     else:
                         _cor = "#6B7280"; _msg = "Comissão não calculada"
 
-                    st.markdown(f"""
-                    <div style="background:{_cor}15;border-left:4px solid {_cor};
-                                border-radius:8px;padding:12px 16px;margin-top:8px;">
-                        <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
-                            Comissão: {_comissao_calc}
-                        </div>
-                        <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
-                        <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
-                            Valor negociado: R$ {_v_final_neg:,.2f} &nbsp;·&nbsp;
-                            Tabela base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
-                            Tabela 3%: R$ {_v_final_ref:,.2f}
-                        </div>
+                st.markdown(f"""
+                <div style="background:{_cor}15;border-left:4px solid {_cor};
+                            border-radius:8px;padding:12px 16px;margin-top:8px;">
+                    <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
+                        Comissão: {_comissao_calc}
                     </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("Insira o valor negociado para calcular a comissão.")
-            except Exception:
-                st.error("Erro ao processar valores decimais. Verifique as entradas.")
+                    <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
+                    <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
+                        Valor negociado: R$ {_val_neg:,.2f} &nbsp;·&nbsp;
+                        Tabela Estado (3%): R$ {round(_tab_3pct, 2):,.2f} &nbsp;·&nbsp;
+                        Meta para 4%: R$ {_tabela_4_objetivo:,.2f}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Insira o valor negociado para calcular a comissão.")
         else:
             st.warning("Selecione um Estado para habilitar o cálculo de comissão.")
     else:
