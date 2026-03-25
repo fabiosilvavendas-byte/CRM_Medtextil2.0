@@ -4332,19 +4332,22 @@ elif menu == "Consulta Clientes":
                                        format="%.2f",
                                        key="cc_val_neg")
 
-      # ── Calcular comissão sobre o valor negociado ─────────────────────
-        # Ajustado para considerar 4% quando o valor for igual ou maior que a tabela correspondente
+     # ── Calcular comissão sobre o valor negociado ─────────────────────
+        # Ajuste: Arredondamos os valores para 2 casas decimais para evitar erros de "dígitos ocultos"
         if '_estado_sel' in locals() and _estado_sel:
-            if _val_neg > 0 and _tab_3pct > 0:
-                # O cálculo usa a tabela do estado como base
-                _comissao_calc = calcular_comissao(_val_neg, _tab_3pct)
-                _variacao = round(((_val_neg - _tab_3pct) / _tab_3pct) * 100, 2)
+            # Forçamos o arredondamento para garantir que 7.779 seja tratado como 7.78
+            _v_neg_ajustado = round(_val_neg, 2)
+            _v_tab_ajustada = round(_tab_3pct, 2)
 
-                # Ajuste de exibição: Se a variação for >= 0, ele já está na zona de 3% ou 4%
+            if _v_neg_ajustado > 0 and _v_tab_ajustada > 0:
+                # Agora a função recebe os valores exatamente como aparecem na tela
+                _comissao_calc = calcular_comissao(_v_neg_ajustado, _v_tab_ajustada)
+                _variacao = round(((_v_neg_ajustado - _v_tab_ajustada) / _v_tab_ajustada) * 100, 2)
+
                 if _comissao_calc == '4%':
                     _cor = "#10B981"; _msg = f"Comissão **4%** — valor igual ou acima da tabela base"
                 elif _comissao_calc == '3%':
-                    _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor dentro da margem da tabela do estado"
+                    _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela do estado"
                 elif _comissao_calc == '2,5%':
                     _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
                 elif _comissao_calc == '2%':
