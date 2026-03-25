@@ -720,7 +720,7 @@ def check_password():
         "admin123": {
             "tipo": "administrador",
             "nome": "Administrador",
-            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings"]
+            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Consulta Clientes"]
         },
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
