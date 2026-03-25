@@ -4332,17 +4332,19 @@ elif menu == "Consulta Clientes":
                                        format="%.2f",
                                        key="cc_val_neg")
 
-       # ── Calcular comissão sobre o valor negociado ─────────────────────
-        # Ajustado: Usa a tabela do estado (_tab_3pct) como base de cálculo
+      # ── Calcular comissão sobre o valor negociado ─────────────────────
+        # Ajustado para considerar 4% quando o valor for igual ou maior que a tabela correspondente
         if '_estado_sel' in locals() and _estado_sel:
             if _val_neg > 0 and _tab_3pct > 0:
+                # O cálculo usa a tabela do estado como base
                 _comissao_calc = calcular_comissao(_val_neg, _tab_3pct)
                 _variacao = round(((_val_neg - _tab_3pct) / _tab_3pct) * 100, 2)
 
+                # Ajuste de exibição: Se a variação for >= 0, ele já está na zona de 3% ou 4%
                 if _comissao_calc == '4%':
-                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor {_variacao:+.1f}% acima da tabela do estado"
+                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor igual ou acima da tabela base"
                 elif _comissao_calc == '3%':
-                    _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela do estado"
+                    _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor dentro da margem da tabela do estado"
                 elif _comissao_calc == '2,5%':
                     _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
                 elif _comissao_calc == '2%':
@@ -4373,7 +4375,6 @@ elif menu == "Consulta Clientes":
             st.warning(f"Produto {_cod_sel} não encontrado na tabela.")
         else:
             st.info("Selecione um código de produto para consultar os preços.")
-
 
 st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
