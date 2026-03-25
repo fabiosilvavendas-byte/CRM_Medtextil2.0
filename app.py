@@ -4183,53 +4183,26 @@ elif menu == "Consulta Clientes":
 
     # ── Carregar tabela de preços ─────────────────────────────────────────
     _df_tabela = None
-    
-    # Tentar carregar produtos_agrupados primeiro (mais confiável)
-    if planilhas_disponiveis.get('produtos_agrupados'):
-        with st.spinner("Carregando catálogo de produtos..."):
-            _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-            if _df_tabela is not None:
-                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
-                st.success("✅ Usando: Produtos Agrupados")
-    
-    # Se não conseguiu, tentar tabela_ne
-    if _df_tabela is None and planilhas_disponiveis.get('tabela_ne'):
-        with st.spinner("Carregando tabela NE..."):
-            try:
-                response = requests.get(planilhas_disponiveis['tabela_ne']['url'], timeout=15)
-                content = io.BytesIO(response.content)
-                
-                # Tentar diferentes skiprows para encontrar o cabeçalho correto
-                for skip in range(0, 10):
-                    try:
-                        df_test = pd.read_excel(content, skiprows=skip, nrows=5)
-                        content.seek(0)  # Reset para próxima tentativa
-                        
-                        # Verificar se as colunas parecem ser cabeçalhos válidos
-                        cols_str = [str(c).upper() for c in df_test.columns]
-                        
-                        # Se não tem UNNAMED, provavelmente achou o cabeçalho
-                        if not any('UNNAMED' in c for c in cols_str):
-                            # Verificar se tem colunas relevantes
-                            has_code = any(x in ' '.join(cols_str) for x in ['COD', 'CODIGO', 'CÓDIGO'])
-                            has_price = any(x in ' '.join(cols_str) for x in ['PRECO', 'PREÇO', 'VALOR', 'PRICE'])
-                            
-                            if has_code or has_price or len(cols_str) > 3:
-                                # Parece ser o cabeçalho correto!
-                                content.seek(0)
-                                _df_tabela = pd.read_excel(content, skiprows=skip)
-                                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
-                                _df_tabela = _df_tabela.dropna(how='all')
-                                st.success(f"✅ Usando: Tabela NE (skiprows={skip})")
-                                break
-                    except:
-                        continue
-            except Exception as e:
-                st.warning(f"Erro ao carregar tabela NE: {e}")
+    if planilhas_disponiveis.get('tabela_ne'):
+        with st.spinner("Carregando tabela de preços..."):
+            # CORREÇÃO: A planilha TABELA_NE tem cabeçalhos nas primeiras linhas
+            response = requests.get(planilhas_disponiveis['tabela_ne']['url'], timeout=15)
+            _df_tabela = pd.read_excel(
+                io.BytesIO(response.content),
+                skiprows=2  # Pula as 2 primeiras linhas de título
+            )
+        if _df_tabela is not None:
+            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+            _df_tabela = _df_tabela.dropna(how='all')  # Remove linhas vazias
+            
+    elif planilhas_disponiveis.get('produtos_agrupados'):
+        # Fallback: usar tabela de produtos agrupados
+        _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+        if _df_tabela is not None:
+            _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
 
     if _df_tabela is None or len(_df_tabela) == 0:
-        st.error("❌ Tabela de preços não encontrada")
-        st.info("💡 Adicione 'Produtos_Agrupados_Completos_conciliados.xlsx' ou 'TABELA_NE_2026_CRM.xlsx' no GitHub")
+        st.error("Tabela de preços não encontrada ou vazia.")
         st.stop()
 
     # Verificar colunas disponíveis
@@ -4243,8 +4216,7 @@ elif menu == "Consulta Clientes":
     if not _cod_col or not _preco_col:
         st.error(f"❌ Colunas necessárias não encontradas")
         st.info(f"📋 Colunas disponíveis: {_cols}")
-        st.info(f"🔍 Procurando: Código (COD, CODIGO) e Preço (PRECO, PREÇO, VALOR)")
-        with st.expander("🔍 Debug: Ver primeiras linhas da tabela"):
+        with st.expander("🔍 Ver dados da tabela"):
             st.dataframe(_df_tabela.head(10))
         st.stop()
 
@@ -4332,34 +4304,50 @@ elif menu == "Consulta Clientes":
                                        format="%.2f",
                                        key="cc_val_neg")
 
-       # ── Calcular comissão sobre o valor negociado (Dinâmico) ──────────
-if _val_neg > 0 and _preco_tabela_sel > 0:
-    # Agora a função usa a tabela selecionada como o "100%"
-    _comissao_calc = calcular_comissao(_val_neg, _preco_tabela_sel)
-    
-    # Diferença percentual real contra a tabela escolhida
-    _variacao = ((_val_neg - _preco_tabela_sel) / _preco_tabela_sel) * 100
+        # ── Calcular comissão sobre o valor negociado ─────────────────────
+        # Usa a mesma regra do histórico: compara com preco_base (tabela padrão)
+        if _val_neg > 0 and _preco_base > 0:
+            _comissao_calc = calcular_comissao(_val_neg, _preco_base)
+            _variacao = round(((_val_neg - _preco_base) / _preco_base) * 100, 2)
 
-    # Lógica de cores baseada na performance
-    if _comissao_calc == '4%':
-        _cor = "#10B981"; _msg = f"Comissão **4%** — {_variacao:+.2f}% acima da tabela selecionada."
-    elif _comissao_calc == '3%':
-        _cor = "#2C5AA0"; _msg = "Comissão **3%** — Valor conforme tabela selecionada."
-    elif _comissao_calc == '2,5%':
-        _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — Desconto de {abs(_variacao):.2f}% (limite 3%)."
-    elif _comissao_calc == '2%':
-        _cor = "#EF4444"; _msg = f"Comissão **2%** — Desconto de {abs(_variacao):.2f}% (excedeu 3%)."
+            if _comissao_calc == '4%':
+                _cor = "#10B981"; _msg = f"Comissão **4%** — valor {_variacao:+.1f}% acima da tabela base"
+            elif _comissao_calc == '3%':
+                _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela base"
+            elif _comissao_calc == '2,5%':
+                _cor = "#F59E0B"; _msg = f"Comissão **2,5%** — valor {abs(_variacao):.1f}% abaixo (até 3%)"
+            elif _comissao_calc == '2%':
+                _cor = "#EF4444"; _msg = f"Comissão **2%** — valor {abs(_variacao):.1f}% abaixo (acima de 3%)"
+            else:
+                _cor = "#6B7280"; _msg = "Comissão não calculada"
+
+            st.markdown(f"""
+            <div style="background:{_cor}15;border-left:4px solid {_cor};
+                        border-radius:8px;padding:12px 16px;margin-top:8px;">
+                <div style="font-size:1.1rem;font-weight:700;color:{_cor};">
+                    Comissão: {_comissao_calc}
+                </div>
+                <div style="font-size:0.82rem;color:#6C757D;margin-top:3px;">{_msg}</div>
+                <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
+                    Valor negociado: R$ {_val_neg:,.2f} &nbsp;·&nbsp;
+                    Tabela base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
+                    Tabela 3%: R$ {_tab_3pct:,.2f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("Insira o valor negociado para calcular a comissão.")
     else:
-        _cor = "#6B7280"; _msg = "Valor fora da regra de comissionamento."
+        if _cod_sel:
+            st.warning(f"Produto {_cod_sel} não encontrado na tabela.")
+        else:
+            st.info("Selecione um código de produto para consultar os preços.")
 
-    st.markdown(f"""
-    <div style="background:{_cor}15; border-left:5px solid {_cor}; border-radius:10px; padding:15px 20px;">
-        <div style="font-size:1.2rem; font-weight:800; color:{_cor};">COMISSÃO: {_comissao_calc}</div>
-        <div style="font-size:0.9rem; color:#4B5563; margin-top:5px;">{_msg}</div>
-        <div style="height:1px; background:#E5E7EB; margin:10px 0;"></div>
-        <div style="display: flex; justify-content: space-between; font-family: monospace; font-size:0.82rem; color:#6B7280;">
-            <span>NEGOCIADO: <b>R$ {_val_neg:,.2f}</b></span>
-            <span>REF. TABELA: <b>R$ {_preco_tabela_sel:,.2f}</b></span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+
+st.markdown("""
+<hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
+<div style="text-align:center;color:#ADB5BD;font-size:0.78rem;padding-bottom:16px;">
+    Dashboard BI Medtextil 2.0 &nbsp;·&nbsp; Desenvolvido com Streamlit
+    &nbsp;·&nbsp; <span style="color:#4A7BC8;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
+</div>
+""", unsafe_allow_html=True)
