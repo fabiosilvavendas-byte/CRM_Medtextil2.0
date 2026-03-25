@@ -4333,21 +4333,19 @@ elif menu == "Consulta Clientes":
                                        key="cc_val_neg")
 
     # ── Calcular comissão sobre o valor negociado ─────────────────────
-        # Limpeza na origem: garante que a tabela de referência não tenha dízimas ocultas
+        # Ajuste de Arredondamento: Limpa resíduos de cálculos de % (ex: 7,77987 -> 7,78)
         if '_estado_sel' in locals() and _estado_sel:
-            # Forçamos a referência e o negociado a terem EXATAMENTE 2 casas decimais
-            _ref_tabela = round(float(_tab_3pct), 2)
+            # Arredondamos a tabela de referência (3%) e o valor negociado para 2 casas
+            _ref_tabela_limpa = round(float(_tab_3pct), 2)
             _v_neg_limpo = round(float(_val_neg), 2)
 
-            if _v_neg_limpo > 0 and _ref_tabela > 0:
-                # Agora a função recebe valores "limpos", sem resíduos infinitesimais
-                _comissao_calc = calcular_comissao(_v_neg_limpo, _ref_tabela)
-                
-                # Cálculo da variação para exibição na tela
-                _variacao = round(((_v_neg_limpo - _ref_tabela) / _ref_tabela) * 100, 2)
+            if _v_neg_limpo > 0 and _ref_tabela_limpa > 0:
+                # Enviamos os valores limpos para a função de cálculo
+                _comissao_calc = calcular_comissao(_v_neg_limpo, _ref_tabela_limpa)
+                _variacao = round(((_v_neg_limpo - _ref_tabela_limpa) / _ref_tabela_limpa) * 100, 2)
 
                 if _comissao_calc == '4%':
-                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor igual ou acima da tabela"
+                    _cor = "#10B981"; _msg = f"Comissão **4%** — valor atingiu o objetivo da tabela"
                 elif _comissao_calc == '3%':
                     _cor = "#2C5AA0"; _msg = f"Comissão **3%** — valor igual ou acima da tabela do estado"
                 elif _comissao_calc == '2,5%':
@@ -4367,7 +4365,7 @@ elif menu == "Consulta Clientes":
                     <div style="font-size:0.78rem;color:#ADB5BD;margin-top:4px;">
                         Valor negociado: R$ {_v_neg_limpo:,.2f} &nbsp;·&nbsp;
                         Tabela base: R$ {_preco_base:,.2f} &nbsp;·&nbsp;
-                        Tabela 3%: R$ {_ref_tabela:,.2f}
+                        Tabela Estado (Ref): R$ {_ref_tabela_limpa:,.2f}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
