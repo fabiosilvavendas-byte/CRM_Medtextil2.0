@@ -725,7 +725,7 @@ def check_password():
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
             "nome": "Colaborador",
-            "modulos": ["Inadimplência", "Histórico", "Pedidos Pendentes"]
+            "modulos": ["Inadimplência", "Histórico", "Pedidos Pendentes", "Consulta Clientes"]
         }
     }
     
