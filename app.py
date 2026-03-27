@@ -1212,277 +1212,64 @@ def to_excel(df):
     return output.getvalue()
 
 def to_excel_pedidos_pendentes(df):
-    """
-    Converte DataFrame de pedidos pendentes para Excel com layout customizado
-    Segue modelo: abas separadas por tipo de produto com subgrupos de marca
-    """
+    """Converte DataFrame de pedidos pendentes para Excel com abas por tipo de produto"""
     output = io.BytesIO()
     
-    # ═══════════════════════════════════════════════════════════════════
-    # FUNÇÕES AUXILIARES
-    # ═══════════════════════════════════════════════════════════════════
-    
-    def identificar_grupo_produto(descricao):
-        """Identifica o grupo principal do produto"""
+    # Função para identificar tipo de produto pela descrição
+    def identificar_tipo(descricao):
         if pd.isna(descricao):
             return 'OUTROS'
         
-        desc_upper = str(descricao).upper()
+        descricao_upper = str(descricao).upper()
         
-        if 'ATADURA' in desc_upper:
-            return 'ATADURA'
-        elif 'CAMPO' in desc_upper:
+        if 'ATADURA' in descricao_upper:
+            return 'ATADURAS'
+        elif 'CAMPO' in descricao_upper:
             return 'CAMPO'
-        elif ('GAZE' in desc_upper and 'ROLO' in desc_upper) or ('GAZE' in desc_upper and 'CIRCULAR' in desc_upper):
-            return 'TIPO QUEIJO'  # Gaze em Rolo
-        elif any(x in desc_upper for x in ['NAO ESTERIL', 'NÃO ESTERIL', 'NÃO ESTÉRIL', 'NAO ESTÉRIL']):
+        elif ('GAZE' in descricao_upper and 'ROLO' in descricao_upper) or ('GAZE' in descricao_upper and 'CIRCULAR' in descricao_upper):
+            return 'GAZE EM ROLO'
+        elif 'NAO ESTERIL' in descricao_upper or 'NÃO ESTERIL' in descricao_upper or 'NÃO ESTÉRIL' in descricao_upper or 'NAO ESTÉRIL' in descricao_upper:
             return 'NÃO ESTERIL'
-        elif any(x in desc_upper for x in ['ESTERIL', 'ESTÉRIL']):
+        elif 'ESTERIL' in descricao_upper or 'ESTÉRIL' in descricao_upper:
             return 'ESTERIL'
         else:
             return 'OUTROS'
     
-    def identificar_subgrupo_marca(descricao, grupo):
-        """
-        Identifica subgrupo baseado na marca
-        COMBATE = MEDMAIS
-        EXTRA = MEDTEXTIL
-        """
-        if pd.isna(descricao):
-            return ''
-        
-        desc_upper = str(descricao).upper()
-        
-        if grupo == 'ATADURA':
-            # Identificar se é FARMA ou HOSPITALAR
-            if 'HOSP' in desc_upper:
-                tipo = 'HOSPITALAR'
+    # Função para identificar se é HOSPITALAR ou FARMA (apenas para ATADURAS)
+    def identificar_categoria(descricao, tipo):
+        if tipo == 'ATADURAS':
+            if pd.notna(descricao) and 'HOSP' in str(descricao).upper():
+                return 'HOSPITALAR'
             else:
-                tipo = 'FARMA'
-            
-            # Identificar marca
-            if 'COMBATE' in desc_upper or 'MEDMAIS' in desc_upper:
-                marca = 'COMBATE'
-            elif 'EXTRA' in desc_upper or 'MEDTEXTIL' in desc_upper:
-                marca = 'EXTRA'
-            else:
-                marca = 'COMBATE'  # Default
-            
-            return f"ATADURAS {tipo} {marca}"
-        
-        elif grupo == 'NÃO ESTERIL':
-            return "PACOTE 09F"
-        
-        elif grupo == 'ESTERIL':
-            # Pode ter 09 FIOS ou 11 FIOS
-            if '11' in desc_upper:
-                return "ESTERIL 11 FIOS"
-            else:
-                return "ESTERIL 09 FIOS"
-        
-        elif grupo == 'CAMPO':
-            return "CAMPO 45 X 50"
-        
-        elif grupo == 'TIPO QUEIJO':
-            return "GAZE EM ROLO 9 FIOS"
-        
+                return 'FARMA'
         return ''
     
-    def calcular_comissao_percentual(valor_negociado, preco_base):
-        """
-        Calcula percentual de comissão seguindo regra do módulo Consulta Clientes
-        """
-        if preco_base <= 0:
-            return 0
-        
-        # Calcular tabelas de referência
-        # Assumindo estado padrão (sem adicional) para cálculo genérico
-        tabela_3pct = preco_base  # Preço base = tabela 3%
-        tabela_4pct = tabela_3pct * 1.06  # Tabela 3% + 6%
-        
-        if valor_negociado >= tabela_4pct:
-            return 4
-        elif valor_negociado >= tabela_3pct:
-            return 3
-        elif valor_negociado >= tabela_3pct * 0.97:  # Até 3% abaixo
-            return 2.5
-        elif valor_negociado >= tabela_3pct * 0.90:  # Mais de 3% abaixo
-            return 2
-        else:
-            return 0
-    
-    def calcular_dias_pendentes(data_emissao):
-        """Calcula dias desde a emissão até hoje"""
-        if pd.isna(data_emissao):
-            return 0
-        try:
-            hoje = pd.Timestamp.now()
-            diff = (hoje - data_emissao).days
-            return max(0, diff)
-        except:
-            return 0
-    
-    # ═══════════════════════════════════════════════════════════════════
-    # PREPARAR DADOS
-    # ═══════════════════════════════════════════════════════════════════
-    
+    # Adicionar coluna de tipo
     df_export = df.copy()
-    
-    # Adicionar colunas calculadas
-    df_export['GrupoProduto'] = df_export['Descricao'].apply(identificar_grupo_produto)
-    df_export['Subgrupo'] = df_export.apply(
-        lambda row: identificar_subgrupo_marca(row['Descricao'], row['GrupoProduto']), 
-        axis=1
-    )
-    
-    # Comissão (assumindo ValorUnit como preço base)
-    df_export['Comissao'] = df_export.apply(
-        lambda row: calcular_comissao_percentual(row['ValorUnit'], row['ValorUnit']),
-        axis=1
-    )
-    
-    # Total em R$
-    df_export['Total'] = df_export['ValorPendente']
-    
-    # Dias pendentes
-    df_export['DiasPendentes'] = df_export['DataEmissao'].apply(calcular_dias_pendentes)
-    
-    # ═══════════════════════════════════════════════════════════════════
-    # CRIAR EXCEL
-    # ═══════════════════════════════════════════════════════════════════
+    df_export['TipoProduto'] = df_export['Descricao'].apply(identificar_tipo)
+    df_export['Categoria'] = df_export.apply(lambda row: identificar_categoria(row['Descricao'], row['TipoProduto']), axis=1)
     
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
+        # Definir ordem das abas
+        tipos_ordem = ['ATADURAS', 'CAMPO', 'ESTERIL', 'NÃO ESTERIL', 'GAZE EM ROLO', 'OUTROS']
         
-        # Formatos
-        fmt_header = workbook.add_format({
-            'bold': True,
-            'bg_color': '#4472C4',
-            'font_color': 'white',
-            'align': 'center',
-            'valign': 'vcenter',
-            'border': 1
-        })
-        
-        fmt_subgrupo = workbook.add_format({
-            'bold': True,
-            'bg_color': '#D9E1F2',
-            'align': 'left',
-            'valign': 'vcenter',
-            'border': 1
-        })
-        
-        # ═══════════════════════════════════════════════════════════════
-        # ABAS DE PRODUTOS
-        # ═══════════════════════════════════════════════════════════════
-        
-        grupos_ordem = ['ATADURA', 'NÃO ESTERIL', 'ESTERIL', 'CAMPO', 'TIPO QUEIJO']
-        
-        for grupo in grupos_ordem:
-            df_grupo = df_export[df_export['GrupoProduto'] == grupo].copy()
+        for tipo in tipos_ordem:
+            df_tipo = df_export[df_export['TipoProduto'] == tipo].copy()
             
-            if len(df_grupo) == 0:
-                continue
-            
-            # Ordenar por subgrupo e cliente
-            df_grupo = df_grupo.sort_values(['Subgrupo', 'Cliente', 'Descricao'])
-            
-            # Nome da aba
-            nome_aba = grupo
-            
-            # Criar sheet
-            worksheet = workbook.add_worksheet(nome_aba)
-            
-            # Cabeçalhos
-            headers = [
-                grupo,  # Primeira coluna com nome do grupo
-                'COD DO PROD.',
-                'VOLUMES',
-                'DESCRIÇÃO',
-                'QUANTIDADE',
-                'VALOR',
-                'COMISSÃO',
-                'DATA',
-                'REPRESENTANTE',
-                'CIDADE',
-                'ESTADO',
-                'OBSERVAÇÃO',
-                'TOTAL',
-                'DIAS PENDENTES'
-            ]
-            
-            # Escrever cabeçalhos
-            for col_num, header in enumerate(headers):
-                worksheet.write(0, col_num, header, fmt_header)
-            
-            # Escrever dados
-            row_num = 1
-            subgrupo_anterior = None
-            
-            for idx, row_data in df_grupo.iterrows():
-                subgrupo_atual = row_data['Subgrupo']
+            if len(df_tipo) > 0:
+                # Para ATADURAS, ordenar por Categoria (HOSPITALAR primeiro)
+                if tipo == 'ATADURAS':
+                    df_tipo = df_tipo.sort_values('Categoria')
                 
-                # Linha de subgrupo (ex: ATADURAS FARMA COMBATE)
-                if subgrupo_atual != subgrupo_anterior:
-                    worksheet.write(row_num, 0, subgrupo_atual, fmt_subgrupo)
-                    for col in range(1, len(headers)):
-                        worksheet.write(row_num, col, '', fmt_subgrupo)
-                    row_num += 1
-                    subgrupo_anterior = subgrupo_atual
-                    cliente_anterior = None
-                else:
-                    cliente_anterior = df_grupo.iloc[idx-1]['Cliente'] if idx > 0 else None
+                # Remover colunas auxiliares antes de exportar
+                colunas_para_remover = ['TipoProduto']
+                # Manter coluna Categoria apenas para ATADURAS
+                if tipo != 'ATADURAS':
+                    colunas_para_remover.append('Categoria')
                 
-                # Se mudou de cliente, escrever nome do cliente
-                if row_data['Cliente'] != cliente_anterior:
-                    worksheet.write(row_num, 0, row_data['Cliente'])
-                    row_num += 1
+                df_tipo = df_tipo.drop(columns=[col for col in colunas_para_remover if col in df_tipo.columns])
                 
-                # Escrever linha de produto
-                worksheet.write(row_num, 0, '')  # Cliente já foi escrito acima
-                worksheet.write(row_num, 1, row_data.get('CodigoProduto', ''))
-                worksheet.write(row_num, 2, '')  # VOLUMES - calcular?
-                worksheet.write(row_num, 3, row_data['Descricao'])
-                worksheet.write(row_num, 4, row_data['QtdPendente'])
-                worksheet.write(row_num, 5, row_data['ValorUnit'])
-                worksheet.write(row_num, 6, row_data['Comissao'])
-                
-                # Data formatada
-                if pd.notna(row_data['DataEmissao']):
-                    worksheet.write(row_num, 7, row_data['DataEmissao'].strftime('%Y-%m-%d'))
-                else:
-                    worksheet.write(row_num, 7, '')
-                
-                worksheet.write(row_num, 8, row_data.get('Vendedor', ''))
-                worksheet.write(row_num, 9, '')  # CIDADE - não temos no df
-                worksheet.write(row_num, 10, '')  # ESTADO - buscar do df principal?
-                worksheet.write(row_num, 11, '')  # OBSERVAÇÃO
-                worksheet.write(row_num, 12, row_data['Total'])
-                worksheet.write(row_num, 13, row_data['DiasPendentes'])
-                
-                row_num += 1
-            
-            # Ajustar largura das colunas
-            worksheet.set_column(0, 0, 30)  # Grupo/Cliente
-            worksheet.set_column(1, 1, 12)  # Código
-            worksheet.set_column(2, 2, 10)  # Volumes
-            worksheet.set_column(3, 3, 50)  # Descrição
-            worksheet.set_column(4, 6, 12)  # Qtd, Valor, Comissão
-            worksheet.set_column(7, 7, 15)  # Data
-            worksheet.set_column(8, 11, 15)  # Representante, Cidade, Estado, Obs
-            worksheet.set_column(12, 13, 12)  # Total, Dias Pendentes
-        
-        # ═══════════════════════════════════════════════════════════════
-        # ABA TOTAL PEDIDO PENDENTE
-        # ═══════════════════════════════════════════════════════════════
-        
-        worksheet_total = workbook.add_worksheet('TOTAL PEDIDO PENDENTE')
-        
-        total_geral = df_export['ValorPendente'].sum()
-        
-        worksheet_total.write(1, 1, 'TOTAL PEDIDOS PENDENTES', fmt_header)
-        worksheet_total.write(2, 1, f'R$ {total_geral:,.2f}')
-        worksheet_total.set_column(1, 1, 30)
+                df_tipo.to_excel(writer, index=False, sheet_name=tipo)
     
     return output.getvalue()
 
