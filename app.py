@@ -1211,184 +1211,17 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='Dados')
     return output.getvalue()
 
-# ====================== PREVISÃO DE FATURAMENTO ======================
-# Capacidade de produção DIÁRIA por produto (identificação por palavras-chave na descrição)
-# Unidade: CX ou FARDOS por dia (conforme produto)
-CAPACIDADE_PRODUCAO = {
-    'CAMPO OPERATORIO 45X50':       {'cap': 80,  'tipo': 'CX'},
-    'CAMPO OPERATÓRIO 25X28 C2':    {'cap': 23,  'tipo': 'CX'},
-    'CAMPO OPERATÓRIO 25X28 C5':    {'cap': 20,  'tipo': 'CX'},
-    'GAZE NAO ESTERIL':             {'cap': 17,  'tipo': 'CX'},
-    'GAZE ESTERIL':                 {'cap': 80,  'tipo': 'CX'},
-    'ATADURA FARMA':                {'cap': 18,  'tipo': 'FARDO'},
-    'ATADURA CONJUGADA':            {'cap': 15,  'tipo': 'FARDO'},
-    'GAZE CIRCULAR':                {'cap': 50,  'tipo': 'CX'},
-}
-
-# Mapeamento de palavras-chave para identificar a linha de produção
-KEYWORDS_PRODUCAO = [
-    (['CAMPO', '45X50'],                            'CAMPO OPERATORIO 45X50'),
-    (['CAMPO', '25X28', 'C2'],                      'CAMPO OPERATÓRIO 25X28 C2'),
-    (['CAMPO', '25X28', 'C5'],                      'CAMPO OPERATÓRIO 25X28 C5'),
-    (['GAZE', 'CIRCULAR'],                          'GAZE CIRCULAR'),
-    (['GAZE', 'NAO', 'ESTERIL'],                    'GAZE NAO ESTERIL'),
-    (['GAZE', 'NÃO', 'ESTERIL'],                    'GAZE NAO ESTERIL'),
-    (['GAZE', 'NAO', 'ESTÉRIL'],                    'GAZE NAO ESTERIL'),
-    (['GAZE', 'NÃO', 'ESTÉRIL'],                    'GAZE NAO ESTERIL'),
-    (['GAZE', 'ESTERIL'],                           'GAZE ESTERIL'),
-    (['GAZE', 'ESTÉRIL'],                           'GAZE ESTERIL'),
-    (['ATADURA', 'CONJUGADA'],                      'ATADURA CONJUGADA'),
-    (['ATADURA'],                                   'ATADURA FARMA'),
-]
-
-def identificar_linha_producao(descricao):
-    """Identifica qual linha de produção corresponde à descrição do produto."""
-    if pd.isna(descricao):
-        return None
-    desc_up = str(descricao).upper()
-    for palavras, linha in KEYWORDS_PRODUCAO:
-        if all(p in desc_up for p in palavras):
-            return linha
-    return None
-
-def proximos_dias_uteis(data_inicio, n_dias):
-    """
-    Retorna lista de n_dias dias úteis (segunda a sábado) a partir de data_inicio (exclusive).
-    """
-    dias = []
-    dt = data_inicio
-    while len(dias) < n_dias:
-        dt = dt + pd.Timedelta(days=1)
-        if dt.weekday() < 6:  # 0=seg, 5=sab, 6=dom → exclui domingo
-            dias.append(dt)
-    return dias
-
-def calcular_previsao_faturamento(df_pendentes, df_produtos_cx):
-    """
-    Calcula a previsão de faturamento para cada linha de pedido pendente.
-    
-    Lógica:
-    - Converte QtdPendente (unidades) → caixas de embarque (CX_EMB da planilha de produtos)
-    - Agrupa por linha de produção para calcular produção paralela
-    - Distribui a capacidade diária entre todos os pedidos de cada linha (proporcionalmente)
-    - Calcula dias úteis necessários e data prevista (seg-sab)
-    
-    Retorna df com colunas adicionais:
-      - LinhaProducao: linha identificada
-      - UnidPorCaixa: quantas unidades por caixa de embarque
-      - QtdCaixas: quantidade de caixas pendentes
-      - DiasUteisPrevistos: dias úteis até conclusão
-      - DataPrevistaFaturamento: data estimada
-    """
-    import math
-
-    hoje = pd.Timestamp.now().normalize()
-
-    # ── Preparar mapa código → CX_EMB ────────────────────────────────────
-    cx_map = {}
-    if df_produtos_cx is not None:
-        _dp = df_produtos_cx.copy()
-        _dp.columns = _dp.columns.str.upper().str.strip()
-        # ID_COD pode ser a primeira coluna mesmo sem o nome
-        if 'ID_COD' not in _dp.columns and len(_dp.columns) > 0:
-            _dp.columns = ['ID_COD'] + list(_dp.columns[1:])
-        if 'ID_COD' in _dp.columns and 'CX_EMB' in _dp.columns:
-            for _, row in _dp.iterrows():
-                try:
-                    cod = str(int(float(str(row['ID_COD']).strip())))
-                    cx_val = row['CX_EMB']
-                    if pd.notna(cx_val) and float(cx_val) > 0:
-                        cx_map[cod] = float(cx_val)
-                except:
-                    continue
-
-    df = df_pendentes.copy()
-
-    # ── 1. Identificar linha de produção ─────────────────────────────────
-    df['LinhaProducao'] = df['Descricao'].apply(identificar_linha_producao)
-
-    # ── 2. Buscar CX_EMB por código ──────────────────────────────────────
-    def _get_cx_emb(codigo):
-        try:
-            cod = str(int(float(str(codigo).strip())))
-            return cx_map.get(cod, None)
-        except:
-            return None
-
-    df['UnidPorCaixa'] = df['CodigoProduto'].apply(_get_cx_emb)
-
-    # ── 3. Converter unidades → caixas de embarque ───────────────────────
-    def _calc_caixas(row):
-        cx = row['UnidPorCaixa']
-        qtd = row['QtdPendente']
-        if pd.notna(cx) and cx > 0 and pd.notna(qtd) and qtd > 0:
-            return math.ceil(qtd / cx)
-        return None
-
-    df['QtdCaixas'] = df.apply(_calc_caixas, axis=1)
-
-    # ── 4. Para cada linha de produção, calcular produção paralela ────────
-    #   A capacidade diária total (cap) é compartilhada entre todos os pedidos
-    #   da mesma linha de produção (proporcional à QtdCaixas/Fardos de cada um).
-    #   O acúmulo de caixas até o pedido i determina em quantos dias ele fica pronto.
-
-    # Identificar grupos de produção presentes
-    linhas_presentes = df['LinhaProducao'].dropna().unique()
-
-    # Criar coluna de resultado
-    df['DiasUteisPrevistos'] = None
-    df['DataPrevistaFaturamento'] = None
-
-    for linha in linhas_presentes:
-        cap_info = CAPACIDADE_PRODUCAO.get(linha)
-        if cap_info is None:
-            continue
-        cap_dia = cap_info['cap']  # caixas ou fardos por dia
-
-        mask = (df['LinhaProducao'] == linha) & (df['QtdCaixas'].notna()) & (df['QtdCaixas'] > 0)
-        indices = df[mask].index.tolist()
-
-        if not indices:
-            continue
-
-        # Acumulado por ordem de aparição (FIFO)
-        acumulado = 0
-        for idx in indices:
-            qtd_cx = df.at[idx, 'QtdCaixas']
-            acumulado += qtd_cx
-            # Dias necessários para produzir até este pedido
-            dias_necessarios = math.ceil(acumulado / cap_dia)
-            df.at[idx, 'DiasUteisPrevistos'] = dias_necessarios
-
-            # Calcular data (dias úteis = seg a sab)
-            datas = proximos_dias_uteis(hoje, dias_necessarios)
-            df.at[idx, 'DataPrevistaFaturamento'] = datas[-1].strftime('%d/%m/%Y')
-
-    # Linhas sem linha de produção identificada
-    df.loc[df['LinhaProducao'].isna(), 'DiasUteisPrevistos'] = 'N/D'
-    df.loc[df['LinhaProducao'].isna(), 'DataPrevistaFaturamento'] = 'N/D'
-
-    return df
-
-
-def to_excel_pedidos_pendentes(df, df_produtos_cx=None):
-    """Converte DataFrame de pedidos pendentes para Excel com abas por tipo de produto e previsão de faturamento"""
+def to_excel_pedidos_pendentes(df):
+    """Converte DataFrame de pedidos pendentes para Excel com abas por tipo de produto"""
     output = io.BytesIO()
-
-    # ── Calcular previsão de faturamento ──────────────────────────────────
-    try:
-        df_com_previsao = calcular_previsao_faturamento(df, df_produtos_cx)
-    except Exception:
-        df_com_previsao = df.copy()
-        for col in ['LinhaProducao', 'UnidPorCaixa', 'QtdCaixas', 'DiasUteisPrevistos', 'DataPrevistaFaturamento']:
-            if col not in df_com_previsao.columns:
-                df_com_previsao[col] = 'N/D'
-
+    
     # Função para identificar tipo de produto pela descrição
     def identificar_tipo(descricao):
         if pd.isna(descricao):
             return 'OUTROS'
+        
         descricao_upper = str(descricao).upper()
+        
         if 'ATADURA' in descricao_upper:
             return 'ATADURAS'
         elif 'CAMPO' in descricao_upper:
@@ -1401,7 +1234,7 @@ def to_excel_pedidos_pendentes(df, df_produtos_cx=None):
             return 'ESTERIL'
         else:
             return 'OUTROS'
-
+    
     # Função para identificar se é HOSPITALAR ou FARMA (apenas para ATADURAS)
     def identificar_categoria(descricao, tipo):
         if tipo == 'ATADURAS':
@@ -1410,66 +1243,34 @@ def to_excel_pedidos_pendentes(df, df_produtos_cx=None):
             else:
                 return 'FARMA'
         return ''
-
+    
     # Adicionar coluna de tipo
-    df_export = df_com_previsao.copy()
+    df_export = df.copy()
     df_export['TipoProduto'] = df_export['Descricao'].apply(identificar_tipo)
     df_export['Categoria'] = df_export.apply(lambda row: identificar_categoria(row['Descricao'], row['TipoProduto']), axis=1)
-
-    # Renomear colunas de previsão para facilitar leitura no Excel
-    df_export = df_export.rename(columns={
-        'LinhaProducao': 'Linha de Produção',
-        'UnidPorCaixa': 'Unid. por Cx. Embarque',
-        'QtdCaixas': 'Qtd Caixas Embarque',
-        'DiasUteisPrevistos': 'Dias Úteis Previstos',
-        'DataPrevistaFaturamento': 'Data Prevista Faturamento',
-    })
-
+    
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # Definir ordem das abas
         tipos_ordem = ['ATADURAS', 'CAMPO', 'ESTERIL', 'NÃO ESTERIL', 'GAZE EM ROLO', 'OUTROS']
-
+        
         for tipo in tipos_ordem:
             df_tipo = df_export[df_export['TipoProduto'] == tipo].copy()
-
+            
             if len(df_tipo) > 0:
                 # Para ATADURAS, ordenar por Categoria (HOSPITALAR primeiro)
                 if tipo == 'ATADURAS':
                     df_tipo = df_tipo.sort_values('Categoria')
-
+                
                 # Remover colunas auxiliares antes de exportar
                 colunas_para_remover = ['TipoProduto']
                 # Manter coluna Categoria apenas para ATADURAS
                 if tipo != 'ATADURAS':
                     colunas_para_remover.append('Categoria')
-
+                
                 df_tipo = df_tipo.drop(columns=[col for col in colunas_para_remover if col in df_tipo.columns])
-
-                # Ordenar colunas: dados do pedido primeiro, depois previsão
-                colunas_previsao = ['Linha de Produção', 'Unid. por Cx. Embarque', 'Qtd Caixas Embarque',
-                                    'Dias Úteis Previstos', 'Data Prevista Faturamento']
-                colunas_base = [c for c in df_tipo.columns if c not in colunas_previsao]
-                colunas_final = colunas_base + [c for c in colunas_previsao if c in df_tipo.columns]
-                df_tipo = df_tipo[colunas_final]
-
+                
                 df_tipo.to_excel(writer, index=False, sheet_name=tipo)
-
-                # Formatar colunas de previsão com destaque
-                workbook = writer.book
-                worksheet = writer.sheets[tipo]
-                fmt_header_prev = workbook.add_format({
-                    'bold': True, 'bg_color': '#1F4788', 'font_color': 'white',
-                    'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True
-                })
-                fmt_cell_prev = workbook.add_format({
-                    'bg_color': '#EEF3FC', 'border': 1, 'align': 'center'
-                })
-                # Aplicar formatação nas colunas de previsão
-                for col_idx, col_name in enumerate(colunas_final):
-                    if col_name in colunas_previsao:
-                        worksheet.write(0, col_idx, col_name, fmt_header_prev)
-                        worksheet.set_column(col_idx, col_idx, 22, fmt_cell_prev)
-
+    
     return output.getvalue()
 
 def formatar_moeda(valor):
@@ -1923,10 +1724,7 @@ df = processar_dados(df)
 if planilhas_disponiveis.get('produtos_agrupados'):
     df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
     if df_ref_preco is not None:
-        df_ref_preco.columns = df_ref_preco.columns.str.upper().str.strip()
-        # ID_COD é agora a primeira coluna; garantir que seja reconhecida corretamente
-        if df_ref_preco.columns[0] != 'ID_COD' and 'ID_COD' not in df_ref_preco.columns:
-            df_ref_preco.columns = ['ID_COD'] + list(df_ref_preco.columns[1:])
+        df_ref_preco.columns = df_ref_preco.columns.str.upper()
         if 'ID_COD' in df_ref_preco.columns and 'PRECO' in df_ref_preco.columns:
             df_ref_preco = df_ref_preco[['ID_COD', 'PRECO']].rename(
                 columns={'ID_COD': 'CodigoProduto', 'PRECO': 'PrecoRef'}
@@ -4218,83 +4016,17 @@ elif menu == "Pedidos Pendentes":
         st.plotly_chart(fig_vend, use_container_width=True)
     
     st.markdown("---")
-
-    # ── Carregar planilha de produtos para previsão ───────────────────────
-    df_produtos_prev = None
-    if planilhas_disponiveis.get('produtos_agrupados'):
-        try:
-            df_produtos_prev = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-        except Exception:
-            df_produtos_prev = None
-
-    # ── Calcular previsão de faturamento ──────────────────────────────────
-    try:
-        df_pend_com_prev = calcular_previsao_faturamento(df_pend_filtrado, df_produtos_prev)
-    except Exception as _e_prev:
-        df_pend_com_prev = df_pend_filtrado.copy()
-        st.warning(f"⚠️ Não foi possível calcular previsão: {_e_prev}")
-
-    # ── Resumo de previsão por linha de produção ──────────────────────────
-    st.subheader("📅 Previsão de Faturamento por Linha de Produção")
-    if 'LinhaProducao' in df_pend_com_prev.columns:
-        _df_prev_resumo = df_pend_com_prev[
-            df_pend_com_prev['LinhaProducao'].notna() &
-            df_pend_com_prev['QtdCaixas'].notna() &
-            (df_pend_com_prev['QtdCaixas'] > 0)
-        ].copy()
-
-        if len(_df_prev_resumo) > 0:
-            _resumo_linha = _df_prev_resumo.groupby('LinhaProducao').agg(
-                TotalCaixas=('QtdCaixas', 'sum'),
-                DiasUteisMax=('DiasUteisPrevistos', 'max'),
-                DataPrevistaUlt=('DataPrevistaFaturamento', 'last'),
-                ValorTotal=('ValorPendente', 'sum')
-            ).reset_index()
-            _resumo_linha = _resumo_linha.sort_values('DiasUteisMax')
-
-            # Cards de previsão por linha
-            _cols_prev = st.columns(min(len(_resumo_linha), 4))
-            for _i, (_idx, _row) in enumerate(_resumo_linha.iterrows()):
-                with _cols_prev[_i % len(_cols_prev)]:
-                    _dias = _row['DiasUteisMax']
-                    _cor = '#28A745' if _dias <= 5 else ('#F59E0B' if _dias <= 15 else '#EF4444')
-                    st.markdown(f"""
-                    <div style="background:white;padding:14px;border-radius:12px;
-                                border-left:4px solid {_cor};box-shadow:0 2px 8px rgba(0,0,0,0.06);
-                                margin-bottom:10px;">
-                        <div style="font-size:0.72rem;font-weight:700;color:#6C757D;
-                                    text-transform:uppercase;margin-bottom:6px;">
-                            {_row['LinhaProducao']}
-                        </div>
-                        <div style="font-size:1.3rem;font-weight:700;color:{_cor};">
-                            {int(_dias)} dias úteis
-                        </div>
-                        <div style="font-size:0.8rem;color:#4A7BC8;font-weight:600;margin-top:3px;">
-                            📅 {_row['DataPrevistaUlt']}
-                        </div>
-                        <div style="font-size:0.75rem;color:#6C757D;margin-top:4px;">
-                            {int(_row['TotalCaixas'])} caixas · R$ {_row['ValorTotal']:,.0f}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("ℹ️ Sem dados suficientes para calcular previsão (verifique se a planilha Produtos_Agrupados_Completos está disponível com a coluna CX_EMB).")
-
-    st.markdown("---")
-
+    
     # Tabela detalhada
     st.subheader("📋 Detalhamento de Pedidos Pendentes")
-
-    # Preparar dados para exibição (com colunas de previsão)
-    _colunas_base_display = ['Cliente', 'NumeroPedido', 'CodigoProduto', 'Descricao',
+    
+    # Preparar dados para exibição
+    df_pend_display = df_pend_filtrado[[
+        'Cliente', 'NumeroPedido', 'CodigoProduto', 'Descricao', 
         'QtdContratada', 'QtdEntregue', 'QtdPendente',
-        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor']
-    _colunas_prev_display = ['LinhaProducao', 'UnidPorCaixa', 'QtdCaixas',
-                              'DiasUteisPrevistos', 'DataPrevistaFaturamento']
-
-    _colunas_existentes = _colunas_base_display + [c for c in _colunas_prev_display if c in df_pend_com_prev.columns]
-    df_pend_display = df_pend_com_prev[[c for c in _colunas_existentes if c in df_pend_com_prev.columns]].copy()
-
+        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor'
+    ]].copy()
+    
     # Formatar valores
     df_pend_display['ValorUnit'] = df_pend_display['ValorUnit'].apply(
         lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
@@ -4308,7 +4040,7 @@ elif menu == "Pedidos Pendentes":
     df_pend_display['PercEntregue'] = df_pend_display['PercEntregue'].apply(
         lambda x: f"{x:.1f}%" if pd.notnull(x) else "0%"
     )
-
+    
     # Renomear colunas
     df_pend_display = df_pend_display.rename(columns={
         'Cliente': 'Cliente',
@@ -4322,20 +4054,15 @@ elif menu == "Pedidos Pendentes":
         'ValorPendente': 'Valor Pendente',
         'PercEntregue': '% Entregue',
         'DataEmissao': 'Data Emissão',
-        'Vendedor': 'Vendedor',
-        'LinhaProducao': '🏭 Linha Produção',
-        'UnidPorCaixa': '📦 Unid/Cx',
-        'QtdCaixas': '📦 Qtd Caixas',
-        'DiasUteisPrevistos': '⏱ Dias Úteis',
-        'DataPrevistaFaturamento': '📅 Data Prevista',
+        'Vendedor': 'Vendedor'
     })
-
+    
     st.dataframe(df_pend_display, use_container_width=True, height=400)
-
+    
     # Botão de download
     st.download_button(
-        "📥 Exportar Pedidos Pendentes (com Previsão de Faturamento)",
-        to_excel_pedidos_pendentes(df_pend_filtrado, df_produtos_prev),
+        "📥 Exportar Pedidos Pendentes (Separado por Tipo)",
+        to_excel_pedidos_pendentes(df_pend_filtrado),
         "pedidos_pendentes.xlsx",
         "application/vnd.ms-excel",
         key="download_pendentes"
