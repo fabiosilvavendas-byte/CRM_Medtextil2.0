@@ -2012,7 +2012,7 @@ with st.sidebar:
 
     st.sidebar.markdown("---")
     _cons_sel = st.session_state.menu_option == 'Consulta Clientes'
-    if st.button("🔎  Consulta Clientes",
+    if st.button("🔎  Consulta Tabela",
                  key="nav_consulta_clientes",
                  use_container_width=True,
                  type="primary" if _cons_sel else "secondary"):
@@ -4299,7 +4299,9 @@ elif menu == "Consulta Clientes":
             _descricao = ' '.join(_parts) if _parts else str(_prod_row.get(_desc_col, ''))
 
         with _cc2:
-            st.text_input("Descrição", value=_descricao, disabled=True, key="cc_desc")
+            # key dinâmica por código — garante que value= seja sempre aplicado
+            st.text_input("Descrição", value=_descricao, disabled=True,
+                          key=f"cc_desc_{_cod_sel}")
 
         # Preço base da tabela
         try:
