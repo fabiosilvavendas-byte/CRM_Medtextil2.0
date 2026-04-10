@@ -1211,222 +1211,17 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='Dados')
     return output.getvalue()
 
-# ====================== PREVISÃO DE FATURAMENTO ======================
-# Capacidade de produção DIÁRIA por produto (identificação por palavras-chave na descrição)
-# Unidade: CX ou FARDOS por dia (conforme produto)
-CAPACIDADE_PRODUCAO = {
-    'CAMPO OPERATORIO 45X50':       {'cap': 80,  'tipo': 'CX'},
-    'CAMPO OPERATÓRIO 25X28 C2':    {'cap': 23,  'tipo': 'CX'},
-    'CAMPO OPERATÓRIO 25X28 C5':    {'cap': 20,  'tipo': 'CX'},
-    'GAZE NAO ESTERIL':             {'cap': 17,  'tipo': 'CX'},
-    'GAZE ESTERIL':                 {'cap': 80,  'tipo': 'CX'},
-    'ATADURA FARMA':                {'cap': 18,  'tipo': 'FARDO'},
-    'ATADURA CONJUGADA':            {'cap': 15,  'tipo': 'FARDO'},
-    'GAZE CIRCULAR':                {'cap': 50,  'tipo': 'CX'},
-}
-
-import re as _re
-import unicodedata as _unicodedata
-
-def _normalizar(texto):
-    """Remove acentos e converte para maiúsculo para comparação robusta."""
-    if not isinstance(texto, str):
-        texto = str(texto)
-    texto = texto.upper()
-    # Remove acentos (NFD decompõe, encode/decode filtra caracteres não-ASCII)
-    texto = _unicodedata.normalize('NFD', texto)
-    texto = ''.join(c for c in texto if _unicodedata.category(c) != 'Mn')
-    return texto
-
-def identificar_linha_producao(descricao):
-    """
-    Identifica qual linha de produção corresponde à descrição do produto.
-    Usa normalização (sem acentos) e regex flexível para máxima robustez.
-    A ordem das regras importa: mais específico antes do mais genérico.
-    """
-    if pd.isna(descricao):
-        return None
-    d = _normalizar(str(descricao))
-
-    # ── CAMPO OPERATORIO ─────────────────────────────────────────────────
-    # 45X50 ou 45 X 50 ou 45CMX50 etc.
-    if _re.search(r'CAMPO', d) and _re.search(r'45\s*[Xx×]?\s*50|45X50|50X45', d):
-        return 'CAMPO OPERATORIO 45X50'
-
-    # 25X28 C2 — C2, COMP2, COMP 2, 2 COMP, CX2, 2CX, COMP.2 etc.
-    if _re.search(r'CAMPO', d) and _re.search(r'25\s*[Xx×]?\s*28|28\s*[Xx×]?\s*25', d) and \
-       _re.search(r'\bC\s*2\b|COMP\s*2\b|2\s*COMP\b|CX\s*2\b|2\s*CX\b|C\.?\s*2\b|\b2C\b', d):
-        return 'CAMPO OPERATÓRIO 25X28 C2'
-
-    # 25X28 C5 — C5, COMP5, etc.
-    if _re.search(r'CAMPO', d) and _re.search(r'25\s*[Xx×]?\s*28|28\s*[Xx×]?\s*25', d) and \
-       _re.search(r'\bC\s*5\b|COMP\s*5\b|5\s*COMP\b|CX\s*5\b|5\s*CX\b|C\.?\s*5\b|\b5C\b', d):
-        return 'CAMPO OPERATÓRIO 25X28 C5'
-
-    # 25X28 sem C2/C5 explícito → tenta inferir pela posição na descrição
-    # (deixa como None — sem informação suficiente para diferenciar C2 de C5)
-
-    # ── GAZE CIRCULAR ────────────────────────────────────────────────────
-    if _re.search(r'GAZE', d) and _re.search(r'CIRCULAR|ROLO|EM ROLO', d):
-        return 'GAZE CIRCULAR'
-
-    # ── GAZE NÃO ESTERIL ─────────────────────────────────────────────────
-    # "NAO ESTERIL", "N ESTERIL", "NESTERIL", "NAO EST", "N EST"
-    if _re.search(r'GAZE', d) and _re.search(r'NAO\s*ESTER|N[AÃ]O\s*ESTER|NESTER|N\.?\s*ESTER|NAO EST\b|N EST\b|NE\b|N\.E\.', d):
-        return 'GAZE NAO ESTERIL'
-
-    # ── GAZE ESTERIL ─────────────────────────────────────────────────────
-    if _re.search(r'GAZE', d) and _re.search(r'ESTER', d):
-        return 'GAZE ESTERIL'
-
-    # ── ATADURA CONJUGADA ────────────────────────────────────────────────
-    if _re.search(r'ATADURA', d) and _re.search(r'CONJ|HOSP', d):
-        return 'ATADURA CONJUGADA'
-
-    # ── ATADURA FARMA ────────────────────────────────────────────────────
-    if _re.search(r'ATADURA', d):
-        return 'ATADURA FARMA'
-
-    return None
-
-def proximos_dias_uteis(data_inicio, n_dias):
-    """
-    Retorna lista de n_dias dias úteis (segunda a sábado) a partir de data_inicio (exclusive).
-    """
-    dias = []
-    dt = data_inicio
-    while len(dias) < n_dias:
-        dt = dt + pd.Timedelta(days=1)
-        if dt.weekday() < 6:  # 0=seg, 5=sab, 6=dom → exclui domingo
-            dias.append(dt)
-    return dias
-
-def calcular_previsao_faturamento(df_pendentes, df_produtos_cx):
-    """
-    Calcula a previsão de faturamento para cada linha de pedido pendente.
-    
-    Lógica:
-    - Converte QtdPendente (unidades) → caixas de embarque (CX_EMB da planilha de produtos)
-    - Agrupa por linha de produção para calcular produção paralela
-    - Distribui a capacidade diária entre todos os pedidos de cada linha (proporcionalmente)
-    - Calcula dias úteis necessários e data prevista (seg-sab)
-    
-    Retorna df com colunas adicionais:
-      - LinhaProducao: linha identificada
-      - UnidPorCaixa: quantas unidades por caixa de embarque
-      - QtdCaixas: quantidade de caixas pendentes
-      - DiasUteisPrevistos: dias úteis até conclusão
-      - DataPrevistaFaturamento: data estimada
-    """
-    import math
-
-    hoje = pd.Timestamp.now().normalize()
-
-    # ── Preparar mapa código → CX_EMB ────────────────────────────────────
-    cx_map = {}
-    if df_produtos_cx is not None:
-        _dp = df_produtos_cx.copy()
-        _dp.columns = _dp.columns.str.upper().str.strip()
-        # ID_COD pode ser a primeira coluna mesmo sem o nome
-        if 'ID_COD' not in _dp.columns and len(_dp.columns) > 0:
-            _dp.columns = ['ID_COD'] + list(_dp.columns[1:])
-        if 'ID_COD' in _dp.columns and 'CX_EMB' in _dp.columns:
-            for _, row in _dp.iterrows():
-                try:
-                    cod = str(int(float(str(row['ID_COD']).strip())))
-                    cx_val = row['CX_EMB']
-                    if pd.notna(cx_val) and float(cx_val) > 0:
-                        cx_map[cod] = float(cx_val)
-                except:
-                    continue
-
-    df = df_pendentes.copy()
-
-    # ── 1. Identificar linha de produção ─────────────────────────────────
-    df['LinhaProducao'] = df['Descricao'].apply(identificar_linha_producao)
-
-    # ── 2. Buscar CX_EMB por código ──────────────────────────────────────
-    def _get_cx_emb(codigo):
-        try:
-            cod = str(int(float(str(codigo).strip())))
-            return cx_map.get(cod, None)
-        except:
-            return None
-
-    df['UnidPorCaixa'] = df['CodigoProduto'].apply(_get_cx_emb)
-
-    # ── 3. Converter unidades → caixas de embarque ───────────────────────
-    def _calc_caixas(row):
-        cx = row['UnidPorCaixa']
-        qtd = row['QtdPendente']
-        if pd.notna(cx) and cx > 0 and pd.notna(qtd) and qtd > 0:
-            return math.ceil(qtd / cx)
-        return None
-
-    df['QtdCaixas'] = df.apply(_calc_caixas, axis=1)
-
-    # ── 4. Para cada linha de produção, calcular produção paralela ────────
-    #   A capacidade diária total (cap) é compartilhada entre todos os pedidos
-    #   da mesma linha de produção (proporcional à QtdCaixas/Fardos de cada um).
-    #   O acúmulo de caixas até o pedido i determina em quantos dias ele fica pronto.
-
-    # Identificar grupos de produção presentes
-    linhas_presentes = df['LinhaProducao'].dropna().unique()
-
-    # Criar coluna de resultado
-    df['DiasUteisPrevistos'] = None
-    df['DataPrevistaFaturamento'] = None
-
-    for linha in linhas_presentes:
-        cap_info = CAPACIDADE_PRODUCAO.get(linha)
-        if cap_info is None:
-            continue
-        cap_dia = cap_info['cap']  # caixas ou fardos por dia
-
-        mask = (df['LinhaProducao'] == linha) & (df['QtdCaixas'].notna()) & (df['QtdCaixas'] > 0)
-        indices = df[mask].index.tolist()
-
-        if not indices:
-            continue
-
-        # Acumulado por ordem de aparição (FIFO)
-        acumulado = 0
-        for idx in indices:
-            qtd_cx = df.at[idx, 'QtdCaixas']
-            acumulado += qtd_cx
-            # Dias necessários para produzir até este pedido
-            dias_necessarios = math.ceil(acumulado / cap_dia)
-            df.at[idx, 'DiasUteisPrevistos'] = dias_necessarios
-
-            # Calcular data (dias úteis = seg a sab)
-            datas = proximos_dias_uteis(hoje, dias_necessarios)
-            df.at[idx, 'DataPrevistaFaturamento'] = datas[-1].strftime('%d/%m/%Y')
-
-    # Linhas sem linha de produção identificada
-    df.loc[df['LinhaProducao'].isna(), 'DiasUteisPrevistos'] = 'N/D'
-    df.loc[df['LinhaProducao'].isna(), 'DataPrevistaFaturamento'] = 'N/D'
-
-    return df
-
-
-def to_excel_pedidos_pendentes(df, df_produtos_cx=None):
-    """Converte DataFrame de pedidos pendentes para Excel com abas por tipo de produto e previsão de faturamento"""
+def to_excel_pedidos_pendentes(df):
+    """Converte DataFrame de pedidos pendentes para Excel com abas por tipo de produto"""
     output = io.BytesIO()
-
-    # ── Calcular previsão de faturamento ──────────────────────────────────
-    try:
-        df_com_previsao = calcular_previsao_faturamento(df, df_produtos_cx)
-    except Exception:
-        df_com_previsao = df.copy()
-        for col in ['LinhaProducao', 'UnidPorCaixa', 'QtdCaixas', 'DiasUteisPrevistos', 'DataPrevistaFaturamento']:
-            if col not in df_com_previsao.columns:
-                df_com_previsao[col] = 'N/D'
-
+    
     # Função para identificar tipo de produto pela descrição
     def identificar_tipo(descricao):
         if pd.isna(descricao):
             return 'OUTROS'
+        
         descricao_upper = str(descricao).upper()
+        
         if 'ATADURA' in descricao_upper:
             return 'ATADURAS'
         elif 'CAMPO' in descricao_upper:
@@ -1439,7 +1234,7 @@ def to_excel_pedidos_pendentes(df, df_produtos_cx=None):
             return 'ESTERIL'
         else:
             return 'OUTROS'
-
+    
     # Função para identificar se é HOSPITALAR ou FARMA (apenas para ATADURAS)
     def identificar_categoria(descricao, tipo):
         if tipo == 'ATADURAS':
@@ -1448,66 +1243,34 @@ def to_excel_pedidos_pendentes(df, df_produtos_cx=None):
             else:
                 return 'FARMA'
         return ''
-
+    
     # Adicionar coluna de tipo
-    df_export = df_com_previsao.copy()
+    df_export = df.copy()
     df_export['TipoProduto'] = df_export['Descricao'].apply(identificar_tipo)
     df_export['Categoria'] = df_export.apply(lambda row: identificar_categoria(row['Descricao'], row['TipoProduto']), axis=1)
-
-    # Renomear colunas de previsão para facilitar leitura no Excel
-    df_export = df_export.rename(columns={
-        'LinhaProducao': 'Linha de Produção',
-        'UnidPorCaixa': 'Unid. por Cx. Embarque',
-        'QtdCaixas': 'Qtd Caixas Embarque',
-        'DiasUteisPrevistos': 'Dias Úteis Previstos',
-        'DataPrevistaFaturamento': 'Data Prevista Faturamento',
-    })
-
+    
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # Definir ordem das abas
         tipos_ordem = ['ATADURAS', 'CAMPO', 'ESTERIL', 'NÃO ESTERIL', 'GAZE EM ROLO', 'OUTROS']
-
+        
         for tipo in tipos_ordem:
             df_tipo = df_export[df_export['TipoProduto'] == tipo].copy()
-
+            
             if len(df_tipo) > 0:
                 # Para ATADURAS, ordenar por Categoria (HOSPITALAR primeiro)
                 if tipo == 'ATADURAS':
                     df_tipo = df_tipo.sort_values('Categoria')
-
+                
                 # Remover colunas auxiliares antes de exportar
                 colunas_para_remover = ['TipoProduto']
                 # Manter coluna Categoria apenas para ATADURAS
                 if tipo != 'ATADURAS':
                     colunas_para_remover.append('Categoria')
-
+                
                 df_tipo = df_tipo.drop(columns=[col for col in colunas_para_remover if col in df_tipo.columns])
-
-                # Ordenar colunas: dados do pedido primeiro, depois previsão
-                colunas_previsao = ['Linha de Produção', 'Unid. por Cx. Embarque', 'Qtd Caixas Embarque',
-                                    'Dias Úteis Previstos', 'Data Prevista Faturamento']
-                colunas_base = [c for c in df_tipo.columns if c not in colunas_previsao]
-                colunas_final = colunas_base + [c for c in colunas_previsao if c in df_tipo.columns]
-                df_tipo = df_tipo[colunas_final]
-
+                
                 df_tipo.to_excel(writer, index=False, sheet_name=tipo)
-
-                # Formatar colunas de previsão com destaque
-                workbook = writer.book
-                worksheet = writer.sheets[tipo]
-                fmt_header_prev = workbook.add_format({
-                    'bold': True, 'bg_color': '#1F4788', 'font_color': 'white',
-                    'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True
-                })
-                fmt_cell_prev = workbook.add_format({
-                    'bg_color': '#EEF3FC', 'border': 1, 'align': 'center'
-                })
-                # Aplicar formatação nas colunas de previsão
-                for col_idx, col_name in enumerate(colunas_final):
-                    if col_name in colunas_previsao:
-                        worksheet.write(0, col_idx, col_name, fmt_header_prev)
-                        worksheet.set_column(col_idx, col_idx, 22, fmt_cell_prev)
-
+    
     return output.getvalue()
 
 def formatar_moeda(valor):
@@ -1961,10 +1724,7 @@ df = processar_dados(df)
 if planilhas_disponiveis.get('produtos_agrupados'):
     df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
     if df_ref_preco is not None:
-        df_ref_preco.columns = df_ref_preco.columns.str.upper().str.strip()
-        # ID_COD é agora a primeira coluna; garantir que seja reconhecida corretamente
-        if df_ref_preco.columns[0] != 'ID_COD' and 'ID_COD' not in df_ref_preco.columns:
-            df_ref_preco.columns = ['ID_COD'] + list(df_ref_preco.columns[1:])
+        df_ref_preco.columns = df_ref_preco.columns.str.upper()
         if 'ID_COD' in df_ref_preco.columns and 'PRECO' in df_ref_preco.columns:
             df_ref_preco = df_ref_preco[['ID_COD', 'PRECO']].rename(
                 columns={'ID_COD': 'CodigoProduto', 'PRECO': 'PrecoRef'}
@@ -2252,7 +2012,7 @@ with st.sidebar:
 
     st.sidebar.markdown("---")
     _cons_sel = st.session_state.menu_option == 'Consulta Clientes'
-    if st.button("🔎  Consulta Tabela",
+    if st.button("🔎  Consulta Clientes",
                  key="nav_consulta_clientes",
                  use_container_width=True,
                  type="primary" if _cons_sel else "secondary"):
@@ -4039,6 +3799,106 @@ elif menu == "Preço Médio":
         key="download_preco_medio"
     )
 
+# ── ABA: VENDAS POR PRODUTO ────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📦 Consulta de Vendas por Produto")
+    st.caption("Análise detalhada de vendas, quantidade e evolução por produto no período.")
+
+    # Filtros da aba vendas
+    _vp_c1, _vp_c2, _vp_c3 = st.columns(3)
+    with _vp_c1:
+        _vp_busca_cod  = st.text_input("🔍 Código", placeholder="Ex: 476", key="vp_cod")
+    with _vp_c2:
+        _vp_busca_nome = st.text_input("🔍 Produto", placeholder="Ex: Atadura", key="vp_nome")
+    with _vp_c3:
+        _vp_top_n = st.selectbox("Exibir Top", [10, 20, 50, 100], key="vp_topn")
+
+    # Aplicar filtros sobre df_preco_filtrado (já filtrado por ano/mês acima)
+    _df_vp = df_preco_filtrado.copy()
+    if _vp_busca_cod:
+        _df_vp = _df_vp[_df_vp['CODPRODUTO'].astype(str).str.contains(_vp_busca_cod, case=False, na=False)]
+    if _vp_busca_nome:
+        _df_vp = _df_vp[_df_vp['NOMEPRODUTO'].str.contains(_vp_busca_nome, case=False, na=False)]
+
+    if len(_df_vp) == 0:
+        st.info("Nenhum produto encontrado com os filtros aplicados.")
+    else:
+        # KPIs resumo
+        _vp_k1, _vp_k2, _vp_k3, _vp_k4 = st.columns(4)
+        with _vp_k1:
+            st.metric("Total Faturado", f"R$ {_df_vp['TOTLIQUIDO'].sum():,.2f}")
+        with _vp_k2:
+            st.metric("Qtd Total Vendida", f"{_df_vp['TOTQTD'].sum():,.0f}")
+        with _vp_k3:
+            _pm_pond = _df_vp['TOTLIQUIDO'].sum() / _df_vp['TOTQTD'].sum() if _df_vp['TOTQTD'].sum() > 0 else 0
+            st.metric("Preço Médio Pond.", f"R$ {_pm_pond:,.2f}")
+        with _vp_k4:
+            st.metric("Produtos Únicos", f"{_df_vp['CODPRODUTO'].nunique():,}")
+
+        st.markdown("---")
+
+        # Gráficos: 2 por linha
+        _g1, _g2 = st.columns(2)
+
+        with _g1:
+            st.markdown("**Top produtos por Faturamento**")
+            _top_fat = _df_vp.groupby('NOMEPRODUTO')['TOTLIQUIDO'].sum().reset_index().sort_values('TOTLIQUIDO', ascending=False).head(_vp_top_n)
+            _fig_fat = px.bar(_top_fat, x='TOTLIQUIDO', y='NOMEPRODUTO', orientation='h',
+                              labels={'NOMEPRODUTO': '', 'TOTLIQUIDO': 'R$'},
+                              color_discrete_sequence=['#1F4788'])
+            _fig_fat = aplicar_layout_grafico(_fig_fat, height=350)
+            st.plotly_chart(_fig_fat, use_container_width=True)
+
+        with _g2:
+            st.markdown("**Top produtos por Quantidade**")
+            _top_qtd = _df_vp.groupby('NOMEPRODUTO')['TOTQTD'].sum().reset_index().sort_values('TOTQTD', ascending=False).head(_vp_top_n)
+            _fig_qtd = px.bar(_top_qtd, x='TOTQTD', y='NOMEPRODUTO', orientation='h',
+                              labels={'NOMEPRODUTO': '', 'TOTQTD': 'Unidades'},
+                              color_discrete_sequence=['#2E86AB'])
+            _fig_qtd = aplicar_layout_grafico(_fig_qtd, height=350)
+            st.plotly_chart(_fig_qtd, use_container_width=True)
+
+        # Evolução de um produto específico
+        _produtos_lista = ['Todos'] + sorted(_df_vp['NOMEPRODUTO'].dropna().unique().tolist())
+        _prod_evo = st.selectbox("📈 Evolução de produto específico:", _produtos_lista, key="vp_evolucao")
+        _df_evo = _df_vp if _prod_evo == 'Todos' else _df_vp[_df_vp['NOMEPRODUTO'] == _prod_evo]
+        if 'MesAno' in _df_evo.columns and len(_df_evo) > 0:
+            _evo_data = _df_evo.groupby('MesAno').agg({'TOTLIQUIDO':'sum','TOTQTD':'sum'}).reset_index().sort_values('MesAno')
+            _eg1, _eg2 = st.columns(2)
+            with _eg1:
+                st.markdown(f"**Faturamento — {_prod_evo}**")
+                _fig_evo_fat = px.line(_evo_data, x='MesAno', y='TOTLIQUIDO',
+                                       labels={'MesAno':'Período','TOTLIQUIDO':'R$'},
+                                       color_discrete_sequence=['#1F4788'])
+                _fig_evo_fat.update_traces(line_width=2, mode='lines+markers', marker=dict(size=5))
+                _fig_evo_fat = aplicar_layout_grafico(_fig_evo_fat, height=250)
+                st.plotly_chart(_fig_evo_fat, use_container_width=True)
+            with _eg2:
+                st.markdown(f"**Quantidade — {_prod_evo}**")
+                _fig_evo_qtd = px.line(_evo_data, x='MesAno', y='TOTQTD',
+                                       labels={'MesAno':'Período','TOTQTD':'Unidades'},
+                                       color_discrete_sequence=['#2E86AB'])
+                _fig_evo_qtd.update_traces(line_width=2, mode='lines+markers', marker=dict(size=5))
+                _fig_evo_qtd = aplicar_layout_grafico(_fig_evo_qtd, height=250)
+                st.plotly_chart(_fig_evo_qtd, use_container_width=True)
+
+        # Tabela detalhada
+        st.markdown("**Detalhamento por Produto**")
+        _df_vp_display = _df_vp.groupby(['CODPRODUTO','NOMEPRODUTO']).agg(
+            {'TOTQTD':'sum','PRECOUNITMEDIO':'mean','TOTLIQUIDO':'sum'}
+        ).reset_index().sort_values('TOTLIQUIDO', ascending=False).head(_vp_top_n)
+        _df_vp_display.columns = ['Código','Produto','Qtd Vendida','Preço Médio','Total (R$)']
+        _df_vp_display['Preço Médio'] = _df_vp_display['Preço Médio'].apply(lambda x: f"R$ {x:,.2f}")
+        _df_vp_display['Total (R$)']  = _df_vp_display['Total (R$)'].apply(lambda x: f"R$ {x:,.2f}")
+        _df_vp_display['Qtd Vendida'] = _df_vp_display['Qtd Vendida'].apply(lambda x: f"{x:,.0f}")
+        st.dataframe(_df_vp_display, use_container_width=True, height=350)
+
+        st.download_button("📥 Exportar Vendas por Produto",
+                           to_excel(_df_vp),
+                           "vendas_por_produto.xlsx",
+                           "application/vnd.ms-excel",
+                           key="dl_vendas_produto")
+
 # ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
@@ -4256,96 +4116,17 @@ elif menu == "Pedidos Pendentes":
         st.plotly_chart(fig_vend, use_container_width=True)
     
     st.markdown("---")
-
-    # ── Carregar planilha de produtos para previsão ───────────────────────
-    df_produtos_prev = None
-    if planilhas_disponiveis.get('produtos_agrupados'):
-        try:
-            df_produtos_prev = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-        except Exception:
-            df_produtos_prev = None
-
-    # ── Calcular previsão de faturamento ──────────────────────────────────
-    try:
-        df_pend_com_prev = calcular_previsao_faturamento(df_pend_filtrado, df_produtos_prev)
-    except Exception as _e_prev:
-        df_pend_com_prev = df_pend_filtrado.copy()
-        st.warning(f"⚠️ Não foi possível calcular previsão: {_e_prev}")
-
-    # ── Resumo de previsão por linha de produção ──────────────────────────
-    st.subheader("📅 Previsão de Faturamento por Linha de Produção")
-    if 'LinhaProducao' in df_pend_com_prev.columns:
-        _df_prev_resumo = df_pend_com_prev[
-            df_pend_com_prev['LinhaProducao'].notna() &
-            df_pend_com_prev['QtdCaixas'].notna() &
-            (df_pend_com_prev['QtdCaixas'] > 0)
-        ].copy()
-
-        if len(_df_prev_resumo) > 0:
-            _resumo_linha = _df_prev_resumo.groupby('LinhaProducao').agg(
-                TotalCaixas=('QtdCaixas', 'sum'),
-                DiasUteisMax=('DiasUteisPrevistos', 'max'),
-                DataPrevistaUlt=('DataPrevistaFaturamento', 'last'),
-                ValorTotal=('ValorPendente', 'sum')
-            ).reset_index()
-            _resumo_linha = _resumo_linha.sort_values('DiasUteisMax')
-
-            # Cards de previsão por linha
-            _cols_prev = st.columns(min(len(_resumo_linha), 4))
-            for _i, (_idx, _row) in enumerate(_resumo_linha.iterrows()):
-                with _cols_prev[_i % len(_cols_prev)]:
-                    _dias = _row['DiasUteisMax']
-                    _cor = '#28A745' if _dias <= 5 else ('#F59E0B' if _dias <= 15 else '#EF4444')
-                    st.markdown(f"""
-                    <div style="background:white;padding:14px;border-radius:12px;
-                                border-left:4px solid {_cor};box-shadow:0 2px 8px rgba(0,0,0,0.06);
-                                margin-bottom:10px;">
-                        <div style="font-size:0.72rem;font-weight:700;color:#6C757D;
-                                    text-transform:uppercase;margin-bottom:6px;">
-                            {_row['LinhaProducao']}
-                        </div>
-                        <div style="font-size:1.3rem;font-weight:700;color:{_cor};">
-                            {int(_dias)} dias úteis
-                        </div>
-                        <div style="font-size:0.8rem;color:#4A7BC8;font-weight:600;margin-top:3px;">
-                            📅 {_row['DataPrevistaUlt']}
-                        </div>
-                        <div style="font-size:0.75rem;color:#6C757D;margin-top:4px;">
-                            {int(_row['TotalCaixas'])} caixas · R$ {_row['ValorTotal']:,.0f}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("ℹ️ Sem dados suficientes para calcular previsão (verifique se a planilha Produtos_Agrupados_Completos está disponível com a coluna CX_EMB).")
-
-    # ── Debug: quais descrições não foram mapeadas ────────────────────────
-    if 'LinhaProducao' in df_pend_com_prev.columns:
-        _nao_mapeados = df_pend_com_prev[
-            df_pend_com_prev['LinhaProducao'].isna() &
-            df_pend_com_prev['QtdPendente'] > 0
-        ][['CodigoProduto', 'Descricao']].drop_duplicates()
-
-        if len(_nao_mapeados) > 0:
-            with st.expander(f"⚠️ {len(_nao_mapeados)} produto(s) sem linha de produção identificada — clique para ver", expanded=False):
-                st.caption("Estes produtos não foram reconhecidos pelas regras de classificação. Informe as descrições para ajustar.")
-                st.dataframe(_nao_mapeados.rename(columns={'CodigoProduto': 'Código', 'Descricao': 'Descrição'}),
-                             use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-
+    
     # Tabela detalhada
     st.subheader("📋 Detalhamento de Pedidos Pendentes")
-
-    # Preparar dados para exibição (com colunas de previsão)
-    _colunas_base_display = ['Cliente', 'NumeroPedido', 'CodigoProduto', 'Descricao',
+    
+    # Preparar dados para exibição
+    df_pend_display = df_pend_filtrado[[
+        'Cliente', 'NumeroPedido', 'CodigoProduto', 'Descricao', 
         'QtdContratada', 'QtdEntregue', 'QtdPendente',
-        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor']
-    _colunas_prev_display = ['LinhaProducao', 'UnidPorCaixa', 'QtdCaixas',
-                              'DiasUteisPrevistos', 'DataPrevistaFaturamento']
-
-    _colunas_existentes = _colunas_base_display + [c for c in _colunas_prev_display if c in df_pend_com_prev.columns]
-    df_pend_display = df_pend_com_prev[[c for c in _colunas_existentes if c in df_pend_com_prev.columns]].copy()
-
+        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor'
+    ]].copy()
+    
     # Formatar valores
     df_pend_display['ValorUnit'] = df_pend_display['ValorUnit'].apply(
         lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
@@ -4359,7 +4140,7 @@ elif menu == "Pedidos Pendentes":
     df_pend_display['PercEntregue'] = df_pend_display['PercEntregue'].apply(
         lambda x: f"{x:.1f}%" if pd.notnull(x) else "0%"
     )
-
+    
     # Renomear colunas
     df_pend_display = df_pend_display.rename(columns={
         'Cliente': 'Cliente',
@@ -4373,20 +4154,15 @@ elif menu == "Pedidos Pendentes":
         'ValorPendente': 'Valor Pendente',
         'PercEntregue': '% Entregue',
         'DataEmissao': 'Data Emissão',
-        'Vendedor': 'Vendedor',
-        'LinhaProducao': '🏭 Linha Produção',
-        'UnidPorCaixa': '📦 Unid/Cx',
-        'QtdCaixas': '📦 Qtd Caixas',
-        'DiasUteisPrevistos': '⏱ Dias Úteis',
-        'DataPrevistaFaturamento': '📅 Data Prevista',
+        'Vendedor': 'Vendedor'
     })
-
+    
     st.dataframe(df_pend_display, use_container_width=True, height=400)
-
+    
     # Botão de download
     st.download_button(
-        "📥 Exportar Pedidos Pendentes (com Previsão de Faturamento)",
-        to_excel_pedidos_pendentes(df_pend_filtrado, df_produtos_prev),
+        "📥 Exportar Pedidos Pendentes (Separado por Tipo)",
+        to_excel_pedidos_pendentes(df_pend_filtrado),
         "pedidos_pendentes.xlsx",
         "application/vnd.ms-excel",
         key="download_pendentes"
@@ -4623,9 +4399,7 @@ elif menu == "Consulta Clientes":
             _descricao = ' '.join(_parts) if _parts else str(_prod_row.get(_desc_col, ''))
 
         with _cc2:
-            # key dinâmica por código — garante que value= seja sempre aplicado
-            st.text_input("Descrição", value=_descricao, disabled=True,
-                          key=f"cc_desc_{_cod_sel}")
+            st.text_input("Descrição", value=_descricao, disabled=True, key="cc_desc")
 
         # Preço base da tabela
         try:
