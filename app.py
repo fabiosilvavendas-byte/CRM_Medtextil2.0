@@ -2012,7 +2012,7 @@ with st.sidebar:
 
     st.sidebar.markdown("---")
     _cons_sel = st.session_state.menu_option == 'Consulta Clientes'
-    if st.button("🔎  Consulta Clientes",
+    if st.button("🔎  Consulta Tabela",
                  key="nav_consulta_clientes",
                  use_container_width=True,
                  type="primary" if _cons_sel else "secondary"):
@@ -3799,106 +3799,6 @@ elif menu == "Preço Médio":
         key="download_preco_medio"
     )
 
-# ── ABA: VENDAS POR PRODUTO ────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 📦 Consulta de Vendas por Produto")
-    st.caption("Análise detalhada de vendas, quantidade e evolução por produto no período.")
-
-    # Filtros da aba vendas
-    _vp_c1, _vp_c2, _vp_c3 = st.columns(3)
-    with _vp_c1:
-        _vp_busca_cod  = st.text_input("🔍 Código", placeholder="Ex: 476", key="vp_cod")
-    with _vp_c2:
-        _vp_busca_nome = st.text_input("🔍 Produto", placeholder="Ex: Atadura", key="vp_nome")
-    with _vp_c3:
-        _vp_top_n = st.selectbox("Exibir Top", [10, 20, 50, 100], key="vp_topn")
-
-    # Aplicar filtros sobre df_preco_filtrado (já filtrado por ano/mês acima)
-    _df_vp = df_preco_filtrado.copy()
-    if _vp_busca_cod:
-        _df_vp = _df_vp[_df_vp['CODPRODUTO'].astype(str).str.contains(_vp_busca_cod, case=False, na=False)]
-    if _vp_busca_nome:
-        _df_vp = _df_vp[_df_vp['NOMEPRODUTO'].str.contains(_vp_busca_nome, case=False, na=False)]
-
-    if len(_df_vp) == 0:
-        st.info("Nenhum produto encontrado com os filtros aplicados.")
-    else:
-        # KPIs resumo
-        _vp_k1, _vp_k2, _vp_k3, _vp_k4 = st.columns(4)
-        with _vp_k1:
-            st.metric("Total Faturado", f"R$ {_df_vp['TOTLIQUIDO'].sum():,.2f}")
-        with _vp_k2:
-            st.metric("Qtd Total Vendida", f"{_df_vp['TOTQTD'].sum():,.0f}")
-        with _vp_k3:
-            _pm_pond = _df_vp['TOTLIQUIDO'].sum() / _df_vp['TOTQTD'].sum() if _df_vp['TOTQTD'].sum() > 0 else 0
-            st.metric("Preço Médio Pond.", f"R$ {_pm_pond:,.2f}")
-        with _vp_k4:
-            st.metric("Produtos Únicos", f"{_df_vp['CODPRODUTO'].nunique():,}")
-
-        st.markdown("---")
-
-        # Gráficos: 2 por linha
-        _g1, _g2 = st.columns(2)
-
-        with _g1:
-            st.markdown("**Top produtos por Faturamento**")
-            _top_fat = _df_vp.groupby('NOMEPRODUTO')['TOTLIQUIDO'].sum().reset_index().sort_values('TOTLIQUIDO', ascending=False).head(_vp_top_n)
-            _fig_fat = px.bar(_top_fat, x='TOTLIQUIDO', y='NOMEPRODUTO', orientation='h',
-                              labels={'NOMEPRODUTO': '', 'TOTLIQUIDO': 'R$'},
-                              color_discrete_sequence=['#1F4788'])
-            _fig_fat = aplicar_layout_grafico(_fig_fat, height=350)
-            st.plotly_chart(_fig_fat, use_container_width=True)
-
-        with _g2:
-            st.markdown("**Top produtos por Quantidade**")
-            _top_qtd = _df_vp.groupby('NOMEPRODUTO')['TOTQTD'].sum().reset_index().sort_values('TOTQTD', ascending=False).head(_vp_top_n)
-            _fig_qtd = px.bar(_top_qtd, x='TOTQTD', y='NOMEPRODUTO', orientation='h',
-                              labels={'NOMEPRODUTO': '', 'TOTQTD': 'Unidades'},
-                              color_discrete_sequence=['#2E86AB'])
-            _fig_qtd = aplicar_layout_grafico(_fig_qtd, height=350)
-            st.plotly_chart(_fig_qtd, use_container_width=True)
-
-        # Evolução de um produto específico
-        _produtos_lista = ['Todos'] + sorted(_df_vp['NOMEPRODUTO'].dropna().unique().tolist())
-        _prod_evo = st.selectbox("📈 Evolução de produto específico:", _produtos_lista, key="vp_evolucao")
-        _df_evo = _df_vp if _prod_evo == 'Todos' else _df_vp[_df_vp['NOMEPRODUTO'] == _prod_evo]
-        if 'MesAno' in _df_evo.columns and len(_df_evo) > 0:
-            _evo_data = _df_evo.groupby('MesAno').agg({'TOTLIQUIDO':'sum','TOTQTD':'sum'}).reset_index().sort_values('MesAno')
-            _eg1, _eg2 = st.columns(2)
-            with _eg1:
-                st.markdown(f"**Faturamento — {_prod_evo}**")
-                _fig_evo_fat = px.line(_evo_data, x='MesAno', y='TOTLIQUIDO',
-                                       labels={'MesAno':'Período','TOTLIQUIDO':'R$'},
-                                       color_discrete_sequence=['#1F4788'])
-                _fig_evo_fat.update_traces(line_width=2, mode='lines+markers', marker=dict(size=5))
-                _fig_evo_fat = aplicar_layout_grafico(_fig_evo_fat, height=250)
-                st.plotly_chart(_fig_evo_fat, use_container_width=True)
-            with _eg2:
-                st.markdown(f"**Quantidade — {_prod_evo}**")
-                _fig_evo_qtd = px.line(_evo_data, x='MesAno', y='TOTQTD',
-                                       labels={'MesAno':'Período','TOTQTD':'Unidades'},
-                                       color_discrete_sequence=['#2E86AB'])
-                _fig_evo_qtd.update_traces(line_width=2, mode='lines+markers', marker=dict(size=5))
-                _fig_evo_qtd = aplicar_layout_grafico(_fig_evo_qtd, height=250)
-                st.plotly_chart(_fig_evo_qtd, use_container_width=True)
-
-        # Tabela detalhada
-        st.markdown("**Detalhamento por Produto**")
-        _df_vp_display = _df_vp.groupby(['CODPRODUTO','NOMEPRODUTO']).agg(
-            {'TOTQTD':'sum','PRECOUNITMEDIO':'mean','TOTLIQUIDO':'sum'}
-        ).reset_index().sort_values('TOTLIQUIDO', ascending=False).head(_vp_top_n)
-        _df_vp_display.columns = ['Código','Produto','Qtd Vendida','Preço Médio','Total (R$)']
-        _df_vp_display['Preço Médio'] = _df_vp_display['Preço Médio'].apply(lambda x: f"R$ {x:,.2f}")
-        _df_vp_display['Total (R$)']  = _df_vp_display['Total (R$)'].apply(lambda x: f"R$ {x:,.2f}")
-        _df_vp_display['Qtd Vendida'] = _df_vp_display['Qtd Vendida'].apply(lambda x: f"{x:,.0f}")
-        st.dataframe(_df_vp_display, use_container_width=True, height=350)
-
-        st.download_button("📥 Exportar Vendas por Produto",
-                           to_excel(_df_vp),
-                           "vendas_por_produto.xlsx",
-                           "application/vnd.ms-excel",
-                           key="dl_vendas_produto")
-
 # ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
@@ -4399,7 +4299,9 @@ elif menu == "Consulta Clientes":
             _descricao = ' '.join(_parts) if _parts else str(_prod_row.get(_desc_col, ''))
 
         with _cc2:
-            st.text_input("Descrição", value=_descricao, disabled=True, key="cc_desc")
+            # key dinâmica por código — garante que value= seja sempre aplicado
+            st.text_input("Descrição", value=_descricao, disabled=True,
+                          key=f"cc_desc_{_cod_sel}")
 
         # Preço base da tabela
         try:
