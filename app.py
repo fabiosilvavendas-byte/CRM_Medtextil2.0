@@ -4070,6 +4070,221 @@ elif menu == "Pedidos Pendentes":
         key="download_pendentes"
     )
 
+    # ===== PREVISÃO DE FATURAMENTO POR CAPACIDADE PRODUTIVA =====
+    st.markdown("---")
+    st.markdown("### 🏭 Previsão de Faturamento por Capacidade Produtiva")
+    st.caption("Converte unidades pendentes em caixas e estima datas de conclusão com base na capacidade diária de cada produto.")
+
+    import math
+    from datetime import date, timedelta
+
+    # Capacidade produtiva por produto (caixas/dia) — match por substring
+    CAPACIDADE_PROD = {
+        "CAMPO OPERATORIO 45X50": 80,
+        "CAMPO OPERATÓRIO 25X28 C2": 23,
+        "CAMPO OPERATÓRIO 25X28 C5": 20,
+        "GAZE NÃO ESTERIL": 17,
+        "GAZE ESTERIL": 80,
+        "ATADURA FARMA": 18,
+        "ATADURA CONJUGADA": 15,
+        "GAZE CIRCULAR": 50,
+    }
+
+    def identificar_capacidade(descricao):
+        """Match por substring, case-insensitive."""
+        if not descricao or str(descricao).lower() == 'nan':
+            return None, "SEM CAPACIDADE"
+        desc_upper = str(descricao).upper().strip()
+        for chave, cap in CAPACIDADE_PROD.items():
+            if chave.upper() in desc_upper:
+                return cap, chave
+        return None, "SEM CAPACIDADE"
+
+    def adicionar_dias_uteis(data_inicio, dias):
+        """Avança N dias úteis (seg–sáb), ignorando domingo."""
+        atual = data_inicio
+        contados = 0
+        while contados < dias:
+            atual += timedelta(days=1)
+            if atual.weekday() != 6:  # 6 = domingo
+                contados += 1
+        return atual
+
+    # Carregar produtos_agrupados para obter CX_EMB e PRECO via ID_COD
+    _df_prod_prev = None
+    if planilhas_disponiveis.get('produtos_agrupados'):
+        with st.spinner("Carregando dados de produtos para previsão..."):
+            _df_prod_prev = carregar_planilha_github(
+                planilhas_disponiveis['produtos_agrupados']['url']
+            )
+        if _df_prod_prev is not None:
+            _df_prod_prev.columns = _df_prod_prev.columns.str.upper().str.strip()
+
+    if _df_prod_prev is None:
+        st.warning("⚠️ Planilha Produtos_Agrupados não disponível. Previsão desabilitada.")
+    else:
+        # Normalizar ID_COD
+        def _norm_cod(v):
+            try:
+                return str(int(float(str(v).strip())))
+            except:
+                return str(v).strip()
+
+        _df_prod_prev['ID_COD_N'] = _df_prod_prev['ID_COD'].apply(_norm_cod)
+
+        # Colunas necessárias
+        _cx_col    = next((c for c in _df_prod_prev.columns if 'CX_EMB' in c), None)
+        _preco_col = next((c for c in _df_prod_prev.columns if 'PRECO' in c or 'PREÇO' in c), None)
+        _desc_col  = next((c for c in _df_prod_prev.columns if 'DESCRI' in c or 'GRUPO' in c), None)
+
+        if not _cx_col or not _preco_col:
+            st.warning(f"⚠️ Colunas CX_EMB ou PRECO não encontradas. Colunas disponíveis: {_df_prod_prev.columns.tolist()}")
+        else:
+            # Preparar base de pendentes com ID_COD normalizado
+            _df_base = df_pend_filtrado.copy()
+            _df_base['COD_N'] = _df_base['CodigoProduto'].apply(_norm_cod)
+
+            # Merge com produtos
+            _df_merge = _df_base.merge(
+                _df_prod_prev[['ID_COD_N', _cx_col, _preco_col] + ([_desc_col] if _desc_col else [])],
+                left_on='COD_N',
+                right_on='ID_COD_N',
+                how='left'
+            )
+
+            # Converter unidades → caixas (ceil, evitar div/0)
+            def _calc_caixas(row):
+                try:
+                    cx = float(row[_cx_col])
+                    if cx <= 0 or pd.isna(cx):
+                        return None
+                    return math.ceil(float(row['QtdPendente']) / cx)
+                except:
+                    return None
+
+            _df_merge['CAIXAS_NECESSARIAS'] = _df_merge.apply(_calc_caixas, axis=1)
+
+            # Identificar capacidade produtiva
+            _desc_vals = _df_merge[_desc_col].tolist() if _desc_col else [''] * len(_df_merge)
+            _caps = [identificar_capacidade(d) for d in _desc_vals]
+            _df_merge['CAPACIDADE_DIA']  = [c[0] for c in _caps]
+            _df_merge['GRUPO_PROD']      = [c[1] for c in _caps]
+
+            # Calcular dias de produção (ceil, paralelo por produto)
+            def _calc_dias(row):
+                try:
+                    if row['CAPACIDADE_DIA'] is None or row['CAIXAS_NECESSARIAS'] is None:
+                        return None
+                    return math.ceil(row['CAIXAS_NECESSARIAS'] / row['CAPACIDADE_DIA'])
+                except:
+                    return None
+
+            _df_merge['DIAS_PRODUCAO'] = _df_merge.apply(_calc_dias, axis=1)
+
+            # Calcular data prevista
+            _hoje = date.today()
+
+            def _calc_data(dias):
+                if dias is None or pd.isna(dias):
+                    return None
+                return adicionar_dias_uteis(_hoje, int(dias))
+
+            _df_merge['DATA_PREVISTA'] = _df_merge['DIAS_PRODUCAO'].apply(_calc_data)
+            _df_merge['PREVISAO_FORMATADA'] = _df_merge.apply(
+                lambda r: f"{r['DATA_PREVISTA'].strftime('%d/%m/%Y')} ({int(r['DIAS_PRODUCAO'])} dias)"
+                if r['DATA_PREVISTA'] is not None else "SEM CAPACIDADE",
+                axis=1
+            )
+
+            # Valor total por linha
+            def _calc_valor(row):
+                try:
+                    return float(row['QtdPendente']) * float(row[_preco_col])
+                except:
+                    return 0.0
+
+            _df_merge['VALOR_TOTAL'] = _df_merge.apply(_calc_valor, axis=1)
+
+            # ── KPIs ────────────────────────────────────────────────────
+            _kp1, _kp2, _kp3 = st.columns(3)
+            _com_prev  = _df_merge[_df_merge['DATA_PREVISTA'].notna()]
+            _sem_prev  = _df_merge[_df_merge['DATA_PREVISTA'].isna()]
+            _dias_pond = (
+                (_com_prev['DIAS_PRODUCAO'] * _com_prev['VALOR_TOTAL']).sum()
+                / _com_prev['VALOR_TOTAL'].sum()
+            ) if _com_prev['VALOR_TOTAL'].sum() > 0 else 0
+
+            with _kp1:
+                st.metric("Valor Total Previsto", f"R$ {_com_prev['VALOR_TOTAL'].sum():,.2f}")
+            with _kp2:
+                st.metric("Média Ponderada de Dias", f"{_dias_pond:.1f} dias")
+            with _kp3:
+                st.metric("Itens sem Capacidade", f"{len(_sem_prev):,}")
+
+            st.markdown("---")
+
+            # ── Faturamento agrupado por data ────────────────────────────
+            st.markdown("**Faturamento Previsto por Data de Conclusão**")
+            _fat_data = (
+                _com_prev.groupby('PREVISAO_FORMATADA')['VALOR_TOTAL']
+                .sum()
+                .reset_index()
+                .sort_values('PREVISAO_FORMATADA')
+            )
+            _fat_data.columns = ['Data Prevista', 'Faturamento (R$)']
+
+            _fig_fat = px.bar(
+                _fat_data,
+                x='Data Prevista',
+                y='Faturamento (R$)',
+                labels={'Data Prevista': 'Data', 'Faturamento (R$)': 'R$'},
+                color_discrete_sequence=['#1F4788']
+            )
+            _fig_fat = aplicar_layout_grafico(_fig_fat, height=300)
+            st.plotly_chart(_fig_fat, use_container_width=True)
+
+            # ── Tabela de previsão ───────────────────────────────────────
+            st.markdown("**Relatório Detalhado de Previsão**")
+            _cols_show = ['Cliente', 'CodigoProduto', 'Descricao',
+                          'QtdPendente', 'CAIXAS_NECESSARIAS',
+                          'CAPACIDADE_DIA', 'DIAS_PRODUCAO',
+                          'PREVISAO_FORMATADA', 'VALOR_TOTAL']
+            _cols_show = [c for c in _cols_show if c in _df_merge.columns]
+            _df_show   = _df_merge[_cols_show].copy()
+            _df_show['VALOR_TOTAL'] = _df_show['VALOR_TOTAL'].apply(
+                lambda x: f"R$ {x:,.2f}" if pd.notnull(x) else "R$ 0,00"
+            )
+            _df_show = _df_show.rename(columns={
+                'CodigoProduto':      'Código',
+                'Descricao':          'Produto',
+                'QtdPendente':        'Qtd (un)',
+                'CAIXAS_NECESSARIAS': 'Caixas',
+                'CAPACIDADE_DIA':     'Cap/Dia',
+                'DIAS_PRODUCAO':      'Dias',
+                'PREVISAO_FORMATADA': 'Previsão',
+                'VALOR_TOTAL':        'Faturamento',
+            })
+            st.dataframe(_df_show, use_container_width=True, height=380)
+
+            # ── Downloads ───────────────────────────────────────────────
+            _dc1, _dc2 = st.columns(2)
+            with _dc1:
+                st.download_button(
+                    "📥 Relatório Final com Previsão",
+                    to_excel(_df_merge[_cols_show]),
+                    "RELATORIO_FINAL_COM_PREVISAO.xlsx",
+                    "application/vnd.ms-excel",
+                    key="dl_previsao_final"
+                )
+            with _dc2:
+                st.download_button(
+                    "📥 Faturamento por Data",
+                    to_excel(_fat_data),
+                    "FATURAMENTO_POR_DATA.xlsx",
+                    "application/vnd.ms-excel",
+                    key="dl_fat_data"
+                )
+
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Rankings</h2>', unsafe_allow_html=True)
