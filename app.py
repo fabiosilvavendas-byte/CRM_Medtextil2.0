@@ -1810,9 +1810,13 @@ _DESC = {
 _INFO_CARD = {}  # preenchido depois dos dados
 
 if 'menu_option' not in st.session_state:
-    # Redirecionar para primeiro módulo permitido se não tiver acesso à home
-    _primeiro_modulo = modulos_permitidos[0] if modulos_permitidos else '__home__'
-    st.session_state.menu_option = _primeiro_modulo
+    # Admin vai para home; colaborador vai direto para primeiro módulo
+    _tipo_usuario = usuario.get('tipo', 'administrador')
+    if _tipo_usuario == 'administrador':
+        st.session_state.menu_option = '__home__'
+    else:
+        _primeiro_modulo = modulos_permitidos[0] if modulos_permitidos else 'Inadimplência'
+        st.session_state.menu_option = _primeiro_modulo
 
 modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Dashboard","Positivação","Inadimplência","Clientes sem Compra",
