@@ -4664,20 +4664,33 @@ elif menu == "Consulta Clientes":
             _prod_row = _match.iloc[0]
 
     if _prod_row is not None:
-        # Descrição
+        # Descrição (sem Gramatura — exibida separadamente)
         _descricao = ""
         if _desc_col:
             _parts = []
-            for _dc in [c for c in _cols if any(x in c for x in ['GRUPO','DESCRI','LINHA','GRAMATURA'])]:
+            for _dc in [c for c in _cols if any(x in c for x in ['GRUPO','DESCRI','LINHA'])]:
                 _v = str(_prod_row.get(_dc, '')).strip()
                 if _v and _v.lower() not in ('nan', ''):
                     _parts.append(_v)
             _descricao = ' '.join(_parts) if _parts else str(_prod_row.get(_desc_col, ''))
 
+        # Gramatura
+        _gramatura = ""
+        _gram_col = next((c for c in _cols if 'GRAMATURA' in c), None)
+        if _gram_col:
+            _gv = _prod_row.get(_gram_col, '')
+            if pd.notna(_gv) and str(_gv).strip().lower() not in ('', 'nan'):
+                _gramatura = str(_gv).strip()
+
         with _cc2:
-            # key dinâmica por código — garante que value= seja sempre aplicado
             st.text_input("Descrição", value=_descricao, disabled=True,
                           key=f"cc_desc_{_cod_sel}")
+
+        if _gramatura:
+            _cg1, _cg2 = st.columns([1, 3])
+            with _cg1:
+                st.text_input("Gramatura", value=_gramatura, disabled=True,
+                              key=f"cc_gram_{_cod_sel}")
 
         # Preço base da tabela
         try:
