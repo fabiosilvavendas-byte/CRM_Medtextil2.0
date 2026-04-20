@@ -4415,30 +4415,37 @@ elif menu == "Pedidos Pendentes":
                 # Mapeamento de grupos → abas
                 # Grupos: palavras-chave em ordem de prioridade
                 GRUPOS_REGRAS = [
-                    ('Atadura',     ['ATADURA']),
-                    ('Campo',       ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
-                    ('Tipo Queijo', ['QUEIJO', 'TIPO QUEIJO']),
-                    ('Esteril',     ['GAZE ESTERIL', 'ESTERIL']),
-                    ('Pacote',      ['PACOTE']),
+                    ('Atadura Farma',       ['ATADURA']),  # todas ataduras → classificar depois
+                    ('Campo',               ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
+                    ('Tipo Queijo',         ['QUEIJO', 'TIPO QUEIJO']),
+                    ('Esteril',             ['GAZE ESTERIL', 'ESTERIL']),
+                    ('Pacote',              ['PACOTE']),
                 ]
 
                 def identificar_aba(descricao):
                     if not descricao:
                         return 'Outros'
                     d = str(descricao).upper()
-                    for aba, chaves in GRUPOS_REGRAS:
+                    # Ataduras: separar em Farma e Hospitalar
+                    if 'ATADURA' in d:
+                        if 'HOSPITALAR' in d:
+                            return 'Atadura Hospitalar'
+                        return 'Atadura Farma'  # FARMA explícito ou sem indicação
+                    for aba, chaves in GRUPOS_REGRAS[1:]:  # pular Atadura
                         for chave in chaves:
                             if chave in d:
                                 return aba
                     return 'Outros'
 
                 def identificar_categoria(descricao, aba):
-                    if aba != 'Atadura':
+                    if 'Atadura' not in aba:
                         return ''
                     d = str(descricao).upper()
+                    if 'HOSPITALAR' in d:
+                        return 'Hospitalar'
                     if 'FARMA' in d:
                         return 'Farma'
-                    return 'Hospitalar'
+                    return 'Farma'  # sem indicação → Farma
 
                 def extrair_descricao_pura(descricao, codigo):
                     """Remove código e nome genérico — retorna só descrição adicional"""
@@ -4547,7 +4554,7 @@ elif menu == "Pedidos Pendentes":
                 )
                 ALT_FILL  = PatternFill("solid", fgColor="EEF3FC")
 
-                ORDEM_ABAS = ['Atadura', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
+                ORDEM_ABAS = ['Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
 
                 for nome_aba in ORDEM_ABAS:
                     linhas = abas_data.get(nome_aba, [])
