@@ -4414,27 +4414,35 @@ elif menu == "Pedidos Pendentes":
 
                 # Mapeamento de grupos → abas
                 # Grupos: palavras-chave em ordem de prioridade
+                # Regras por palavras-chave na descrição — ordem importa
+                # Verificações mais específicas primeiro para evitar falsos positivos
                 GRUPOS_REGRAS = [
-                    ('Atadura Farma',       ['ATADURA']),  # todas ataduras → classificar depois
-                    ('Campo',               ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
-                    ('Tipo Queijo',         ['QUEIJO', 'TIPO QUEIJO']),
-                    ('Esteril',             ['GAZE ESTERIL', 'ESTERIL']),
-                    ('Pacote',              ['PACOTE']),
+                    # Atadura — separado na função abaixo
+                    ('Campo',           ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
+                    # Tipo Queijo: GAZE CIRCULAR e variantes
+                    ('Tipo Queijo',     ['GAZE CIRCULAR', 'QUEIJO', 'TIPO QUEIJO']),
+                    # Esteril: GAZE ESTERIL (verificar ANTES de ESTERIL isolado)
+                    ('Esteril',         ['GAZE ESTERIL']),
+                    # Pacote: GAZE NÃO ESTERIL e variantes (verificar ANTES de ESTERIL)
+                    ('Pacote',          ['GAZE NAO ESTERIL', 'GAZE NÃO ESTERIL',
+                                         'NAO ESTERIL', 'NÃO ESTERIL', 'PACOTE']),
                 ]
 
                 def identificar_aba(descricao):
                     if not descricao:
                         return 'Outros'
                     d = str(descricao).upper()
-                    # Ataduras: separar em Farma e Hospitalar
+
+                    # Atadura — sempre primeiro para não confundir com outros
                     if 'ATADURA' in d:
-                        if 'HOSPITALAR' in d:
-                            return 'Atadura Hospitalar'
-                        return 'Atadura Farma'  # FARMA explícito ou sem indicação
-                    for aba, chaves in GRUPOS_REGRAS[1:]:  # pular Atadura
+                        return 'Atadura Hospitalar' if 'HOSPITALAR' in d else 'Atadura Farma'
+
+                    # Demais grupos em ordem de especificidade
+                    for aba, chaves in GRUPOS_REGRAS:
                         for chave in chaves:
                             if chave in d:
                                 return aba
+
                     return 'Outros'
 
                 def identificar_categoria(descricao, aba):
