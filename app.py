@@ -2713,10 +2713,15 @@ elif menu == "Inadimplência":
         st.dataframe(df_detalhado_display, use_container_width=True, height=400)
         
         # Botão de download
+        _nome_inad = (
+            f"{vendedor_inad_filtro.upper().replace(' ', '_')}_INADIMPLENCIA.xlsx"
+            if vendedor_inad_filtro != 'Todos'
+            else "RELATORIO_INADIMPLENCIA.xlsx"
+        )
         st.download_button(
             "📥 Exportar Relatório Completo",
             to_excel(df_detalhado),
-            "relatorio_inadimplencia.xlsx",
+            _nome_inad,
             "application/vnd.ms-excel"
         )
 
