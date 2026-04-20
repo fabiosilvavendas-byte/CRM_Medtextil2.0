@@ -2624,96 +2624,55 @@ elif menu == "Inadimplência":
         
         st.markdown("---")
         
-        # ========== GRÁFICOS ==========
-        col5, col6 = st.columns(2)
-        
+        # ========== GRÁFICOS — 4 por linha ==========
+        col5, col6, col7, col8 = st.columns(4)
+
         with col5:
-            st.subheader("📊 Inadimplência por Faixa de Atraso")
-            
-            # Ordenar faixas corretamente
+            st.markdown("**📊 Por Faixa de Atraso**")
             ordem_faixas = ['A Vencer', '1-30 dias', '31-60 dias', '61-90 dias', 'Acima de 90 dias']
             inad_por_faixa = df_inad_filtrado.groupby('FaixaAtraso')['ValorLiquido'].sum().reset_index()
             inad_por_faixa['FaixaAtraso'] = pd.Categorical(inad_por_faixa['FaixaAtraso'], categories=ordem_faixas, ordered=True)
             inad_por_faixa = inad_por_faixa.sort_values('FaixaAtraso')
-            
-            fig_faixa = px.bar(
-                inad_por_faixa,
-                x='FaixaAtraso',
-                y='ValorLiquido',
-                labels={'FaixaAtraso': 'Faixa de Atraso', 'ValorLiquido': 'Valor (R$)'},
-                color='ValorLiquido',
-                color_discrete_sequence=['#1F4788']
-            )
-            fig_faixa = aplicar_layout_grafico(fig_faixa)
-        st.plotly_chart(fig_faixa, use_container_width=True)
-        
+            fig_faixa = px.bar(inad_por_faixa, x='FaixaAtraso', y='ValorLiquido',
+                labels={'FaixaAtraso': '', 'ValorLiquido': 'R$'},
+                color_discrete_sequence=['#1F4788'])
+            fig_faixa = aplicar_layout_grafico(fig_faixa, height=280)
+            st.plotly_chart(fig_faixa, use_container_width=True)
+
         with col6:
-            st.subheader("🏦 Inadimplência por Banco")
+            st.markdown("**🏦 Por Banco**")
             inad_por_banco = df_inad_filtrado.groupby('Banco')['ValorLiquido'].sum().reset_index()
             inad_por_banco = inad_por_banco.sort_values('ValorLiquido', ascending=False).head(10)
-            
-            fig_banco = px.bar(
-                inad_por_banco,
-                x='ValorLiquido',
-                y='Banco',
-                orientation='h',
-                labels={'Banco': 'Banco', 'ValorLiquido': 'Valor (R$)'},
-                color='ValorLiquido',
-                color_discrete_sequence=['#1F4788']
-            )
-            fig_banco = aplicar_layout_grafico(fig_banco)
-        st.plotly_chart(fig_banco, use_container_width=True)
-        
-        st.markdown("---")
-        
-        col7, col8 = st.columns(2)
-        
+            fig_banco = px.bar(inad_por_banco, x='ValorLiquido', y='Banco', orientation='h',
+                labels={'Banco': '', 'ValorLiquido': 'R$'},
+                color_discrete_sequence=['#1F4788'])
+            fig_banco = aplicar_layout_grafico(fig_banco, height=280)
+            st.plotly_chart(fig_banco, use_container_width=True)
+
         with col7:
-            st.subheader("👤 Top 10 Vendedores - Inadimplência")
-            
-            # Verificar se as colunas necessárias existem
+            st.markdown("**👤 Top Vendedores**")
             if 'NumeroDoc' not in df_inad_filtrado.columns:
-                # Tentar encontrar coluna alternativa
                 possiveis_nomes = [col for col in df_inad_filtrado.columns if 'DOC' in col.upper() or 'NUMERO' in col.upper()]
-                if possiveis_nomes:
-                    df_inad_filtrado['NumeroDoc'] = df_inad_filtrado[possiveis_nomes[0]]
-                else:
-                    # Criar coluna fake apenas para não quebrar
-                    df_inad_filtrado['NumeroDoc'] = 1
-            
-            inad_por_vendedor = df_inad_filtrado.groupby('Vendedor').agg({
-                'ValorLiquido': 'sum',
-                'NumeroDoc': 'count'
-            }).reset_index()
+                df_inad_filtrado['NumeroDoc'] = df_inad_filtrado[possiveis_nomes[0]] if possiveis_nomes else 1
+            inad_por_vendedor = df_inad_filtrado.groupby('Vendedor').agg(
+                {'ValorLiquido': 'sum', 'NumeroDoc': 'count'}).reset_index()
             inad_por_vendedor.columns = ['Vendedor', 'Valor', 'QtdTitulos']
             inad_por_vendedor = inad_por_vendedor.sort_values('Valor', ascending=False).head(10)
-            
-            fig_vend_inad = px.bar(
-                inad_por_vendedor,
-                x='Vendedor',
-                y='Valor',
-                labels={'Vendedor': 'Vendedor', 'Valor': 'Valor (R$)'},
-                color='Valor',
-                color_discrete_sequence=['#4A7BC8']
-            )
-            fig_vend_inad = aplicar_layout_grafico(fig_vend_inad)
-        st.plotly_chart(fig_vend_inad, use_container_width=True)
-        
+            fig_vend_inad = px.bar(inad_por_vendedor, x='Valor', y='Vendedor', orientation='h',
+                labels={'Vendedor': '', 'Valor': 'R$'},
+                color_discrete_sequence=['#4A7BC8'])
+            fig_vend_inad = aplicar_layout_grafico(fig_vend_inad, height=280)
+            st.plotly_chart(fig_vend_inad, use_container_width=True)
+
         with col8:
-            st.subheader("🗺️ Top 10 Estados - Inadimplência")
+            st.markdown("**🗺️ Top Estados**")
             inad_por_estado = df_inad_filtrado.groupby('Estado')['ValorLiquido'].sum().reset_index()
             inad_por_estado = inad_por_estado.sort_values('ValorLiquido', ascending=False).head(10)
-            
-            fig_est_inad = px.bar(
-                inad_por_estado,
-                x='Estado',
-                y='ValorLiquido',
-                labels={'Estado': 'Estado', 'ValorLiquido': 'Valor (R$)'},
-                color='ValorLiquido',
-                color_discrete_sequence=['#163561']
-            )
-            fig_est_inad = aplicar_layout_grafico(fig_est_inad)
-        st.plotly_chart(fig_est_inad, use_container_width=True)
+            fig_est_inad = px.bar(inad_por_estado, x='ValorLiquido', y='Estado', orientation='h',
+                labels={'Estado': '', 'ValorLiquido': 'R$'},
+                color_discrete_sequence=['#163561'])
+            fig_est_inad = aplicar_layout_grafico(fig_est_inad, height=280)
+            st.plotly_chart(fig_est_inad, use_container_width=True)
         
         st.markdown("---")
         
