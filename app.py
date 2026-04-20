@@ -4426,11 +4426,222 @@ elif menu == "Pedidos Pendentes":
             st.dataframe(_df_show, use_container_width=True, height=380)
 
             # ── Downloads ───────────────────────────────────────────────
+            def _gerar_relatorio_previsao(df_merge, df_prod_prev, cx_col, preco_col, desc_col):
+                """
+                Gera Excel com abas separadas por grupo de produto.
+                Colunas: Cliente, Código, Volumes(cx), Descrição, Contratado,
+                         Entregue, Pendente, Valor Unit, Valor Pendente,
+                         Data Emissão, Dias Pendentes, Vendedor, %Entregue,
+                         Previsão(branco), Categoria, Observações(branco)
+                """
+                import math
+                from datetime import date
+                from io import BytesIO
+                import openpyxl
+                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+                from openpyxl.utils import get_column_letter
+
+                hoje = date.today()
+
+                # Mapeamento de grupos → abas
+                GRUPOS_ABA = {
+                    'ATADURA':  'Atadura',
+                    'CAMPO':    'Campo',
+                    'QUEIJO':   'Tipo Queijo',
+                    'ESTERIL':  'Esteril',
+                    'PACOTE':   'Pacote',
+                }
+
+                def identificar_aba(descricao):
+                    if not descricao:
+                        return 'Outros'
+                    d = str(descricao).upper()
+                    for chave, aba in GRUPOS_ABA.items():
+                        if chave in d:
+                            return aba
+                    return 'Outros'
+
+                def identificar_categoria(descricao, aba):
+                    """Categoria só para aba Atadura: Farma ou Hospitalar"""
+                    if aba != 'Atadura':
+                        return ''
+                    d = str(descricao).upper()
+                    if 'FARMA' in d:
+                        return 'Farma'
+                    return 'Hospitalar'
+
+                def extrair_descricao_pura(descricao, codigo):
+                    """Remove código e nome genérico — retorna só descrição adicional"""
+                    if not descricao:
+                        return ''
+                    d = str(descricao).strip()
+                    # Remover código se presente no início
+                    cod_str = str(codigo).strip()
+                    if d.startswith(cod_str):
+                        d = d[len(cod_str):].strip(' -|')
+                    return d
+
+                # Calcular CX_EMB lookup
+                cx_lookup = {}
+                if df_prod_prev is not None and cx_col:
+                    for _, row in df_prod_prev.iterrows():
+                        try:
+                            k = str(int(float(str(row['ID_COD_N'])))).strip()
+                            v = float(row[cx_col])
+                            if v > 0:
+                                cx_lookup[k] = v
+                        except:
+                            pass
+
+                COLUNAS = [
+                    'Cliente', 'Código', 'Volumes (cx)', 'Descrição',
+                    'Contratado', 'Entregue', 'Pendente',
+                    'Valor Unitário', 'Valor Pendente',
+                    'Data Emissão', 'Dias Pendentes', 'Vendedor',
+                    '% Entregue', 'Previsão', 'Categoria', 'Observações'
+                ]
+
+                # Agrupar linhas por aba
+                abas_data = {}
+                for _, row in df_merge.iterrows():
+                    desc_raw = str(row.get('Descricao', '') or '')
+                    aba = identificar_aba(desc_raw)
+                    if aba not in abas_data:
+                        abas_data[aba] = []
+
+                    cod = str(row.get('CodigoProduto', '')).strip()
+                    try:
+                        cod_n = str(int(float(cod)))
+                    except:
+                        cod_n = cod
+
+                    cx = cx_lookup.get(cod_n, 0)
+                    qtd_cont = float(row.get('QtdContratada', 0) or 0)
+                    qtd_ent  = float(row.get('QtdEntregue', 0) or 0)
+                    qtd_pend = float(row.get('QtdPendente', 0) or 0)
+                    val_unit = float(row.get('ValorUnit', 0) or 0)
+                    val_pend = val_unit * qtd_pend
+
+                    # Volumes em caixas
+                    volumes_cx = math.ceil(qtd_pend / cx) if cx > 0 else ''
+
+                    # Dias pendentes
+                    try:
+                        dt_em = pd.to_datetime(row.get('DataEmissao')).date()
+                        dias_pend = (hoje - dt_em).days
+                    except:
+                        dias_pend = ''
+
+                    # % entregue
+                    perc_ent = round((qtd_ent / qtd_cont * 100), 1) if qtd_cont > 0 else 0
+
+                    desc_pura = extrair_descricao_pura(desc_raw, cod)
+                    categoria = identificar_categoria(desc_raw, aba)
+
+                    dt_em_fmt = ''
+                    try:
+                        dt_em_fmt = pd.to_datetime(row.get('DataEmissao')).strftime('%d/%m/%Y')
+                    except:
+                        pass
+
+                    abas_data[aba].append([
+                        row.get('Cliente', ''),
+                        cod,
+                        volumes_cx,
+                        desc_pura,
+                        qtd_cont,
+                        qtd_ent,
+                        qtd_pend,
+                        val_unit,
+                        val_pend,
+                        dt_em_fmt,
+                        dias_pend,
+                        row.get('Vendedor', ''),
+                        f"{perc_ent:.1f}%",
+                        '',            # Previsão — branco
+                        categoria,
+                        '',            # Observações — branco
+                    ])
+
+                # Criar workbook
+                wb = openpyxl.Workbook()
+                wb.remove(wb.active)
+
+                # Estilos
+                HDR_FILL  = PatternFill("solid", fgColor="1F4788")
+                HDR_FONT  = Font(bold=True, color="FFFFFF", size=10)
+                HDR_ALIGN = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                BORDER    = Border(
+                    left=Side(style='thin'), right=Side(style='thin'),
+                    top=Side(style='thin'), bottom=Side(style='thin')
+                )
+                ALT_FILL  = PatternFill("solid", fgColor="EEF3FC")
+
+                ORDEM_ABAS = ['Atadura', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
+
+                for nome_aba in ORDEM_ABAS:
+                    linhas = abas_data.get(nome_aba, [])
+                    ws = wb.create_sheet(title=nome_aba)
+
+                    # Cabeçalho
+                    ws.append(COLUNAS)
+                    for col_idx, _ in enumerate(COLUNAS, 1):
+                        cell = ws.cell(row=1, column=col_idx)
+                        cell.fill   = HDR_FILL
+                        cell.font   = HDR_FONT
+                        cell.alignment = HDR_ALIGN
+                        cell.border = BORDER
+
+                    ws.row_dimensions[1].height = 30
+
+                    # Dados
+                    for r_idx, linha in enumerate(linhas, 2):
+                        ws.append(linha)
+                        fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
+                        for col_idx in range(1, len(COLUNAS) + 1):
+                            cell = ws.cell(row=r_idx, column=col_idx)
+                            cell.border = BORDER
+                            cell.alignment = Alignment(vertical="center")
+                            if fill.fill_type:
+                                cell.fill = fill
+                            # Formatar moeda
+                            if col_idx in (8, 9):
+                                cell.number_format = 'R$ #,##0.00'
+                            # Formatar números inteiros
+                            if col_idx in (5, 6, 7):
+                                cell.number_format = '#,##0'
+
+                    # Larguras de coluna
+                    larguras = [30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    for i, larg in enumerate(larguras, 1):
+                        ws.column_dimensions[get_column_letter(i)].width = larg
+
+                    # Rodapé com totais (última linha)
+                    if linhas:
+                        ultima = len(linhas) + 2
+                        ws.cell(ultima, 1, 'TOTAL').font = Font(bold=True)
+                        # Somar Contratado, Entregue, Pendente, ValorPendente
+                        for col_idx, nome_col in enumerate(COLUNAS, 1):
+                            if nome_col in ('Contratado', 'Entregue', 'Pendente', 'Valor Pendente'):
+                                total = sum(
+                                    float(linha[col_idx - 1]) if isinstance(linha[col_idx - 1], (int, float)) else 0
+                                    for linha in linhas
+                                )
+                                c = ws.cell(ultima, col_idx, total)
+                                c.font = Font(bold=True)
+                                c.number_format = '#,##0.00' if nome_col == 'Valor Pendente' else '#,##0'
+
+                output = BytesIO()
+                wb.save(output)
+                return output.getvalue()
+
             _dc1, _dc2 = st.columns(2)
             with _dc1:
                 st.download_button(
                     "📥 Relatório Final com Previsão",
-                    to_excel(_df_merge[_cols_show]),
+                    _gerar_relatorio_previsao(
+                        _df_merge, _df_prod_prev, _cx_col, _preco_col, _desc_col
+                    ),
                     "RELATORIO_FINAL_COM_PREVISAO.xlsx",
                     "application/vnd.ms-excel",
                     key="dl_previsao_final"
@@ -4664,33 +4875,20 @@ elif menu == "Consulta Clientes":
             _prod_row = _match.iloc[0]
 
     if _prod_row is not None:
-        # Descrição (sem Gramatura — exibida separadamente)
+        # Descrição
         _descricao = ""
         if _desc_col:
             _parts = []
-            for _dc in [c for c in _cols if any(x in c for x in ['GRUPO','DESCRI','LINHA'])]:
+            for _dc in [c for c in _cols if any(x in c for x in ['GRUPO','DESCRI','LINHA','GRAMATURA'])]:
                 _v = str(_prod_row.get(_dc, '')).strip()
                 if _v and _v.lower() not in ('nan', ''):
                     _parts.append(_v)
             _descricao = ' '.join(_parts) if _parts else str(_prod_row.get(_desc_col, ''))
 
-        # Gramatura
-        _gramatura = ""
-        _gram_col = next((c for c in _cols if 'GRAMATURA' in c), None)
-        if _gram_col:
-            _gv = _prod_row.get(_gram_col, '')
-            if pd.notna(_gv) and str(_gv).strip().lower() not in ('', 'nan'):
-                _gramatura = str(_gv).strip()
-
         with _cc2:
+            # key dinâmica por código — garante que value= seja sempre aplicado
             st.text_input("Descrição", value=_descricao, disabled=True,
                           key=f"cc_desc_{_cod_sel}")
-
-        if _gramatura:
-            _cg1, _cg2 = st.columns([1, 3])
-            with _cg1:
-                st.text_input("Gramatura", value=_gramatura, disabled=True,
-                              key=f"cc_gram_{_cod_sel}")
 
         # Preço base da tabela
         try:
