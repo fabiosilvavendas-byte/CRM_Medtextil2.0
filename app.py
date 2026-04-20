@@ -4220,11 +4220,16 @@ elif menu == "Pedidos Pendentes":
     
     st.dataframe(df_pend_display, use_container_width=True, height=400)
     
-    # Botão de download
+    # Botão de download — nome do arquivo reflete o vendedor filtrado
+    _nome_arquivo_pend = (
+        f"{vendedor_pend_filtro.upper().replace(' ', '_')}_PENDENTES.xlsx"
+        if vendedor_pend_filtro != 'Todos'
+        else "PEDIDOS_PENDENTES.xlsx"
+    )
     st.download_button(
         "📥 Exportar Pedidos Pendentes (Separado por Tipo)",
         to_excel_pedidos_pendentes(df_pend_filtrado),
-        "pedidos_pendentes.xlsx",
+        _nome_arquivo_pend,
         "application/vnd.ms-excel",
         key="download_pendentes"
     )
