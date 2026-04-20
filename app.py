@@ -4414,33 +4414,33 @@ elif menu == "Pedidos Pendentes":
 
                 # Mapeamento de grupos → abas
                 # Grupos: palavras-chave em ordem de prioridade
-                # Regras por palavras-chave na descrição — ordem importa
-                # Verificações mais específicas primeiro para evitar falsos positivos
+                # Regras por palavras-chave — ORDEM CRÍTICA: mais específico primeiro
+                # NAO ESTERIL deve vir ANTES de ESTERIL para evitar falso match
                 GRUPOS_REGRAS = [
-                    # Atadura — separado na função abaixo
-                    ('Campo',           ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
-                    # Tipo Queijo: GAZE CIRCULAR e variantes
-                    ('Tipo Queijo',     ['GAZE CIRCULAR', 'QUEIJO', 'TIPO QUEIJO']),
-                    # Esteril: GAZE ESTERIL (verificar ANTES de ESTERIL isolado)
-                    ('Esteril',         ['GAZE ESTERIL']),
-                    # Pacote: GAZE NÃO ESTERIL e variantes (verificar ANTES de ESTERIL)
-                    ('Pacote',          ['GAZE NAO ESTERIL', 'GAZE NÃO ESTERIL',
-                                         'NAO ESTERIL', 'NÃO ESTERIL', 'PACOTE']),
+                    ('Campo',       ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
+                    ('Tipo Queijo', ['GAZE CIRCULAR', 'QUEIJO', 'TIPO QUEIJO']),
+                    ('Pacote',      ['NAO ESTERIL', 'NÃO ESTERIL', 'PACOTE']),  # ANTES de Esteril
+                    ('Esteril',     ['GAZE ESTERIL', 'ESTERIL']),               # DEPOIS de Pacote
                 ]
+
+                def _norm(s):
+                    """Remove acentos e normaliza para comparação segura."""
+                    import unicodedata
+                    return unicodedata.normalize('NFKD', str(s)).encode('ascii', 'ignore').decode('ascii').upper()
 
                 def identificar_aba(descricao):
                     if not descricao:
                         return 'Outros'
-                    d = str(descricao).upper()
+                    d = _norm(descricao)
 
-                    # Atadura — sempre primeiro para não confundir com outros
+                    # Atadura — sempre primeiro
                     if 'ATADURA' in d:
                         return 'Atadura Hospitalar' if 'HOSPITALAR' in d else 'Atadura Farma'
 
-                    # Demais grupos em ordem de especificidade
+                    # Demais grupos — chaves também normalizadas
                     for aba, chaves in GRUPOS_REGRAS:
                         for chave in chaves:
-                            if chave in d:
+                            if _norm(chave) in d:
                                 return aba
 
                     return 'Outros'
