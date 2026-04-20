@@ -4847,7 +4847,7 @@ elif menu == "Consulta Clientes":
 
     # ── Campo de código do produto ────────────────────────────────────────
     _codigos_lista = [''] + sorted(_df_tabela[_cod_col].dropna().astype(str).unique().tolist())
-    _cc1, _cc2 = st.columns([1, 2])
+    _cc1, _cc2, _cc3 = st.columns([1, 2, 1])
     with _cc1:
         _cod_sel = st.selectbox("Código do Produto", _codigos_lista,
                                 key="cc_codigo", label_visibility="visible")
@@ -4864,16 +4864,27 @@ elif menu == "Consulta Clientes":
         _descricao = ""
         if _desc_col:
             _parts = []
-            for _dc in [c for c in _cols if any(x in c for x in ['GRUPO','DESCRI','LINHA','GRAMATURA'])]:
+            for _dc in [c for c in _cols if any(x in c for x in ['GRUPO','DESCRI','LINHA'])]:
                 _v = str(_prod_row.get(_dc, '')).strip()
                 if _v and _v.lower() not in ('nan', ''):
                     _parts.append(_v)
             _descricao = ' '.join(_parts) if _parts else str(_prod_row.get(_desc_col, ''))
 
+        # Gramatura
+        _gram_col = next((c for c in _cols if 'GRAMATUR' in c), None)
+        _gramatura = ''
+        if _gram_col:
+            _gv = str(_prod_row.get(_gram_col, '')).strip()
+            if _gv and _gv.lower() not in ('nan', '0', '0.0', ''):
+                _gramatura = _gv
+
         with _cc2:
-            # key dinâmica por código — garante que value= seja sempre aplicado
             st.text_input("Descrição", value=_descricao, disabled=True,
                           key=f"cc_desc_{_cod_sel}")
+
+        with _cc3:
+            st.text_input("Gramatura", value=_gramatura, disabled=True,
+                          key=f"cc_gram_{_cod_sel}")
 
         # Preço base da tabela
         try:
