@@ -4444,25 +4444,26 @@ elif menu == "Pedidos Pendentes":
                 hoje = date.today()
 
                 # Mapeamento de grupos → abas
-                GRUPOS_ABA = {
-                    'ATADURA':  'Atadura',
-                    'CAMPO':    'Campo',
-                    'QUEIJO':   'Tipo Queijo',
-                    'ESTERIL':  'Esteril',
-                    'PACOTE':   'Pacote',
-                }
+                # Grupos: palavras-chave em ordem de prioridade
+                GRUPOS_REGRAS = [
+                    ('Atadura',     ['ATADURA']),
+                    ('Campo',       ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
+                    ('Tipo Queijo', ['QUEIJO', 'TIPO QUEIJO']),
+                    ('Esteril',     ['GAZE ESTERIL', 'ESTERIL']),
+                    ('Pacote',      ['PACOTE']),
+                ]
 
                 def identificar_aba(descricao):
                     if not descricao:
                         return 'Outros'
                     d = str(descricao).upper()
-                    for chave, aba in GRUPOS_ABA.items():
-                        if chave in d:
-                            return aba
+                    for aba, chaves in GRUPOS_REGRAS:
+                        for chave in chaves:
+                            if chave in d:
+                                return aba
                     return 'Outros'
 
                 def identificar_categoria(descricao, aba):
-                    """Categoria só para aba Atadura: Farma ou Hospitalar"""
                     if aba != 'Atadura':
                         return ''
                     d = str(descricao).upper()
