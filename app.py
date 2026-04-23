@@ -4717,102 +4717,99 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
-# ====================== MÓDULO: PERFORMANCE DE VENDEDORES ======================
+# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (VERSÃO BLINDADA) ======================
 if menu == "Performance de Vendedores":
     st.markdown('<h2 style="color:#1F4788;">📈 Performance de Vendedores</h2>', unsafe_allow_html=True)
     
-    # --- PADRONIZAÇÃO DE COLUNAS ---
+    # --- MAPEAMENTO SEGURO DE COLUNAS (Evita KeyError) ---
     df_modulo = df.copy()
-    
-    # Mapeamento dinâmico para garantir compatibilidade com o Excel
-    col_vendedor = next((c for c in df_modulo.columns if c.lower() in ['vendedor', 'vendedores']), None)
-    col_estado = next((c for c in df_modulo.columns if c.lower() in ['estado', 'uf', 'regiao', 'região']), None)
-    col_data = next((c for c in df_modulo.columns if c.lower() in ['dataemissao', 'data emissao', 'data']), None)
-    
-    if not col_vendedor or not col_estado:
-        st.error(f"⚠️ Colunas críticas não encontradas ('Vendedor' ou 'Estado').")
+    cols = df_modulo.columns.tolist()
+
+    def find_col(possibilities):
+        return next((c for c in cols if c.lower().strip() in possibilities), None)
+
+    # Definição das colunas baseada no seu padrão de dados
+    c_vendedor = find_col(['vendedor', 'vendedores', 'nome vendedor'])
+    c_estado   = find_col(['estado', 'uf', 'regiao', 'região'])
+    c_data     = find_col(['dataemissao', 'data emissao', 'data', 'emissao'])
+    c_total    = find_col(['totalproduto', 'valor total', 'vlr_total', 'total', 'faturamento'])
+    c_qtd      = find_col(['qtdvendida', 'qtd', 'quantidade', 'volume', 'unidades'])
+    c_nota     = find_col(['numnota', 'nota', 'nf', 'pedido'])
+    c_cliente  = find_col(['cpf_cnpj', 'cnpj', 'cliente_id', 'cliente'])
+    c_tipo     = find_col(['tipomov', 'tipo', 'movimentacao', 'operacao'])
+    c_desc     = find_col(['descricao', 'produto', 'item', 'nome produto'])
+
+    # Verificação de integridade mínima
+    if not c_vendedor or not c_total:
+        st.error("⚠️ Não foi possível identificar as colunas de 'Vendedor' ou 'Valor' no arquivo.")
         st.stop()
 
-    # --- TRATAMENTO DOS FILTROS ---
-    vendedores_unicos = df_modulo[col_vendedor].unique().tolist()
-    vendedores_limpos = sorted([
-        str(v) for v in vendedores_unicos 
-        if pd.notna(v) and str(v).strip().lower() != 'nan' and str(v).strip() != ''
-    ])
-    
-    estados_unicos = df_modulo[col_estado].unique().tolist()
-    estados_limpos = sorted([
-        str(e) for e in estados_unicos 
-        if pd.notna(e) and str(e).strip().lower() != 'nan' and str(e).strip() != ''
-    ])
+    # --- TRATAMENTO DE FILTROS ---
+    vendedores = sorted([str(x) for x in df_modulo[c_vendedor].unique() if pd.notna(x) and str(x).lower() != 'nan'])
+    estados    = sorted([str(x) for x in df_modulo[c_estado].unique() if pd.notna(x) and str(x).lower() != 'nan']) if c_estado else []
 
-    # --- BARRA DE FILTROS ---
     with st.expander("🔍 Filtros de Análise", expanded=True):
-        col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            vendedor_sel = st.selectbox("Vendedor", ["Todos"] + vendedores_limpos)
-        with col_f2:
-            estado_sel = st.selectbox("Estado", ["Todos"] + estados_limpos)
-        with col_f3:
-            df_modulo[col_data] = pd.to_datetime(df_modulo[col_data])
-            data_min, data_max = df_modulo[col_data].min().date(), df_modulo[col_data].max().date()
-            periodo_sel = st.date_input("Período", [data_min, data_max])
+        f1, f2, f3 = st.columns(3)
+        vendedor_sel = f1.selectbox("Vendedor", ["Todos"] + vendedores)
+        estado_sel   = f2.selectbox("Estado", ["Todos"] + estados) if c_estado else f2.info("Coluna 'Estado' não detectada.")
+        
+        # Tratamento de Data
+        df_modulo[c_data] = pd.to_datetime(df_modulo[c_data], errors='coerce')
+        df_modulo = df_modulo.dropna(subset=[c_data])
+        d_min, d_max = df_modulo[c_data].min().date(), df_modulo[c_data].max().date()
+        periodo_sel = f3.date_input("Período", [d_min, d_max])
 
     # --- APLICAÇÃO DOS FILTROS ---
+    mask = pd.Series([True] * len(df_modulo), index=df_modulo.index)
     if vendedor_sel != "Todos":
-        df_modulo = df_modulo[df_modulo[col_vendedor].astype(str) == vendedor_sel]
-    
-    if estado_sel != "Todos":
-        df_modulo = df_modulo[df_modulo[col_estado].astype(str) == estado_sel]
-        
+        mask &= (df_modulo[c_vendedor].astype(str) == vendedor_sel)
+    if c_estado and estado_sel != "Todos":
+        mask &= (df_modulo[c_estado].astype(str) == estado_sel)
     if len(periodo_sel) == 2:
-        df_modulo = df_modulo[
-            (df_modulo[col_data].dt.date >= periodo_sel[0]) & 
-            (df_modulo[col_data].dt.date <= periodo_sel[1])
-        ]
+        mask &= (df_modulo[c_data].dt.date >= periodo_sel[0]) & (df_modulo[c_data].dt.date <= periodo_sel[1])
+    
+    df_f = df_modulo[mask]
 
-    # --- CÁLCULOS DO DASHBOARD ---
-    if not df_modulo.empty:
-        # Filtros de movimentação (Venda vs Devolução)
-        vendas = df_modulo[df_modulo['TipoMov'].str.contains('Venda', case=False, na=False)]
-        devolucoes = df_modulo[df_modulo['TipoMov'].str.contains('Devolucao', case=False, na=False)]
+    # --- PROCESSAMENTO DOS INDICADORES (Lógica do sistema) ---
+    if not df_f.empty:
+        # Filtro de Vendas vs Devoluções (Blindado para nulos)
+        vendas = df_f[df_f[c_tipo].str.contains('Venda', case=False, na=False)] if c_tipo else df_f
+        devol  = df_f[df_f[c_tipo].str.contains('Devolucao|Devolução', case=False, na=False)] if c_tipo else pd.DataFrame()
         
-        fat_liq = vendas['TotalProduto'].sum() - devolucoes['TotalProduto'].sum()
-        vol_total = vendas['QtdVendida'].sum()
-        clientes_atendidos = vendas['CPF_CNPJ'].nunique()
-        ticket_medio = fat_liq / vendas['NumNota'].nunique() if vendas['NumNota'].nunique() > 0 else 0
-        
-        # Cards de Resumo (Utilizando seu padrão render_kpi_card)
+        fat_liq = vendas[c_total].sum() - devol[c_total].sum()
+        vol_total = vendas[c_qtd].sum() if c_qtd else 0
+        positivacao = vendas[c_cliente].nunique() if c_cliente else 0
+        ticket_medio = fat_liq / vendas[c_nota].nunique() if c_nota and vendas[c_nota].nunique() > 0 else 0
+
+        # --- EXIBIÇÃO ---
         c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            render_kpi_card("Faturamento Líquido", f"R$ {fat_liq:,.2f}", icon="💰")
-        with c2:
-            render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", icon="🎫")
-        with c3:
-            render_kpi_card("Positivação", f"{clientes_atendidos}", icon="👥")
-        with c4:
-            render_kpi_card("Volume Total", f"{vol_total:,.0f} un.", icon="📦")
+        with c1: render_kpi_card("Faturamento Líquido", f"R$ {fat_liq:,.2f}", icon="💰")
+        with c2: render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", icon="🎫")
+        with c3: render_kpi_card("Positivação", f"{positivacao} Cli.", icon="👥")
+        with c4: render_kpi_card("Volume Total", f"{vol_total:,.0f}", icon="📦")
 
         # Gráficos
-        tab1, tab2 = st.tabs(["📈 Evolução Temporal", "📊 Mix e Comparativo por Estado"])
-        with tab1:
-            evol = vendas.groupby(vendas[col_data].dt.date)['TotalProduto'].sum().reset_index()
-            fig_evol = px.area(evol, x=col_data, y='TotalProduto', title="Evolução Diária", color_discrete_sequence=['#1F4788'])
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            st.subheader("Evolução Mensal")
+            df_evol = vendas.groupby(vendas[c_data].dt.to_period('M'))[c_total].sum().reset_index()
+            df_evol[c_data] = df_evol[c_data].astype(str)
+            fig_evol = px.line(df_evol, x=c_data, y=c_total, markers=True, color_discrete_sequence=['#1F4788'])
             st.plotly_chart(fig_evol, use_container_width=True)
             
-        with tab2:
-            cg1, cg2 = st.columns(2)
-            with cg1:
-                mix = vendas.groupby('Descricao')['TotalProduto'].sum().nlargest(10).reset_index()
-                fig_mix = px.bar(mix, x='TotalProduto', y='Descricao', orientation='h', title="Top 10 Produtos", color_discrete_sequence=['#10B981'])
+        with col_g2:
+            st.subheader("Concentração por Produto (Mix)")
+            if c_desc:
+                df_mix = vendas.groupby(c_desc)[c_total].sum().nlargest(10).reset_index()
+                fig_mix = px.pie(df_mix, values=c_total, names=c_desc, hole=.4)
                 st.plotly_chart(fig_mix, use_container_width=True)
-            with cg2:
-                # Ranking dentro do Estado selecionado
-                rank = df_modulo.groupby(col_vendedor)['TotalProduto'].sum().sort_values(ascending=True).reset_index()
-                fig_rank = px.bar(rank, x='TotalProduto', y=col_vendedor, orientation='h', title="Comparativo Vendedores", color_discrete_sequence=['#F59E0B'])
-                st.plotly_chart(fig_rank, use_container_width=True)
+
+        st.subheader("Performance Comparativa")
+        df_rank = df_f.groupby(c_vendedor)[c_total].sum().sort_values(ascending=True).reset_index()
+        fig_rank = px.bar(df_rank, x=c_total, y=c_vendedor, orientation='h', color_discrete_sequence=['#10B981'])
+        st.plotly_chart(fig_rank, use_container_width=True)
     else:
-        st.warning("Nenhum dado encontrado para os filtros aplicados.")
+        st.warning("Nenhum dado encontrado para os filtros selecionados.")
 
 # ====================== CONSULTA CLIENTES ======================
 elif menu == "Consulta Clientes":
