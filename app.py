@@ -4721,19 +4721,29 @@ elif menu == "Rankings":
 if menu == "Performance de Vendedores":
     st.markdown('<h2 style="color:#1F4788;">📈 Performance de Vendedores</h2>', unsafe_allow_html=True)
     
-    # --- TRATAMENTO DOS DADOS PARA OS FILTROS (Correção do AttributeError) ---
-    # 1. Vendedores: Garantimos que tudo seja string ANTES de verificar .lower()
-    vendedores_unicos = df['Vendedor'].unique().tolist()
+    # --- PADRONIZAÇÃO DE COLUNAS ---
+    df_modulo = df.copy()
+    
+    # Mapeamento dinâmico para garantir compatibilidade com o Excel
+    col_vendedor = next((c for c in df_modulo.columns if c.lower() in ['vendedor', 'vendedores']), None)
+    col_estado = next((c for c in df_modulo.columns if c.lower() in ['estado', 'uf', 'regiao', 'região']), None)
+    col_data = next((c for c in df_modulo.columns if c.lower() in ['dataemissao', 'data emissao', 'data']), None)
+    
+    if not col_vendedor or not col_estado:
+        st.error(f"⚠️ Colunas críticas não encontradas ('Vendedor' ou 'Estado').")
+        st.stop()
+
+    # --- TRATAMENTO DOS FILTROS ---
+    vendedores_unicos = df_modulo[col_vendedor].unique().tolist()
     vendedores_limpos = sorted([
         str(v) for v in vendedores_unicos 
         if pd.notna(v) and str(v).strip().lower() != 'nan' and str(v).strip() != ''
     ])
     
-    # 2. Regiões: Mesma lógica de proteção
-    regioes_unicas = df['Regiao'].unique().tolist()
-    regioes_limpas = sorted([
-        str(r) for r in regioes_unicas 
-        if pd.notna(r) and str(r).strip().lower() != 'nan' and str(r).strip() != ''
+    estados_unicos = df_modulo[col_estado].unique().tolist()
+    estados_limpos = sorted([
+        str(e) for e in estados_unicos 
+        if pd.notna(e) and str(e).strip().lower() != 'nan' and str(e).strip() != ''
     ])
 
     # --- BARRA DE FILTROS ---
@@ -4742,62 +4752,67 @@ if menu == "Performance de Vendedores":
         with col_f1:
             vendedor_sel = st.selectbox("Vendedor", ["Todos"] + vendedores_limpos)
         with col_f2:
-            regiao_sel = st.selectbox("Região", ["Todas"] + regioes_limpas)
+            estado_sel = st.selectbox("Estado", ["Todos"] + estados_limpos)
         with col_f3:
-            # Garantir que a coluna de data esteja em datetime para evitar erros no date_input
-            df['DataEmissao'] = pd.to_datetime(df['DataEmissao'])
-            data_min, data_max = df['DataEmissao'].min().date(), df['DataEmissao'].max().date()
+            df_modulo[col_data] = pd.to_datetime(df_modulo[col_data])
+            data_min, data_max = df_modulo[col_data].min().date(), df_modulo[col_data].max().date()
             periodo_sel = st.date_input("Período", [data_min, data_max])
 
-    # --- APLICAÇÃO DOS FILTROS NO DATAFRAME ---
-    df_perf = df.copy()
-    
+    # --- APLICAÇÃO DOS FILTROS ---
     if vendedor_sel != "Todos":
-        df_perf = df_perf[df_perf['Vendedor'].astype(str) == vendedor_sel]
+        df_modulo = df_modulo[df_modulo[col_vendedor].astype(str) == vendedor_sel]
     
-    if regiao_sel != "Todas":
-        df_perf = df_perf[df_perf['Regiao'].astype(str) == regiao_sel]
+    if estado_sel != "Todos":
+        df_modulo = df_modulo[df_modulo[col_estado].astype(str) == estado_sel]
         
     if len(periodo_sel) == 2:
-        df_perf = df_perf[
-            (df_perf['DataEmissao'].dt.date >= periodo_sel[0]) & 
-            (df_perf['DataEmissao'].dt.date <= periodo_sel[1])
+        df_modulo = df_modulo[
+            (df_modulo[col_data].dt.date >= periodo_sel[0]) & 
+            (df_modulo[col_data].dt.date <= periodo_sel[1])
         ]
 
-    # --- CÁLCULOS E DASHBOARD (Mantendo a lógica anterior) ---
-    if not df_perf.empty:
+    # --- CÁLCULOS DO DASHBOARD ---
+    if not df_modulo.empty:
         # Filtros de movimentação (Venda vs Devolução)
-        vendas_v = df_perf[df_perf['TipoMov'].str.contains('Venda', case=False, na=False)]
-        dev_v = df_perf[df_perf['TipoMov'].str.contains('Devolucao', case=False, na=False)]
+        vendas = df_modulo[df_modulo['TipoMov'].str.contains('Venda', case=False, na=False)]
+        devolucoes = df_modulo[df_modulo['TipoMov'].str.contains('Devolucao', case=False, na=False)]
         
-        fat_liquido = vendas_v['TotalProduto'].sum() - dev_v['TotalProduto'].sum()
-        positivacao = vendas_v['CPF_CNPJ'].nunique()
-        ticket_medio = fat_liquido / vendas_v['NumNota'].nunique() if vendas_v['NumNota'].nunique() > 0 else 0
+        fat_liq = vendas['TotalProduto'].sum() - devolucoes['TotalProduto'].sum()
+        vol_total = vendas['QtdVendida'].sum()
+        clientes_atendidos = vendas['CPF_CNPJ'].nunique()
+        ticket_medio = fat_liq / vendas['NumNota'].nunique() if vendas['NumNota'].nunique() > 0 else 0
         
-        # Cards de Resumo
-        c1, c2, c3 = st.columns(3)
+        # Cards de Resumo (Utilizando seu padrão render_kpi_card)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
-            render_kpi_card("Faturamento Líquido", f"R$ {fat_liquido:,.2f}", icon="💰")
+            render_kpi_card("Faturamento Líquido", f"R$ {fat_liq:,.2f}", icon="💰")
         with c2:
             render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", icon="🎫")
         with c3:
-            render_kpi_card("Clientes Atendidos", f"{positivacao}", icon="👥")
+            render_kpi_card("Positivação", f"{clientes_atendidos}", icon="👥")
+        with c4:
+            render_kpi_card("Volume Total", f"{vol_total:,.0f} un.", icon="📦")
 
         # Gráficos
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            st.subheader("Vendas por Produto (Top 10)")
-            mix = vendas_v.groupby('Descricao')['TotalProduto'].sum().nlargest(10).reset_index()
-            fig1 = px.bar(mix, x='TotalProduto', y='Descricao', orientation='h', color_discrete_sequence=['#1F4788'])
-            st.plotly_chart(fig1, use_container_width=True)
+        tab1, tab2 = st.tabs(["📈 Evolução Temporal", "📊 Mix e Comparativo por Estado"])
+        with tab1:
+            evol = vendas.groupby(vendas[col_data].dt.date)['TotalProduto'].sum().reset_index()
+            fig_evol = px.area(evol, x=col_data, y='TotalProduto', title="Evolução Diária", color_discrete_sequence=['#1F4788'])
+            st.plotly_chart(fig_evol, use_container_width=True)
             
-        with col_g2:
-            st.subheader("Evolução Diária")
-            evol = vendas_v.groupby(vendas_v['DataEmissao'].dt.date)['TotalProduto'].sum().reset_index()
-            fig2 = px.line(evol, x='DataEmissao', y='TotalProduto', color_discrete_sequence=['#10B981'])
-            st.plotly_chart(fig2, use_container_width=True)
+        with tab2:
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                mix = vendas.groupby('Descricao')['TotalProduto'].sum().nlargest(10).reset_index()
+                fig_mix = px.bar(mix, x='TotalProduto', y='Descricao', orientation='h', title="Top 10 Produtos", color_discrete_sequence=['#10B981'])
+                st.plotly_chart(fig_mix, use_container_width=True)
+            with cg2:
+                # Ranking dentro do Estado selecionado
+                rank = df_modulo.groupby(col_vendedor)['TotalProduto'].sum().sort_values(ascending=True).reset_index()
+                fig_rank = px.bar(rank, x='TotalProduto', y=col_vendedor, orientation='h', title="Comparativo Vendedores", color_discrete_sequence=['#F59E0B'])
+                st.plotly_chart(fig_rank, use_container_width=True)
     else:
-        st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        st.warning("Nenhum dado encontrado para os filtros aplicados.")
 
 # ====================== CONSULTA CLIENTES ======================
 elif menu == "Consulta Clientes":
