@@ -3995,24 +3995,44 @@ elif menu == "Preço Médio":
 
 elif menu == "Pedidos Pendentes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
-    
-    # Verificar se a planilha existe
-    if not planilhas_disponiveis.get('pedidos_pendentes'):
-        st.error("❌ Planilha 'PEDIDOSPENDENTES.xlsx' não encontrada")
-        st.info("💡 Adicione no GitHub um arquivo com 'PEDIDOSPENDENTES' no nome")
-        st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
+
+    # ── Upload das duas planilhas ─────────────────────────────────────────
+    with st.expander("📂 Carregar Planilhas", expanded="pend_df_principal" not in st.session_state):
+        _up1, _up2 = st.columns(2)
+        with _up1:
+            st.markdown("**1. Base Principal** (PEDIDOSPENDENTES.xlsx)")
+            _f_principal = st.file_uploader("Base Principal", type=["xlsx","xls"], key="up_pend_principal", label_visibility="collapsed")
+        with _up2:
+            st.markdown("**2. Base Complementar** (Previsão + Observações)")
+            _f_complementar = st.file_uploader("Base Complementar", type=["xlsx","xls","csv"], key="up_pend_comp", label_visibility="collapsed")
+        st.caption("A base complementar deve ter as colunas: **N° Pedido**, **Previsão** e **Observações**. Pedidos novos na base principal entram sem previsão/observação até serem preenchidos.")
+        if _f_principal:
+            st.session_state["pend_file_principal"] = _f_principal.read()
+            st.session_state["pend_file_principal_nome"] = _f_principal.name
+        if _f_complementar:
+            st.session_state["pend_file_comp"] = _f_complementar.read()
+            st.session_state["pend_file_comp_nome"] = _f_complementar.name
+
+    # Verificar se temos dados carregados (upload ou GitHub)
+    _bytes_principal = st.session_state.get("pend_file_principal")
+    _bytes_comp      = st.session_state.get("pend_file_comp")
+
+    if not _bytes_principal and not planilhas_disponiveis.get('pedidos_pendentes'):
+        st.info("⬆️ Faça upload da Base Principal acima ou adicione 'PEDIDOSPENDENTES.xlsx' no GitHub.")
         st.stop()
-    
-    # Carregar planilha
+
+    # Carregar planilha principal: upload tem prioridade sobre GitHub
     with st.spinner("📥 Carregando pedidos pendentes..."):
         try:
             import zipfile
             import xml.etree.ElementTree as ET
             from io import BytesIO
-            
-            # Baixar arquivo
-            response = requests.get(planilhas_disponiveis['pedidos_pendentes']['url'])
-            excel_file = BytesIO(response.content)
+
+            if _bytes_principal:
+                excel_file = BytesIO(_bytes_principal)
+            else:
+                response = requests.get(planilhas_disponiveis['pedidos_pendentes']['url'])
+                excel_file = BytesIO(response.content)
             
             # Extrair shared strings
             with zipfile.ZipFile(excel_file) as z:
@@ -4116,13 +4136,37 @@ elif menu == "Pedidos Pendentes":
                     _df_prod_gram.columns = _df_prod_gram.columns.str.upper().str.strip()
             df_pendentes["Gramatura"] = df_pendentes["CodigoProduto"].apply(lambda c: _buscar_gramatura(c, _df_prod_gram))
 
-            # ── Mesclar base complementar (previsão/obs) ──────────────────
-            _token = (st.secrets.get("GITHUB_TOKEN", "") if hasattr(st, "secrets") else (GITHUB_TOKEN or ""))
-            _complementar, _comp_sha = _carregar_complementar(_token)
-            if "pend_complementar" not in st.session_state or _comp_sha != st.session_state.get("pend_comp_sha"):
-                st.session_state["pend_complementar"] = _complementar
-                st.session_state["pend_comp_sha"]    = _comp_sha
-            df_pendentes["Previsao"]   = df_pendentes["NumeroPedido"].apply(lambda n: st.session_state["pend_complementar"].get(str(n), {}).get("previsao", ""))
+            # ── Mesclar base complementar (previsão/obs) via upload ──────
+            _df_comp = None
+            if _bytes_comp:
+                try:
+                    _nome_comp = st.session_state.get("pend_file_comp_nome", "")
+                    if _nome_comp.endswith(".csv"):
+                        _df_comp = pd.read_csv(BytesIO(_bytes_comp), dtype=str)
+                    else:
+                        _df_comp = pd.read_excel(BytesIO(_bytes_comp), dtype=str)
+                    _df_comp.columns = _df_comp.columns.str.strip()
+                    # Detectar coluna de número do pedido (flexível)
+                    _col_num = next((c for c in _df_comp.columns if any(x in c.upper() for x in ["N° PEDIDO","N PEDIDO","NUMERO","PEDIDO","NUM"])), None)
+                    _col_prev = next((c for c in _df_comp.columns if "PREV" in c.upper()), None)
+                    _col_obs  = next((c for c in _df_comp.columns if any(x in c.upper() for x in ["OBS","OBSERV"])), None)
+                    if _col_num:
+                        _comp_map = {}
+                        for _, _r in _df_comp.iterrows():
+                            _k = str(_r[_col_num]).strip()
+                            if _k and _k != "nan":
+                                _comp_map[_k] = {
+                                    "previsao": str(_r[_col_prev]).strip() if _col_prev and str(_r.get(_col_prev,"")) != "nan" else "",
+                                    "obs":      str(_r[_col_obs]).strip()  if _col_obs  and str(_r.get(_col_obs, "")) != "nan" else ""
+                                }
+                        st.session_state["pend_complementar"] = _comp_map
+                except Exception as _ec:
+                    st.warning(f"⚠️ Não foi possível ler a base complementar: {_ec}")
+
+            if "pend_complementar" not in st.session_state:
+                st.session_state["pend_complementar"] = {}
+
+            df_pendentes["Previsao"]    = df_pendentes["NumeroPedido"].apply(lambda n: st.session_state["pend_complementar"].get(str(n), {}).get("previsao", ""))
             df_pendentes["Observacoes"] = df_pendentes["NumeroPedido"].apply(lambda n: st.session_state["pend_complementar"].get(str(n), {}).get("obs", ""))
 
         except Exception as e:
@@ -4249,41 +4293,7 @@ elif menu == "Pedidos Pendentes":
     })
     st.dataframe(df_pend_display, use_container_width=True, height=400)
 
-    # ── Edição de informações manuais (Previsão / Observações) ───────────
-    st.markdown("---")
-    _token_edit = (st.secrets.get("GITHUB_TOKEN", "") if hasattr(st, "secrets") else (GITHUB_TOKEN or ""))
-    _tem_token  = bool(_token_edit)
-    with st.expander("✏️ Editar Previsão e Observações por Pedido" + ("" if _tem_token else " ⚠️ Token não configurado"), expanded=False):
-        if not _tem_token:
-            st.warning("Configure GITHUB_TOKEN em st.secrets ou na variável GITHUB_TOKEN para salvar dados manuais.")
-        else:
-            # Selecionar pedido a editar
-            _pedidos_unicos = sorted(df_pend_filtrado['NumeroPedido'].dropna().unique().tolist())
-            _ped_sel = st.selectbox("Número do Pedido", _pedidos_unicos, key="pend_edit_ped")
-            _comp_now = st.session_state["pend_complementar"]
-            _prev_atual = _comp_now.get(str(_ped_sel), {}).get("previsao", "")
-            _obs_atual  = _comp_now.get(str(_ped_sel), {}).get("obs", "")
-
-            _col_p, _col_o = st.columns(2)
-            with _col_p:
-                _nova_prev = st.text_input("Previsão de Faturamento", value=_prev_atual, key="pend_nova_prev",
-                                           placeholder="ex: 25/05/2025")
-            with _col_o:
-                _nova_obs  = st.text_area("Observações", value=_obs_atual, key="pend_nova_obs", height=80)
-
-            if st.button("💾 Salvar", key="pend_salvar_comp"):
-                _comp_upd = dict(st.session_state["pend_complementar"])
-                _comp_upd[str(_ped_sel)] = {"previsao": _nova_prev.strip(), "obs": _nova_obs.strip()}
-                _ok, _msg = _salvar_complementar(_token_edit, _comp_upd, st.session_state.get("pend_comp_sha"))
-                if _ok:
-                    st.session_state["pend_complementar"] = _comp_upd
-                    # Atualizar sha após salvar
-                    _, _novo_sha = _carregar_complementar(_token_edit)
-                    st.session_state["pend_comp_sha"] = _novo_sha
-                    st.success(f"✅ Previsão/Observações do pedido {_ped_sel} salvas!")
-                    st.rerun()
-                else:
-                    st.error(f"❌ Erro ao salvar: {_msg}")
+    st.caption("💡 Para atualizar previsão/observações: exporte abaixo, edite as colunas Previsão e Observações, e recarregue o arquivo como Base Complementar no topo da página.")
     
     # Botão de download — nome do arquivo reflete o vendedor filtrado
     _nome_arquivo_pend = (
