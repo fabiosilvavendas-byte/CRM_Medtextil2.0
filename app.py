@@ -4717,11 +4717,11 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
-# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (FULL COMPLIANCE) ======================
+# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (FINAL CORRIGIDO) ======================
 if menu == "Performance de Vendedores":
-    st.markdown('<h2 style="color:#1F4788;">📈 Performance de Vendedores - Análise Executiva</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 style="color:#1F4788;">📈 Performance de Vendedores</h2>', unsafe_allow_html=True)
     
-    # --- 1. MAPEAMENTO E BLINDAGEM DE COLUNAS ---
+    # --- 1. MAPEAMENTO SEGURO DE COLUNAS ---
     df_perf = df.copy()
     cols = [c.lower().strip() for c in df_perf.columns]
     
@@ -4730,62 +4730,67 @@ if menu == "Performance de Vendedores":
             if opt in cols: return df_perf.columns[cols.index(opt)]
         return None
 
+    # Mapeamento de variáveis
     c_ven = get_col(['vendedor', 'vendedores'])
     c_est = get_col(['estado', 'uf', 'regiao', 'região'])
-    c_dat = get_col(['dataemissao', 'data emissao', 'data'])
-    c_tot = get_col(['totalproduto', 'valor total', 'total', 'faturamento'])
+    c_dat = get_col(['dataemissao', 'data emissao', 'data', 'emissao'])
+    c_tot = get_col(['totalproduto', 'valor total', 'total', 'faturamento', 'vlr_total'])
     c_qtd = get_col(['qtdvendida', 'qtd', 'quantidade', 'volume'])
-    c_cli = get_col(['cpf_cnpj', 'cnpj', 'cliente_id'])
-    c_mov = get_col(['tipomov', 'tipo', 'movimentacao'])
-    c_not = get_col(['numnota', 'nota', 'nf'])
-    c_prd = get_col(['descricao', 'produto', 'nome produto'])
+    c_cli = get_col(['cpf_cnpj', 'cnpj', 'cliente_id', 'cliente'])
+    c_mov = get_col(['tipomov', 'tipo', 'movimentacao', 'operacao'])
+    c_not = get_col(['numnota', 'nota', 'nf', 'pedido'])
+    c_prd = get_col(['descricao', 'produto', 'nome produto', 'item'])
 
-    # --- 2. FILTROS OBRIGATÓRIOS ---
-    with st.expander("🔍 Filtros Estratégicos", expanded=True):
+    # --- 2. FILTROS ---
+    with st.expander("🔍 Filtros de Análise", expanded=True):
         f1, f2, f3 = st.columns(3)
-        lista_ven = sorted([str(x) for x in df_perf[c_ven].unique() if pd.notna(x)])
-        lista_est = sorted([str(x) for x in df_perf[c_est].unique() if pd.notna(x)])
         
+        lista_ven = sorted([str(x) for x in df_perf[c_ven].unique() if pd.notna(x) and str(x).lower() != 'nan'])
         vendedor_sel = f1.selectbox("Vendedor", ["Todos"] + lista_ven)
-        estado_sel   = f2.selectbox("Estado", ["Todos"] + lista_est)
+        
+        lista_est = sorted([str(x) for x in df_perf[c_est].unique() if pd.notna(x) and str(x).lower() != 'nan']) if c_est else []
+        estado_sel = f2.selectbox("Estado", ["Todos"] + lista_est) if c_est else f2.info("UF não detectada")
         
         df_perf[c_dat] = pd.to_datetime(df_perf[c_dat], errors='coerce')
         d_min, d_max = df_perf[c_dat].min().date(), df_perf[c_dat].max().date()
-        periodo_sel = f3.date_input("Período de Análise", [d_min, d_max])
+        periodo_sel = f3.date_input("Período", [d_min, d_max])
 
-    # Aplicação de Filtros
-    query = (df_perf[c_dat].dt.date >= periodo_sel[0])
-    if len(periodo_sel) > 1: query &= (df_perf[c_dat].dt.date <= periodo_sel[1])
-    if vendedor_sel != "Todos": query &= (df_perf[c_ven] == vendedor_sel)
-    if estado_sel != "Todos": query &= (df_perf[c_est] == estado_sel)
+    # Aplicação dos Filtros
+    mask = (df_perf[c_dat].dt.date >= periodo_sel[0])
+    if len(periodo_sel) > 1: mask &= (df_perf[c_dat].dt.date <= periodo_sel[1])
+    if vendedor_sel != "Todos": mask &= (df_perf[c_ven] == vendedor_sel)
+    if c_est and estado_sel != "Todos": mask &= (df_perf[c_est] == estado_sel)
     
-    df_f = df_perf[query]
+    df_f = df_perf[mask]
 
+    # --- 3. CÁLCULO DOS INDICADORES ---
     if not df_f.empty:
-        # --- 3. CÁLCULO DE MÉTRICAS SOLICITADAS ---
-        vendas = df_f[df_f[c_mov].str.contains('Venda', case=False, na=False)]
-        devols = df_f[df_f[c_mov].str.contains('Devolucao|Devolução', case=False, na=False)]
+        # Separar Vendas e Devoluções
+        vendas = df_f[df_f[c_mov].str.contains('Venda', case=False, na=False)] if c_mov else df_f
+        devols = df_f[df_f[c_mov].str.contains('Devolucao|Devolução', case=False, na=False)] if c_mov else pd.DataFrame(columns=df_f.columns)
         
         # Faturamento Líquido
-        fat_liq = vendas[c_total].sum() - devols[c_total].sum()
+        val_vendas = vendas[c_tot].sum() if c_tot else 0
+        val_devols = devols[c_tot].sum() if c_tot else 0
+        fat_liq = val_vendas - val_devols
         
-        # Ticket Médio e Volume
-        notas_unicas = vendas[c_not].nunique()
-        ticket_medio = fat_liq / notas_unicas if notas_unicas > 0 else 0
-        volume_total = vendas[c_qtd].sum()
+        # Ticket e Volume
+        n_notas = vendas[c_not].nunique() if c_not else 1
+        ticket_medio = fat_liq / n_notas if n_notas > 0 else 0
+        volume_total = vendas[c_qtd].sum() if c_qtd else 0
         
-        # Positivação (Clientes únicos)
-        positivacao = vendas[c_cli].nunique()
+        # Clientes Atendidos (Positivação)
+        positivacao = vendas[c_cli].nunique() if c_cli else 0
         
-        # Inadimplência (Estimada por títulos em aberto no sistema)
-        # Se não houver coluna de status, simulamos a lógica de mercado para o dashboard
-        inad_vencida = df_f[df_f['Situacao'].str.contains('Vencido', na=False)][c_total].sum() if 'Situacao' in df_f.columns else 0
+        # Inadimplência (Busca na coluna 'Situacao' se existir)
+        col_sit = next((c for c in df_f.columns if c.lower() in ['situacao', 'situação', 'status']), None)
+        inad_vencida = df_f[df_f[col_sit].astype(str).str.contains('Vencido|Aberto', case=False, na=False)][c_tot].sum() if col_sit else 0
         inad_pct = (inad_vencida / fat_liq * 100) if fat_liq > 0 else 0
         
-        # Comissão (Baseada na sua lógica existente de aprox. 3.5%)
-        comissao_estimada = fat_liq * 0.035
+        # Comissão (Base 3.5% conforme padrão do sistema)
+        comissao = fat_liq * 0.035
 
-        # --- 4. EXIBIÇÃO VISUAL (Cards de Resumo) ---
+        # --- 4. EXIBIÇÃO EM CARDS ---
         c1, c2, c3, c4 = st.columns(4)
         with c1: render_kpi_card("Faturamento Líquido", f"R$ {fat_liq:,.2f}")
         with c2: render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}")
@@ -4794,53 +4799,42 @@ if menu == "Performance de Vendedores":
 
         c1b, c2b, c3b, c4b = st.columns(4)
         with c1b: render_kpi_card("Inadimplência", f"{inad_pct:.1f}%", delta=f"R$ {inad_vencida:,.2f}", color="#EF4444")
-        with c2b: render_kpi_card("Comissão Estimada", f"R$ {comissao_estimada:,.2f}", color="#10B981")
-        with c3b: render_kpi_card("Prazo Médio", "28 dias", icon="📅") # Simulado com base em prazos padrão
-        with c4b: render_kpi_card("Notas Emitidas", f"{notas_unicas}", icon="📝")
+        with c2b: render_kpi_card("Comissão Estimada", f"R$ {comissao:,.2f}", color="#10B981")
+        with c3b: render_kpi_card("Capilaridade", f"{positivacao}", icon="📍")
+        with c4b: render_kpi_card("Pedidos", f"{n_notas}", icon="📦")
 
-        # --- 5. GRÁFICOS COMPLEMENTARES ---
-        t1, t2, t3 = st.tabs(["📊 Evolução e Mix", "⚖️ Comparativo Individual", "📋 Dados Extraídos"])
+        # --- 5. GRÁFICOS ---
+        tab_evol, tab_comp = st.tabs(["📊 Evolução e Mix", "⚖️ Comparativo Individual"])
         
-        with t1:
+        with tab_evol:
             g1, g2 = st.columns(2)
             with g1:
-                evol = vendas.groupby(vendas[c_dat].dt.date)[c_total].sum().reset_index()
-                st.plotly_chart(px.line(evol, x=c_dat, y=c_total, title="Evolução Diária de Vendas"), use_container_width=True)
+                evol = vendas.groupby(vendas[c_dat].dt.date)[c_tot].sum().reset_index()
+                st.plotly_chart(px.line(evol, x=c_dat, y=c_tot, title="Evolução de Vendas", color_discrete_sequence=['#1F4788']), use_container_width=True)
             with g2:
-                mix = vendas.groupby(c_prd)[c_total].sum().nlargest(10).reset_index()
-                st.plotly_chart(px.pie(mix, values=c_total, names=c_prd, title="Mix de Produtos (Top 10)", hole=0.4), use_container_width=True)
-        
-        with t2:
-            st.subheader("Performance por Vendedor (No período selecionado)")
-            comp = df_f.groupby(c_ven)[c_total].sum().sort_values(ascending=True).reset_index()
-            st.plotly_chart(px.bar(comp, x=c_total, y=c_ven, orientation='h', color=c_total, color_continuous_scale='Blues'), use_container_width=True)
+                if c_prd:
+                    mix = vendas.groupby(c_prd)[c_tot].sum().nlargest(10).reset_index()
+                    st.plotly_chart(px.pie(mix, values=c_tot, names=c_prd, title="Mix de Produtos (Top 10)", hole=0.4), use_container_width=True)
 
-        with t3:
-            st.dataframe(df_f[[c_dat, c_ven, c_not, c_prd, c_total]], use_container_width=True)
+        with tab_comp:
+            st.subheader("Performance Comparativa por Vendedor")
+            comp_data = df_f.groupby(c_ven)[c_tot].sum().sort_values(ascending=True).reset_index()
+            st.plotly_chart(px.bar(comp_data, x=c_tot, y=c_ven, orientation='h', color=c_tot, color_continuous_scale='Blues'), use_container_width=True)
 
-        # --- 6. EXPORTAÇÃO (DOWNLOAD) ---
+        # --- 6. EXPORTAÇÃO EXCEL (RELATÓRIO SOB DEMANDA) ---
         st.markdown("---")
-        col_down1, col_down2 = st.columns(2)
-        
-        # Gerar Excel conforme padrão do seu sistema
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_f.to_excel(writer, index=False, sheet_name='Performance')
         
-        col_down1.download_button(
-            label="📥 Baixar Relatório Completo (Excel)",
+        st.download_button(
+            label="📥 Gerar Relatório de Performance (Excel)",
             data=output.getvalue(),
             file_name=f"Performance_{vendedor_sel}_{datetime.now().strftime('%d%m%Y')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        
-        if col_down2.button("📄 Gerar Relatório Executivo (PDF)"):
-            st.info("O PDF está sendo processado com o Resumo Executivo, KPIs e Mix de Produtos. O download começará em instantes.")
-            # Nota: A integração com FPDF exige que a lib esteja no requirements.txt. 
-            # O botão acima simula a chamada para manter a interface solicitada.
-
     else:
-        st.warning("Sem dados para os filtros selecionados.")
+        st.warning("Nenhum dado encontrado para os filtros selecionados.")
 
 # ====================== CONSULTA CLIENTES ======================
 elif menu == "Consulta Clientes":
