@@ -720,7 +720,7 @@ def check_password():
         "admin123": {
             "tipo": "administrador",
             "nome": "Administrador",
-            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Consulta Clientes", "Performance de Vendedores"]
+            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Consulta Clientes"]
         },
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
@@ -1984,12 +1984,12 @@ div[data-testid="stHorizontalBlock"].filter-bar { background: #F2F5FA !important
 _ICONES_NAV = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
-    "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores": "📈",
+    "Pedidos Pendentes":"▣","Rankings":"▲",
 }
 _ICONES_CARD = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
-    "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores": "📈",
+    "Pedidos Pendentes":"▣","Rankings":"▲",
 }
 
 with st.sidebar:
@@ -4717,6 +4717,7 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
+
 import pandas as pd
 import streamlit as st
 import plotly.express as px
