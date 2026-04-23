@@ -4717,7 +4717,7 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
-# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (DIAGNÓSTICO FINAL) ======================
+# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (VERSÃO FINAL) ======================
 if menu == "Performance de Vendedores":
     import base64
     import tempfile
@@ -4731,127 +4731,128 @@ if menu == "Performance de Vendedores":
 
     st.markdown('<h2 style="color:#1F4788;">📈 Diagnóstico de Performance de Vendas</h2>', unsafe_allow_html=True)
     
-    # 1. Recuperação da Base Filtrada (df_filtrado já vem com filtros de Vendedor/Data do seu app)
+    # 1. Uso do DataFrame filtrado globalmente pelo seu app
     df_perf_base = df_filtrado.copy()
     
+    # 2. Identificação das variáveis de filtro do seu sistema
+    # Tentamos capturar o vendedor selecionado nos filtros globais do seu app
+    vendedor_nome = "Geral"
+    if 'vendedor' in locals(): vendedor_nome = vendedor
+    elif 'vendedor_input' in locals(): vendedor_nome = vendedor_input
+    
     if not df_perf_base.empty:
-        # --- MAPEAMENTO DINÂMICO DE COLUNAS (Evita o KeyError) ---
-        def get_col(possibilidades, dataframe):
-            for p in possibilidades:
-                for col in dataframe.columns:
-                    if p.lower() in col.lower().strip(): return col
+        # --- MAPEAMENTO DINÂMICO DE COLUNAS ---
+        def find_col(lista, dframe):
+            for p in lista:
+                for c in dframe.columns:
+                    if p.lower() in c.lower().strip(): return c
             return None
 
-        c_vlr = get_col(['vlr. total', 'totalproduto', 'valor total'], df_perf_base)
-        c_qtd = get_col(['qtde.', 'quantidade', 'volume'], df_perf_base)
-        c_prd = get_col(['descricao', 'descrição', 'produto', 'item'], df_perf_base)
-        c_cli = get_col(['cpf_cnpj', 'cnpj', 'cliente'], df_perf_base)
-        c_mov = get_col(['tipomov', 'tipo'], df_perf_base)
+        c_vlr = find_col(['vlr. total', 'totalproduto', 'valor total'], df_perf_base)
+        c_qtd = find_col(['qtde.', 'quantidade', 'volume'], df_perf_base)
+        c_prd = find_col(['descricao', 'descrição', 'produto'], df_perf_base)
+        c_cli = find_col(['cpf_cnpj', 'cnpj', 'cliente'], df_perf_base)
+        c_mov = find_col(['tipomov', 'tipo'], df_perf_base)
 
-        # --- PROCESSAMENTO DOS INDICADORES CORPORATIVOS ---
+        # --- PROCESSAMENTO DOS KPIs ---
         vendas_df = df_perf_base[df_perf_base[c_mov].str.contains('Venda', case=False, na=False)].copy()
         devol_df  = df_perf_base[df_perf_base[c_mov].str.contains('Devolu', case=False, na=False)].copy()
         
-        # Uso da sua função 'obter_notas_unicas' para cálculo de Ticket Médio Real
-        notas_venda_unicas = obter_notas_unicas(vendas_df)
+        # Usa sua função nativa para limpar duplicidade de faturamento por nota
+        notas_unicas = obter_notas_unicas(vendas_df)
         
-        # Cálculos Financeiros
-        fat_bruto = notas_venda_unicas[c_vlr].sum()
+        fat_bruto = notas_unicas[c_vlr].sum()
         val_devol = devol_df[c_vlr].sum()
         fat_liq   = fat_bruto - val_devol
         
-        n_pedidos = len(notas_venda_unicas)
+        n_pedidos = len(notas_unicas)
         n_clientes = vendas_df[c_cli].nunique()
         volume_total = vendas_df[c_qtd].sum()
-        
         ticket_medio = fat_liq / n_pedidos if n_pedidos > 0 else 0
-        comissao_est = fat_liq * 0.035  # Base de 3.5%
 
-        # --- VISUALIZAÇÃO NO APP (DASHBOARD) ---
-        st.subheader("📌 Resumo Executivo")
+        # --- DASHBOARD DE PERFORMANCE ---
+        st.subheader(f"📊 Análise: {vendedor_nome}")
         k1, k2, k3, k4 = st.columns(4)
         with k1: render_kpi_card("Faturamento Líquido", f"R$ {fat_liq:,.2f}", f"Bruto: R$ {fat_bruto:,.2f}")
         with k2: render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", f"Base: {n_pedidos} Pedidos")
         with k3: render_kpi_card("Positivação", f"{n_clientes} Clientes", icon="👥")
         with k4: 
-            # Inadimplência Real
-            inad_val = df_perf_base[df_perf_base['Situação'].astype(str).str.contains('Vencido', case=False, na=False)][c_vlr].sum() if 'Situação' in df_perf_base.columns else 0
-            render_kpi_card("Inadimplência", f"R$ {inad_val:,.2f}", color="#EF4444")
+            inad = df_perf_base[df_perf_base['Situação'].astype(str).str.contains('Vencido', case=False, na=False)][c_vlr].sum() if 'Situação' in df_perf_base.columns else 0
+            render_kpi_card("Inadimplência", f"R$ {inad:,.2f}", color="#EF4444")
 
         st.markdown("---")
         
         # --- GRÁFICOS NO APP ---
         g1, g2 = st.columns(2)
         with g1:
-            evol_df = notas_venda_unicas.groupby(notas_venda_unicas['DataEmissao'].dt.date)[c_vlr].sum().reset_index()
-            fig_evol = px.area(evol_df, x='DataEmissao', y=c_vlr, title="Evolução de Faturamento Diário", color_discrete_sequence=['#1F4788'])
+            evol_data = notas_unicas.groupby(notas_unicas['DataEmissao'].dt.date)[c_vlr].sum().reset_index()
+            fig_evol = px.area(evol_data, x='DataEmissao', y=c_vlr, title="Evolução Diária", color_discrete_sequence=['#1F4788'])
             st.plotly_chart(aplicar_layout_grafico(fig_evol), use_container_width=True)
             
         with g2:
-            mix_df = vendas_df.groupby(c_prd)[c_vlr].sum().nlargest(10).reset_index()
-            fig_mix = px.pie(mix_df, values=c_vlr, names=c_prd, hole=.4, title="Mix de Produtos (Top 10)")
+            mix_data = vendas_df.groupby(c_prd)[c_vlr].sum().nlargest(10).reset_index()
+            fig_mix = px.pie(mix_data, values=c_vlr, names=c_prd, hole=.4, title="Top 10 Produtos")
             st.plotly_chart(fig_mix, use_container_width=True)
 
-        # --- GERADOR DE PDF PROFISSIONAL ---
-        def gerar_pdf_diagnostico():
+        # --- FUNÇÃO GERADORA DE PDF (BLINDADA) ---
+        def gerar_pdf_performance():
             pdf = FPDF()
             pdf.add_page()
             
-            # Layout do Header
+            # Header
             pdf.set_fill_color(31, 71, 136)
             pdf.rect(0, 0, 210, 40, 'F')
             pdf.set_text_color(255, 255, 255)
             pdf.set_font("Arial", 'B', 16)
-            pdf.cell(190, 20, "DIAGNÓSTICO DE PERFORMANCE - MEDTEXTIL", 0, 1, 'C')
+            pdf.cell(190, 20, "DIAGNÓSTICO DE PERFORMANCE DE VENDAS", 0, 1, 'C')
             pdf.set_font("Arial", '', 10)
-            pdf.cell(190, 5, f"Vendedor: {vendedor_sel} | Período Analisado: {periodo[0].strftime('%d/%m/%Y')} a {periodo[1].strftime('%d/%m/%Y')}", 0, 1, 'C')
             
-            # Tabela de Indicadores
+            # Data do período (usando a data do filtro do seu app)
+            data_info = f"Período: {df_perf_base['DataEmissao'].min().strftime('%d/%m/%Y')} - {df_perf_base['DataEmissao'].max().strftime('%d/%m/%Y')}"
+            pdf.cell(190, 5, f"Vendedor: {vendedor_nome} | {data_info}", 0, 1, 'C')
+            
+            # Tabela
             pdf.ln(25)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Arial", 'B', 12)
-            pdf.cell(190, 10, "1. RESUMO DOS INDICADORES CORPORATIVOS", 0, 1, 'L')
+            pdf.cell(190, 10, "RESUMO DOS INDICADORES", 0, 1, 'L')
             pdf.set_font("Arial", '', 11)
             
-            rows = [
-                ["Faturamento Líquido Real", f"R$ {fat_liq:,.2f}"],
-                ["Ticket Médio por Pedido", f"R$ {ticket_medio:,.2f}"],
-                ["Quantidade de Pedidos", str(n_pedidos)],
-                ["Clientes Atendidos (Positivação)", str(n_clientes)],
+            indicadores = [
+                ["Faturamento Líquido", f"R$ {fat_liq:,.2f}"],
+                ["Ticket Médio / Pedido", f"R$ {ticket_medio:,.2f}"],
                 ["Volume Total (Unidades)", f"{volume_total:,.0f}"],
-                ["Valor de Devoluções", f"R$ {val_devol:,.2f}"],
-                ["Comissão Estimada (3.5%)", f"R$ {comissao_est:,.2f}"]
+                ["Clientes Atendidos", str(n_clientes)],
+                ["Total de Pedidos", str(n_pedidos)],
+                ["Devoluções", f"R$ {val_devol:,.2f}"]
             ]
-            
-            for row in rows:
-                pdf.cell(110, 10, row[0], 1)
-                pdf.cell(80, 10, row[1], 1, 1, 'C')
+            for i in indicadores:
+                pdf.cell(110, 10, i[0], 1)
+                pdf.cell(80, 10, i[1], 1, 1, 'C')
 
-            # Inclusão do Gráfico no PDF
+            # Gráfico no PDF
             try:
                 pdf.ln(10)
-                pdf.set_font("Arial", 'B', 12)
-                pdf.cell(190, 10, "2. ANÁLISE DE TENDÊNCIA (EVOLUÇÃO)", 0, 1, 'L')
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                     fig_evol.write_image(tmp.name)
-                    pdf.image(tmp.name, x=15, y=pdf.get_y(), w=170)
+                    pdf.image(tmp.name, x=15, y=pdf.get_y(), w=175)
             except:
-                pdf.cell(190, 10, "(Gráfico não disponível - Requer Kaleido no requirements.txt)", 0, 1)
+                pdf.cell(190, 10, "(Gráfico não processado - verifique dependência kaleido)", 0, 1)
 
             return pdf.output(dest='S').encode('latin-1', 'replace')
 
-        # --- AÇÕES DE EXPORTAÇÃO ---
+        # --- DOWNLOADS ---
         st.markdown("---")
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button("📄 Gerar Relatório Diagnóstico em PDF"):
+        d1, d2 = st.columns(2)
+        with d1:
+            if st.button("📄 Gerar Relatório Diagnóstico (PDF)"):
                 st.download_button(
-                    label="📥 Clique para Baixar PDF",
-                    data=gerar_pdf_diagnostico(),
-                    file_name=f"Performance_{vendedor_sel}_{datetime.now().strftime('%d%m%Y')}.pdf",
+                    label="📥 Baixar PDF de Performance",
+                    data=gerar_pdf_performance(),
+                    file_name=f"Performance_{vendedor_nome}_{datetime.now().strftime('%d%m%Y')}.pdf",
                     mime="application/pdf"
                 )
-        with b2:
+        with d2:
             st.download_button(
                 label="📥 Baixar Dados Detalhados (Excel)",
                 data=to_excel(df_perf_base),
@@ -4859,7 +4860,7 @@ if menu == "Performance de Vendedores":
                 mime="application/vnd.ms-excel"
             )
     else:
-        st.warning("Selecione um vendedor e período com dados na barra lateral.")
+        st.warning("Aguardando seleção de dados na barra lateral para gerar o diagnóstico.")
 # ====================== CONSULTA CLIENTES ======================
 elif menu == "Consulta Clientes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Consulta de Preços por Cliente</h2>', unsafe_allow_html=True)
