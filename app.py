@@ -2272,73 +2272,6 @@ if menu not in modulos_permitidos:
     </div>""", unsafe_allow_html=True)
     st.stop()
 # ====================== DASHBOARD ======================
-# ====================== PEDIDOS PENDENTES ======================
-# ── Helpers para base complementar (previsão/obs) no GitHub ──────────────
-def _gh_api(method, path, token, payload=None):
-    """Requisição autenticada à API do GitHub."""
-    import json as _json
-    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
-    if method == "GET":
-        r = requests.get(url, headers=headers, timeout=10)
-    else:
-        r = requests.put(url, headers=headers, data=_json.dumps(payload), timeout=15)
-    return r
-
-def _carregar_complementar(token):
-    """Lê pedidos_complementar.json do GitHub. Retorna dict {num_pedido: {previsao, obs}}."""
-    import json as _json, base64 as _b64
-    path = f"{GITHUB_FOLDER}/pedidos_complementar.json"
-    try:
-        if not token:
-            return {}, None
-        r = _gh_api("GET", path, token)
-        if r.status_code == 200:
-            data = r.json()
-            content = _b64.b64decode(data["content"]).decode("utf-8")
-            return _json.loads(content), data["sha"]
-        return {}, None
-    except:
-        return {}, None
-
-def _salvar_complementar(token, complementar, sha):
-    """Salva/atualiza pedidos_complementar.json no GitHub."""
-    import json as _json, base64 as _b64
-    path = f"{GITHUB_FOLDER}/pedidos_complementar.json"
-    try:
-        if not token:
-            return False, "Token GitHub não configurado"
-        content_b64 = _b64.b64encode(_json.dumps(complementar, ensure_ascii=False, indent=2).encode()).decode()
-        payload = {"message": "Atualiza complementar pedidos pendentes", "content": content_b64}
-        if sha:
-            payload["sha"] = sha
-        r = _gh_api("PUT", path, token, payload)
-        return r.status_code in (200, 201), r.json().get("message", "")
-    except Exception as e:
-        return False, str(e)
-
-def _buscar_gramatura(codigo_produto, df_prod):
-    """Busca gramatura na tabela de produtos (igual ao módulo consulta tabela)."""
-    if df_prod is None or codigo_produto is None:
-        return ""
-    cols = df_prod.columns.tolist()
-    gram_col = next((c for c in cols if "GRAMATUR" in c), None)
-    cod_col  = next((c for c in cols if any(x in c for x in ["ID_COD", "CODIGO", "COD"])), None)
-    if not gram_col or not cod_col:
-        return ""
-    try:
-        def _norm(v):
-            try: return str(int(float(str(v).strip())))
-            except: return str(v).strip()
-        cod_n = _norm(codigo_produto)
-        match = df_prod[df_prod[cod_col].apply(_norm) == cod_n]
-        if len(match) == 0:
-            return ""
-        gv = str(match.iloc[0].get(gram_col, "")).strip()
-        return "" if gv.lower() in ("nan", "0", "0.0", "") else gv
-    except:
-        return ""
-
 if menu == "Dashboard":
     # KPIs principais com cards customizados
     col1, col2, col3, col4 = st.columns(4)
@@ -3993,46 +3926,27 @@ elif menu == "Preço Médio":
         key="download_preco_medio"
     )
 
+# ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
-
-    # ── Upload das duas planilhas ─────────────────────────────────────────
-    with st.expander("📂 Carregar Planilhas", expanded="pend_df_principal" not in st.session_state):
-        _up1, _up2 = st.columns(2)
-        with _up1:
-            st.markdown("**1. Base Principal** (PEDIDOSPENDENTES.xlsx)")
-            _f_principal = st.file_uploader("Base Principal", type=["xlsx","xls"], key="up_pend_principal", label_visibility="collapsed")
-        with _up2:
-            st.markdown("**2. Base Complementar** (Previsão + Observações)")
-            _f_complementar = st.file_uploader("Base Complementar", type=["xlsx","xls","csv"], key="up_pend_comp", label_visibility="collapsed")
-        st.caption("A base complementar deve ter as colunas: **N° Pedido**, **Previsão** e **Observações**. Pedidos novos na base principal entram sem previsão/observação até serem preenchidos.")
-        if _f_principal:
-            st.session_state["pend_file_principal"] = _f_principal.read()
-            st.session_state["pend_file_principal_nome"] = _f_principal.name
-        if _f_complementar:
-            st.session_state["pend_file_comp"] = _f_complementar.read()
-            st.session_state["pend_file_comp_nome"] = _f_complementar.name
-
-    # Verificar se temos dados carregados (upload ou GitHub)
-    _bytes_principal = st.session_state.get("pend_file_principal")
-    _bytes_comp      = st.session_state.get("pend_file_comp")
-
-    if not _bytes_principal and not planilhas_disponiveis.get('pedidos_pendentes'):
-        st.info("⬆️ Faça upload da Base Principal acima ou adicione 'PEDIDOSPENDENTES.xlsx' no GitHub.")
+    
+    # Verificar se a planilha existe
+    if not planilhas_disponiveis.get('pedidos_pendentes'):
+        st.error("❌ Planilha 'PEDIDOSPENDENTES.xlsx' não encontrada")
+        st.info("💡 Adicione no GitHub um arquivo com 'PEDIDOSPENDENTES' no nome")
+        st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
         st.stop()
-
-    # Carregar planilha principal: upload tem prioridade sobre GitHub
+    
+    # Carregar planilha
     with st.spinner("📥 Carregando pedidos pendentes..."):
         try:
             import zipfile
             import xml.etree.ElementTree as ET
             from io import BytesIO
-
-            if _bytes_principal:
-                excel_file = BytesIO(_bytes_principal)
-            else:
-                response = requests.get(planilhas_disponiveis['pedidos_pendentes']['url'])
-                excel_file = BytesIO(response.content)
+            
+            # Baixar arquivo
+            response = requests.get(planilhas_disponiveis['pedidos_pendentes']['url'])
+            excel_file = BytesIO(response.content)
             
             # Extrair shared strings
             with zipfile.ZipFile(excel_file) as z:
@@ -4127,48 +4041,8 @@ elif menu == "Pedidos Pendentes":
             if len(df_pendentes) == 0:
                 st.warning("⚠️ Nenhum pedido pendente encontrado na planilha")
                 st.stop()
-
-            # ── Carregar gramatura ────────────────────────────────────────
-            _df_prod_gram = None
-            if planilhas_disponiveis.get("produtos_agrupados"):
-                _df_prod_gram = carregar_planilha_github(planilhas_disponiveis["produtos_agrupados"]["url"])
-                if _df_prod_gram is not None:
-                    _df_prod_gram.columns = _df_prod_gram.columns.str.upper().str.strip()
-            df_pendentes["Gramatura"] = df_pendentes["CodigoProduto"].apply(lambda c: _buscar_gramatura(c, _df_prod_gram))
-
-            # ── Mesclar base complementar (previsão/obs) via upload ──────
-            _df_comp = None
-            if _bytes_comp:
-                try:
-                    _nome_comp = st.session_state.get("pend_file_comp_nome", "")
-                    if _nome_comp.endswith(".csv"):
-                        _df_comp = pd.read_csv(BytesIO(_bytes_comp), dtype=str)
-                    else:
-                        _df_comp = pd.read_excel(BytesIO(_bytes_comp), dtype=str)
-                    _df_comp.columns = _df_comp.columns.str.strip()
-                    # Detectar coluna de número do pedido (flexível)
-                    _col_num = next((c for c in _df_comp.columns if any(x in c.upper() for x in ["N° PEDIDO","N PEDIDO","NUMERO","PEDIDO","NUM"])), None)
-                    _col_prev = next((c for c in _df_comp.columns if "PREV" in c.upper()), None)
-                    _col_obs  = next((c for c in _df_comp.columns if any(x in c.upper() for x in ["OBS","OBSERV"])), None)
-                    if _col_num:
-                        _comp_map = {}
-                        for _, _r in _df_comp.iterrows():
-                            _k = str(_r[_col_num]).strip()
-                            if _k and _k != "nan":
-                                _comp_map[_k] = {
-                                    "previsao": str(_r[_col_prev]).strip() if _col_prev and str(_r.get(_col_prev,"")) != "nan" else "",
-                                    "obs":      str(_r[_col_obs]).strip()  if _col_obs  and str(_r.get(_col_obs, "")) != "nan" else ""
-                                }
-                        st.session_state["pend_complementar"] = _comp_map
-                except Exception as _ec:
-                    st.warning(f"⚠️ Não foi possível ler a base complementar: {_ec}")
-
-            if "pend_complementar" not in st.session_state:
-                st.session_state["pend_complementar"] = {}
-
-            df_pendentes["Previsao"]    = df_pendentes["NumeroPedido"].apply(lambda n: st.session_state["pend_complementar"].get(str(n), {}).get("previsao", ""))
-            df_pendentes["Observacoes"] = df_pendentes["NumeroPedido"].apply(lambda n: st.session_state["pend_complementar"].get(str(n), {}).get("obs", ""))
-
+            
+            
         except Exception as e:
             st.error(f"❌ Erro ao processar planilha: {str(e)}")
             st.stop()
@@ -4273,27 +4147,44 @@ elif menu == "Pedidos Pendentes":
     # Tabela detalhada
     st.subheader("📋 Detalhamento de Pedidos Pendentes")
     
-    # Preparar dados para exibição (inclui Gramatura + colunas manuais)
+    # Preparar dados para exibição
     df_pend_display = df_pend_filtrado[[
-        'Cliente', 'NumeroPedido', 'CodigoProduto', 'Gramatura', 'Descricao',
+        'Cliente', 'NumeroPedido', 'CodigoProduto', 'Descricao', 
         'QtdContratada', 'QtdEntregue', 'QtdPendente',
-        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor',
-        'Previsao', 'Observacoes'
+        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor'
     ]].copy()
-    df_pend_display['ValorUnit']     = df_pend_display['ValorUnit'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
-    df_pend_display['ValorPendente'] = df_pend_display['ValorPendente'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
-    df_pend_display['DataEmissao']   = df_pend_display['DataEmissao'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notnull(x) else '')
-    df_pend_display['PercEntregue']  = df_pend_display['PercEntregue'].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else "0%")
+    
+    # Formatar valores
+    df_pend_display['ValorUnit'] = df_pend_display['ValorUnit'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    df_pend_display['ValorPendente'] = df_pend_display['ValorPendente'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    df_pend_display['DataEmissao'] = df_pend_display['DataEmissao'].apply(
+        lambda x: x.strftime('%d/%m/%Y') if pd.notnull(x) else ''
+    )
+    df_pend_display['PercEntregue'] = df_pend_display['PercEntregue'].apply(
+        lambda x: f"{x:.1f}%" if pd.notnull(x) else "0%"
+    )
+    
+    # Renomear colunas
     df_pend_display = df_pend_display.rename(columns={
-        'NumeroPedido': 'N° Pedido', 'CodigoProduto': 'Código', 'Gramatura': 'Gramatura',
-        'Descricao': 'Descrição', 'QtdContratada': 'Qtd Contratada', 'QtdEntregue': 'Qtd Entregue',
-        'QtdPendente': 'Qtd Pendente', 'ValorUnit': 'Valor Unit.', 'ValorPendente': 'Valor Pendente',
-        'PercEntregue': '% Entregue', 'DataEmissao': 'Data Emissão',
-        'Previsao': 'Previsão', 'Observacoes': 'Observações'
+        'Cliente': 'Cliente',
+        'NumeroPedido': 'N° Pedido',
+        'CodigoProduto': 'Código',
+        'Descricao': 'Descrição',
+        'QtdContratada': 'Qtd Contratada',
+        'QtdEntregue': 'Qtd Entregue',
+        'QtdPendente': 'Qtd Pendente',
+        'ValorUnit': 'Valor Unit.',
+        'ValorPendente': 'Valor Pendente',
+        'PercEntregue': '% Entregue',
+        'DataEmissao': 'Data Emissão',
+        'Vendedor': 'Vendedor'
     })
+    
     st.dataframe(df_pend_display, use_container_width=True, height=400)
-
-    st.caption("💡 Para atualizar previsão/observações: exporte abaixo, edite as colunas Previsão e Observações, e recarregue o arquivo como Base Complementar no topo da página.")
     
     # Botão de download — nome do arquivo reflete o vendedor filtrado
     _nome_arquivo_pend = (
@@ -4590,7 +4481,7 @@ elif menu == "Pedidos Pendentes":
                             pass
 
                 COLUNAS = [
-                    'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
+                    'Cliente', 'Código', 'Volumes (cx)', 'Descrição',
                     'Contratado', 'Entregue', 'Pendente',
                     'Valor Unitário', 'Valor Pendente',
                     'Data Emissão', 'Dias Pendentes', 'Vendedor',
@@ -4640,17 +4531,9 @@ elif menu == "Pedidos Pendentes":
                     except:
                         pass
 
-                    # Previsão/Obs da base complementar
-                    _num_ped = str(row.get('NumeroPedido', ''))
-                    _comp_row = st.session_state.get('pend_complementar', {}).get(_num_ped, {})
-                    _prev_row = _comp_row.get('previsao', '') or row.get('Previsao', '')
-                    _obs_row  = _comp_row.get('obs', '')    or row.get('Observacoes', '')
-
                     abas_data[aba].append([
-                        _num_ped,
                         row.get('Cliente', ''),
                         cod,
-                        row.get('Gramatura', ''),
                         volumes_cx,
                         desc_pura,
                         qtd_cont,
@@ -4662,9 +4545,9 @@ elif menu == "Pedidos Pendentes":
                         dias_pend,
                         row.get('Vendedor', ''),
                         f"{perc_ent:.1f}%",
-                        _prev_row,
+                        '',            # Previsão — branco
                         categoria,
-                        _obs_row,
+                        '',            # Observações — branco
                     ])
 
                 # Criar workbook
@@ -4709,14 +4592,14 @@ elif menu == "Pedidos Pendentes":
                             if fill.fill_type:
                                 cell.fill = fill
                             # Formatar moeda
-                            if col_idx in (10, 11):
+                            if col_idx in (8, 9):
                                 cell.number_format = 'R$ #,##0.00'
                             # Formatar números inteiros
-                            if col_idx in (7, 8, 9):
+                            if col_idx in (5, 6, 7):
                                 cell.number_format = '#,##0'
 
                     # Larguras de coluna
-                    larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    larguras = [30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
                     for i, larg in enumerate(larguras, 1):
                         ws.column_dimensions[get_column_letter(i)].width = larg
 
@@ -4758,6 +4641,301 @@ elif menu == "Pedidos Pendentes":
                     "application/vnd.ms-excel",
                     key="dl_fat_data"
                 )
+
+
+    # =====================================================================
+    # CONCILIAÇÃO: Relatório Atual + Relatório Anterior com Observações
+    # =====================================================================
+    st.markdown("---")
+    st.markdown("### 🔀 Conciliar Relatórios")
+    st.caption(
+        "Gera um novo Relatório Final idêntico ao original, porém com as colunas "
+        "**N° Pedido**, **Gramatura**, **Previsão** e **Observações** preenchidas. "
+        "Carregue o relatório recém-gerado acima e o relatório anterior onde você "
+        "inseriu as observações manualmente."
+    )
+
+    _cc1, _cc2 = st.columns(2)
+    with _cc1:
+        st.markdown("**1. Relatório Atual** (gerado agora, sem observações)")
+        _f_atual = st.file_uploader(
+            "Relatório Atual", type=["xlsx"], key="conc_atual",
+            label_visibility="collapsed"
+        )
+    with _cc2:
+        st.markdown("**2. Relatório Anterior** (com suas observações preenchidas)")
+        _f_anterior = st.file_uploader(
+            "Relatório Anterior", type=["xlsx"], key="conc_anterior",
+            label_visibility="collapsed"
+        )
+
+    if _f_atual and _f_anterior:
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+            from io import BytesIO as _BIO
+
+            # ── 1. Ler mapa de Previsão/Obs do arquivo ANTERIOR ──────────
+            # Varrer todas as abas, indexar por N° Pedido
+            _wb_ant = openpyxl.load_workbook(_BIO(_f_anterior.read()), data_only=True)
+            _obs_map = {}  # {num_pedido: {'previsao': ..., 'obs': ...}}
+
+            for _ws_ant in _wb_ant.worksheets:
+                _rows_ant = list(_ws_ant.iter_rows(values_only=True))
+                if not _rows_ant:
+                    continue
+                _hdr_ant = [str(c).strip() if c else '' for c in _rows_ant[0]]
+
+                def _find(keywords):
+                    for _i, _h in enumerate(_hdr_ant):
+                        if any(k in _h.upper() for k in keywords):
+                            return _i
+                    return None
+
+                _i_num  = _find(['N° PEDIDO', 'N PEDIDO', 'NUMERO', 'NUM'])
+                _i_prev = _find(['PREV'])
+                _i_obs  = _find(['OBS', 'OBSERV'])
+
+                if _i_num is None:
+                    continue
+
+                for _r in _rows_ant[1:]:
+                    _k = str(_r[_i_num]).strip() if _r[_i_num] is not None else ''
+                    if not _k or _k == 'None':
+                        continue
+                    _prev_v = str(_r[_i_prev]).strip() if _i_prev is not None and _r[_i_prev] not in (None, '', 'None') else ''
+                    _obs_v  = str(_r[_i_obs]).strip()  if _i_obs  is not None and _r[_i_obs]  not in (None, '', 'None') else ''
+                    _existing = _obs_map.get(_k, {})
+                    _obs_map[_k] = {
+                        'previsao': _prev_v or _existing.get('previsao', ''),
+                        'obs':      _obs_v  or _existing.get('obs', '')
+                    }
+
+            # ── 2. Ler mapa de Gramatura do produtos_agrupados (GitHub) ──
+            _gram_map = {}
+            if planilhas_disponiveis.get('produtos_agrupados'):
+                _df_gram = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                if _df_gram is not None:
+                    _df_gram.columns = _df_gram.columns.str.upper().str.strip()
+                    _g_cod  = next((c for c in _df_gram.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
+                    _g_gram = next((c for c in _df_gram.columns if 'GRAMATUR' in c), None)
+                    if _g_cod and _g_gram:
+                        for _, _gr in _df_gram.iterrows():
+                            try:
+                                _gk = str(int(float(str(_gr[_g_cod]).strip())))
+                            except:
+                                _gk = str(_gr[_g_cod]).strip()
+                            _gv = str(_gr[_g_gram]).strip()
+                            if _gv and _gv.lower() not in ('nan', '0', '0.0', ''):
+                                _gram_map[_gk] = _gv
+
+            # ── 3. Processar arquivo ATUAL aba a aba ─────────────────────
+            _wb_at = openpyxl.load_workbook(_BIO(_f_atual.read()))
+            _wb_out = openpyxl.Workbook()
+            _wb_out.remove(_wb_out.active)
+
+            # Estilos (idênticos ao relatório original)
+            _HDR_FILL  = PatternFill("solid", fgColor="1F4788")
+            _HDR_FONT  = Font(bold=True, color="FFFFFF", size=10)
+            _HDR_ALIGN = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            _BORDER    = Border(
+                left=Side(style='thin'), right=Side(style='thin'),
+                top=Side(style='thin'), bottom=Side(style='thin')
+            )
+            _ALT_FILL  = PatternFill("solid", fgColor="EEF3FC")
+            _TOT_FONT  = Font(bold=True)
+
+            for _ws_at in _wb_at.worksheets:
+                _rows_at = list(_ws_at.iter_rows(values_only=True))
+                if not _rows_at:
+                    continue
+
+                _hdr_orig = [str(c).strip() if c else '' for c in _rows_at[0]]
+
+                # Detectar índices das colunas-chave no arquivo atual
+                def _fi(keywords):
+                    for _i, _h in enumerate(_hdr_orig):
+                        if any(k in _h.upper() for k in keywords):
+                            return _i
+                    return None
+
+                _ic_num  = _fi(['N° PEDIDO', 'N PEDIDO', 'NUMERO', 'NUM'])
+                _ic_cod  = _fi(['CÓDIGO', 'CODIGO', 'COD'])
+                _ic_prev = _fi(['PREV'])
+                _ic_obs  = _fi(['OBS', 'OBSERV'])
+                _ic_gram = _fi(['GRAMATUR'])
+
+                # Construir cabeçalho de saída
+                # Regra: garantir N° Pedido como 1ª coluna e Gramatura após Código
+                _hdr_out = list(_hdr_orig)
+
+                # Adicionar N° Pedido se ausente
+                if _ic_num is None:
+                    _hdr_out = ['N° Pedido'] + _hdr_out
+                    _offset_num = 0
+                    _offset = 1  # colunas deslocadas
+                else:
+                    # Mover N° Pedido para posição 0 se não estiver
+                    if _ic_num != 0:
+                        _hdr_out.pop(_ic_num)
+                        _hdr_out = ['N° Pedido'] + _hdr_out
+                    _offset = 0
+
+                # Re-detectar índices após ajuste de cabeçalho
+                def _fi2(keywords, hdr):
+                    for _i, _h in enumerate(hdr):
+                        if any(k in _h.upper() for k in keywords):
+                            return _i
+                    return None
+
+                _oc_cod  = _fi2(['CÓDIGO', 'CODIGO', 'COD'], _hdr_out)
+                _oc_gram = _fi2(['GRAMATUR'], _hdr_out)
+                _oc_prev = _fi2(['PREV'], _hdr_out)
+                _oc_obs  = _fi2(['OBS', 'OBSERV'], _hdr_out)
+
+                # Inserir Gramatura após Código se ausente
+                if _oc_gram is None and _oc_cod is not None:
+                    _hdr_out.insert(_oc_cod + 1, 'Gramatura')
+
+                # Inserir colunas Previsão e Observações se ausentes
+                if _oc_prev is None:
+                    _hdr_out.append('Previsão')
+                if _oc_obs is None:
+                    _hdr_out.append('Observações')
+
+                # Criar aba de saída
+                _ws_out = _wb_out.create_sheet(title=_ws_at.title)
+
+                # Escrever cabeçalho estilizado
+                _ws_out.append(_hdr_out)
+                for _ci in range(1, len(_hdr_out) + 1):
+                    _cell = _ws_out.cell(row=1, column=_ci)
+                    _cell.fill      = _HDR_FILL
+                    _cell.font      = _HDR_FONT
+                    _cell.alignment = _HDR_ALIGN
+                    _cell.border    = _BORDER
+                _ws_out.row_dimensions[1].height = 30
+
+                # Processar linhas de dados
+                _ri_out = 2
+                for _r_orig in _rows_at[1:]:
+                    _r_list = list(_r_orig)
+
+                    # Extrair N° Pedido da linha original
+                    _num = str(_r_list[_ic_num]).strip() if _ic_num is not None and _r_list[_ic_num] not in (None, '') else ''
+
+                    # Extrair código para gramatura
+                    _cod_raw = str(_r_list[_ic_cod]).strip() if _ic_cod is not None and _r_list[_ic_cod] not in (None, '') else ''
+                    try:
+                        _cod_norm = str(int(float(_cod_raw)))
+                    except:
+                        _cod_norm = _cod_raw
+                    _gram_val = _gram_map.get(_cod_norm, '')
+
+                    # Buscar previsão/obs do mapa do relatório anterior
+                    _comp = _obs_map.get(_num, {})
+                    _prev_val = _comp.get('previsao', '')
+                    _obs_val  = _comp.get('obs', '')
+
+                    # Montar linha de saída na ordem do _hdr_out
+                    _row_out = []
+                    for _col_name in _hdr_out:
+                        _cn_up = _col_name.upper()
+                        if 'N° PEDIDO' in _cn_up or 'N PEDIDO' in _cn_up or ('NUM' in _cn_up and 'PEDIDO' in _cn_up):
+                            _row_out.append(_num)
+                        elif 'GRAMATUR' in _cn_up:
+                            _row_out.append(_gram_val)
+                        elif 'PREV' in _cn_up:
+                            _row_out.append(_prev_val)
+                        elif 'OBS' in _cn_up or 'OBSERV' in _cn_up:
+                            _row_out.append(_obs_val)
+                        else:
+                            # Buscar valor da coluna original pelo nome
+                            _idx_orig = next(
+                                (i for i, h in enumerate(_hdr_orig) if str(h).strip().upper() == _cn_up),
+                                None
+                            )
+                            _row_out.append(_r_list[_idx_orig] if _idx_orig is not None and _idx_orig < len(_r_list) else '')
+
+                    _ws_out.append(_row_out)
+
+                    # Aplicar estilos na linha
+                    _fill = _ALT_FILL if _ri_out % 2 == 0 else PatternFill()
+                    for _ci, _col_name in enumerate(_hdr_out, 1):
+                        _cell = _ws_out.cell(row=_ri_out, column=_ci)
+                        _cell.border    = _BORDER
+                        _cell.alignment = Alignment(vertical="center")
+                        if _fill.fill_type:
+                            _cell.fill = _fill
+                        _cn_up = _col_name.upper()
+                        if any(x in _cn_up for x in ['VALOR UNIT', 'VALOR PEND']):
+                            _cell.number_format = 'R$ #,##0.00'
+                        elif any(x in _cn_up for x in ['CONTRAT', 'ENTREGUE', 'PENDENTE', 'VOLUMES']):
+                            try:
+                                _cell.value = float(_cell.value) if _cell.value not in (None, '') else ''
+                                _cell.number_format = '#,##0'
+                            except:
+                                pass
+
+                    _ri_out += 1
+
+                # Larguras de coluna adaptadas
+                for _ci, _col_name in enumerate(_hdr_out, 1):
+                    _cn = _col_name.upper()
+                    if 'CLIENTE' in _cn:           _w = 30
+                    elif 'DESCRI' in _cn:          _w = 35
+                    elif 'OBSERV' in _cn:          _w = 28
+                    elif 'PREV' in _cn:            _w = 16
+                    elif 'GRAMATUR' in _cn:        _w = 12
+                    elif 'N° PEDIDO' in _cn:       _w = 14
+                    elif 'VENDEDOR' in _cn:        _w = 20
+                    elif any(x in _cn for x in ['VALOR','DATA']):  _w = 14
+                    else:                           _w = 11
+                    _ws_out.column_dimensions[get_column_letter(_ci)].width = _w
+
+                # Rodapé totais
+                _total_rows = _ri_out - 2
+                if _total_rows > 0:
+                    _ultima = _ri_out
+                    _ws_out.cell(_ultima, 1, 'TOTAL').font = _TOT_FONT
+                    for _ci, _col_name in enumerate(_hdr_out, 1):
+                        _cn = _col_name.upper()
+                        if any(x in _cn for x in ['CONTRAT','ENTREGUE','PENDENTE','VALOR PEND']):
+                            _tot = 0
+                            for _rr in range(2, _ultima):
+                                try:
+                                    _tot += float(_ws_out.cell(_rr, _ci).value or 0)
+                                except:
+                                    pass
+                            _c = _ws_out.cell(_ultima, _ci, _tot)
+                            _c.font = _TOT_FONT
+                            _c.number_format = 'R$ #,##0.00' if 'VALOR' in _cn else '#,##0'
+
+            # ── 4. Gerar download ─────────────────────────────────────────
+            _buf = _BIO()
+            _wb_out.save(_buf)
+            _n_obs = sum(1 for v in _obs_map.values() if v.get('obs') or v.get('previsao'))
+            st.success(
+                f"✅ Conciliação concluída — "
+                f"{_n_obs} pedidos com Previsão/Observações aplicadas | "
+                f"{len(_gram_map)} produtos com Gramatura"
+            )
+            st.download_button(
+                "📥 Baixar Relatório Conciliado",
+                _buf.getvalue(),
+                "RELATORIO_CONCILIADO.xlsx",
+                "application/vnd.ms-excel",
+                key="dl_conciliado"
+            )
+
+        except Exception as _e:
+            st.error(f"❌ Erro na conciliação: {_e}")
+            import traceback; st.code(traceback.format_exc())
+
+    elif _f_atual or _f_anterior:
+        st.info("⬆️ Carregue os dois arquivos para habilitar a conciliação.")
+
 
 
 # ====================== PERFORMANCE DE VENDEDORES ======================
