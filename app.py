@@ -4717,120 +4717,101 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
-# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (AJUSTADO) ======================
+# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (SINCRONIZADO) ======================
 if menu == "Performance de Vendedores":
     st.markdown('<h2 style="color:#1F4788;">📈 Performance de Vendedores</h2>', unsafe_allow_html=True)
     
-    # 1. Preparação dos Dados baseada no app (21).py
-    df_perf = df.copy()
+    # 1. Utilização do DataFrame já filtrado globalmente pelo seu sistema
+    # O seu sistema já define 'df_filtrado' na barra lateral.
+    df_perf_base = df_filtrado.copy()
     
-    # Garantir conversão de data e tratamento de nulos
-    df_perf['DataEmissao'] = pd.to_datetime(df_perf['DataEmissao'], errors='coerce')
-    
-    # Mapeamento dinâmico de colunas conforme o seu arquivo funcional
-    col_vendedor = 'Vendedor'
-    col_estado = 'Estado'
-    col_total = 'TotalProduto'
-    col_qtd = 'Qtde'
-    col_tipo = 'TipoMov'
-    col_desc = 'Descricao'
-    # Identificação da coluna de Nota (Tenta 'NF', depois 'Nota Fiscal', se não existir gera ID)
-    col_nf = next((c for c in df_perf.columns if c in ['NF', 'Nota Fiscal', 'NumNota']), None)
+    if not df_perf_base.empty:
+        # --- MAPEAMENTO DE COLUNAS DO SEU ARQUIVO FUNCIONAL ---
+        # No seu sistema: 'Vlr. Total' é o faturamento, 'Qtde.' é o volume, 'NF' é a nota.
+        c_tot = 'Vlr. Total'
+        c_qtd = 'Qtde.'
+        c_nf  = 'NF'
+        c_mov = 'TipoMov'
+        c_cli = 'CPF_CNPJ'
+        c_prd = 'Descricao'
 
-    # 2. Barra de Filtros
-    with st.expander("🔍 Filtros de Performance", expanded=True):
-        f1, f2, f3 = st.columns(3)
-        with f1:
-            lista_vendedores = sorted([v for v in df_perf[col_vendedor].unique() if pd.notna(v)])
-            vendedor_sel = st.selectbox("Vendedor", ["Todos"] + lista_vendedores)
-        with f2:
-            lista_estados = sorted([e for e in df_perf[col_estado].unique() if pd.notna(e)])
-            estado_sel = st.selectbox("Estado", ["Todos"] + lista_estados)
-        with f3:
-            d_min, d_max = df_perf['DataEmissao'].min().date(), df_perf['DataEmissao'].max().date()
-            periodo = st.date_input("Período", [d_min, d_max])
-
-    # Aplicação dos Filtros
-    if vendedor_sel != "Todos":
-        df_perf = df_perf[df_perf[col_vendedor] == vendedor_sel]
-    if estado_sel != "Todos":
-        df_perf = df_perf[df_perf[col_estado] == estado_sel]
-    if len(periodo) == 2:
-        df_perf = df_perf[(df_perf['DataEmissao'].dt.date >= periodo[0]) & (df_perf['DataEmissao'].dt.date <= periodo[1])]
-
-    if not df_perf.empty:
-        # --- CÁLCULOS TÉCNICOS ---
-        vendas_df = df_perf[df_perf[col_tipo].str.contains('Venda', case=False, na=False)].copy()
-        devol_df = df_perf[df_perf[col_tipo].str.contains('Devolucao|Devolução', case=False, na=False)].copy()
+        # --- PROCESSAMENTO TÉCNICO ---
+        # Filtro de Vendas e Devoluções conforme padrão do seu sistema
+        vendas_df = df_perf_base[df_perf_base[c_mov] == 'NF Venda'].copy()
+        devol_df = df_perf_base[df_perf_base[c_mov] == 'NF Dev.Venda'].copy()
         
-        faturamento_bruto = vendas_df[col_total].sum()
-        valor_devolucao = devol_df[col_total].sum()
+        # Obtenção de Notas Únicas para evitar erro de Ticket Médio (Lógica do seu arquivo)
+        notas_venda_unicas = obter_notas_unicas(vendas_df)
+        
+        # --- CÁLCULOS DE PERFORMANCE ---
+        faturamento_bruto = notas_venda_unicas[c_tot].sum()
+        valor_devolucao = devol_df[c_tot].sum()
         faturamento_liquido = faturamento_bruto - valor_devolucao
         
-        # Contagem de Pedidos Únicos (Blindagem contra KeyError)
-        if col_nf:
-            total_pedidos = vendas_df[col_nf].nunique()
-        else:
-            # Fallback: Se não achar coluna de NF, agrupa por Cliente e Data para aproximar pedidos
-            total_pedidos = vendas_df.groupby(['CPF_CNPJ', 'DataEmissao']).ngroups
-        
-        # Ticket Médio e Volume
+        # Ticket Médio Real (Baseado em Notas Únicas)
+        total_pedidos = len(notas_venda_unicas)
         ticket_medio = faturamento_liquido / total_pedidos if total_pedidos > 0 else 0
-        volume_total = vendas_df[col_qtd].sum()
-        clientes_atendidos = vendas_df['CPF_CNPJ'].nunique()
         
-        # Inadimplência e Prazo (Usando colunas do seu sistema)
-        inad_valor = df_perf[df_perf['Situacao'].astype(str).str.contains('Vencido', case=False, na=False)][col_total].sum() if 'Situacao' in df_perf.columns else 0
-        inad_pct = (inad_valor / faturamento_liquido * 100) if faturamento_liquido > 0 else 0
+        # Positivação e Volume
+        clientes_atendidos = vendas_df[c_cli].nunique()
+        volume_total = vendas_df[c_qtd].sum()
         
-        # Prazo Médio (Coluna 'Prazo' do seu CSV)
-        prazo_medio = df_perf['Prazo'].mean() if 'Prazo' in df_perf.columns else 28
+        # Inadimplência (Sincronizado com sua coluna 'Situação')
+        # Buscando o valor de títulos vencidos se a coluna existir
+        c_sit = 'Situação' if 'Situação' in df_perf_base.columns else None
+        inad_val = df_perf_base[df_perf_base[c_sit].astype(str).str.contains('Vencido', case=False, na=False)][c_tot].sum() if c_sit else 0
+        inad_pct = (inad_val / faturamento_liquido * 100) if faturamento_liquido > 0 else 0
 
-        # --- EXIBIÇÃO ---
+        # --- EXIBIÇÃO EM CARDS (USANDO SUA FUNÇÃO RENDER_KPI_CARD) ---
         c1, c2, c3, c4 = st.columns(4)
-        with c1: render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}", f"Bruto: R$ {faturamento_bruto:,.2f}")
-        with c2: render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", f"Base: {total_pedidos} Pedidos")
-        with c3: render_kpi_card("Positivação", f"{clientes_atendidos} Cli.", icon="👥")
-        with c4: render_kpi_card("Volume Total", f"{volume_total:,.0f} un.", icon="📦")
+        with c1: 
+            render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}", f"Bruto: R$ {faturamento_bruto:,.2f}")
+        with c2: 
+            render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", f"Base: {total_pedidos} Pedidos")
+        with c3: 
+            render_kpi_card("Positivação", f"{clientes_atendidos} Cli.", icon="👥")
+        with c4: 
+            render_kpi_card("Volume Total", f"{volume_total:,.0f} un.", icon="📦")
 
         c1b, c2b, c3b, c4b = st.columns(4)
-        with c1b: render_kpi_card("Inadimplência", f"{inad_pct:.1f}%", f"R$ {inad_valor:,.2f}", color="#EF4444")
-        with c2b: 
-            comissao_est = faturamento_liquido * 0.035
-            render_kpi_card("Comissão Est.", f"R$ {comissao_est:,.2f}", "Ref: 3.5% sobre Líq.", color="#10B981")
-        with c3b: render_kpi_card("Prazo Médio", f"{int(prazo_medio)} Dias", icon="📅")
-        with c4b: render_kpi_card("Devoluções", f"R$ {valor_devolucao:,.2f}", color="#F59E0B")
+        with c1b:
+            render_kpi_card("Inadimplência", f"{inad_pct:.1f}%", f"R$ {inad_val:,.2f}", color="#EF4444")
+        with c2b:
+            comissao_calc = faturamento_liquido * 0.035 # Base 3.5%
+            render_kpi_card("Comissão Est.", f"R$ {comissao_calc:,.2f}", "Ref: 3.5% Médio", color="#10B981")
+        with c3b:
+            # Prazo médio baseado na sua coluna de Prazo
+            prazo_m = df_perf_base['Prazo'].mean() if 'Prazo' in df_perf_base.columns else 28
+            render_kpi_card("Prazo Médio", f"{int(prazo_m)} Dias", icon="📅")
+        with c4b:
+            render_kpi_card("Capilaridade", f"{clientes_atendidos}", icon="📍")
 
-        # Gráficos
-        t1, t2 = st.tabs(["📊 Mix de Produtos", "📈 Evolução Temporal"])
+        # --- ANÁLISE GRÁFICA ---
+        t1, t2 = st.tabs(["📊 Mix & Ranking", "📈 Evolução Diária"])
         with t1:
-            g1, g2 = st.columns(2)
-            with g1:
-                mix = vendas_df.groupby(col_desc)[col_total].sum().nlargest(10).reset_index()
-                st.plotly_chart(px.pie(mix, values=col_total, names=col_desc, hole=.4, title="Top 10 Produtos"), use_container_width=True)
-            with g2:
-                # Ranking por faturamento no período
-                rank = df_perf.groupby(col_vendedor)[col_total].sum().sort_values(ascending=True).reset_index()
-                st.plotly_chart(px.bar(rank, x=col_total, y=col_vendedor, orientation='h', title="Comparativo Vendedores"), use_container_width=True)
+            ga, gb = st.columns(2)
+            with ga:
+                mix = vendas_df.groupby(c_prd)[c_tot].sum().nlargest(10).reset_index()
+                st.plotly_chart(px.pie(mix, values=c_tot, names=c_prd, hole=.4, title="Top 10 Produtos"), use_container_width=True)
+            with gb:
+                # Ranking por faturamento líquido usando notas únicas
+                rank_v = notas_venda_unicas.groupby('Vendedor')[c_tot].sum().sort_values(ascending=True).reset_index()
+                st.plotly_chart(px.bar(rank_v, x=c_tot, y='Vendedor', orientation='h', title="Ranking Faturamento"), use_container_width=True)
         
         with t2:
-            evol = vendas_df.groupby(vendas_df['DataEmissao'].dt.date)[col_total].sum().reset_index()
-            st.plotly_chart(px.area(evol, x='DataEmissao', y=col_total, title="Curva de Faturamento Diário"), use_container_width=True)
+            evol = notas_venda_unicas.groupby(notas_venda_unicas['DataEmissao'].dt.date)[c_tot].sum().reset_index()
+            st.plotly_chart(px.area(evol, x='DataEmissao', y=c_tot, title="Curva de Faturamento"), use_container_width=True)
 
-        # --- EXPORTAÇÃO EXCEL ---
+        # --- EXPORTAÇÃO (USANDO SUA FUNÇÃO TO_EXCEL) ---
         st.markdown("---")
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            df_perf.to_excel(writer, index=False, sheet_name='Performance')
-        
         st.download_button(
-            label="📥 Gerar Relatório de Performance (Excel)",
-            data=buffer.getvalue(),
-            file_name=f"Performance_{vendedor_sel}_{datetime.now().strftime('%d%m%Y')}.xlsx",
+            label="📥 Baixar Relatório de Performance (Excel)",
+            data=to_excel(df_perf_base),
+            file_name=f"Performance_{datetime.now().strftime('%d%m%Y')}.xlsx",
             mime="application/vnd.ms-excel"
         )
     else:
-        st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        st.warning("Utilize os filtros da barra lateral para carregar os dados de performance.")
 # ====================== CONSULTA CLIENTES ======================
 elif menu == "Consulta Clientes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Consulta de Preços por Cliente</h2>', unsafe_allow_html=True)
