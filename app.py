@@ -4717,35 +4717,39 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
-# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (SINCRONIZADO) ======================
+# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (SINCRONIZADO & BLINDADO) ======================
 if menu == "Performance de Vendedores":
     st.markdown('<h2 style="color:#1F4788;">📈 Performance de Vendedores</h2>', unsafe_allow_html=True)
     
-    # 1. Utilização do DataFrame já filtrado globalmente pelo seu sistema
-    # O seu sistema já define 'df_filtrado' na barra lateral.
+    # 1. Utilização do DataFrame já filtrado globalmente no app (21).py
     df_perf_base = df_filtrado.copy()
     
     if not df_perf_base.empty:
-        # --- MAPEAMENTO DE COLUNAS DO SEU ARQUIVO FUNCIONAL ---
-        # No seu sistema: 'Vlr. Total' é o faturamento, 'Qtde.' é o volume, 'NF' é a nota.
-        c_tot = 'Vlr. Total'
-        c_qtd = 'Qtde.'
-        c_nf  = 'NF'
-        c_mov = 'TipoMov'
-        c_cli = 'CPF_CNPJ'
-        c_prd = 'Descricao'
+        # --- FUNÇÃO DE MAPEAMENTO SEGURO (Extraído da lógica do seu sistema) ---
+        cols = df_perf_base.columns.tolist()
+        def find_c(targets):
+            return next((c for c in cols if c.lower().strip() in targets), None)
+
+        # Mapeamento exato baseado nos seus arquivos funcionais
+        c_tot = find_c(['vlr. total', 'totalproduto', 'valor total', 'total'])
+        c_qtd = find_c(['qtde.', 'qtde', 'quantidade', 'qtd. atend.'])
+        c_mov = find_c(['tipomov', 'tipo', 'movimentação'])
+        c_not = find_c(['nf', 'nota fiscal', 'numnota'])
+        c_cli = find_c(['cpf_cnpj', 'cnpj', 'cliente'])
+        c_prd = find_c(['descricao', 'descrição', 'produto'])
 
         # --- PROCESSAMENTO TÉCNICO ---
-        # Filtro de Vendas e Devoluções conforme padrão do seu sistema
-        vendas_df = df_perf_base[df_perf_base[c_mov] == 'NF Venda'].copy()
-        devol_df = df_perf_base[df_perf_base[c_mov] == 'NF Dev.Venda'].copy()
+        # Filtro de Vendas e Devoluções (Lógica padrão do seu app)
+        vendas_df = df_perf_base[df_perf_base[c_mov].str.contains('Venda', case=False, na=False)].copy()
+        devol_df = df_perf_base[df_perf_base[c_mov].str.contains('Devolucao|Devolução', case=False, na=False)].copy()
         
-        # Obtenção de Notas Únicas para evitar erro de Ticket Médio (Lógica do seu arquivo)
+        # Obtenção de Notas Únicas para evitar erro de Ticket Médio
+        # Usa a função 'obter_notas_unicas' que já existe no seu código funcional
         notas_venda_unicas = obter_notas_unicas(vendas_df)
         
         # --- CÁLCULOS DE PERFORMANCE ---
-        faturamento_bruto = notas_venda_unicas[c_tot].sum()
-        valor_devolucao = devol_df[c_tot].sum()
+        faturamento_bruto = notas_venda_unicas[c_tot].sum() if c_tot else 0
+        valor_devolucao = devol_df[c_tot].sum() if c_tot else 0
         faturamento_liquido = faturamento_bruto - valor_devolucao
         
         # Ticket Médio Real (Baseado em Notas Únicas)
@@ -4753,48 +4757,38 @@ if menu == "Performance de Vendedores":
         ticket_medio = faturamento_liquido / total_pedidos if total_pedidos > 0 else 0
         
         # Positivação e Volume
-        clientes_atendidos = vendas_df[c_cli].nunique()
-        volume_total = vendas_df[c_qtd].sum()
+        clientes_atendidos = vendas_df[c_cli].nunique() if c_cli else 0
+        volume_total = vendas_df[c_qtd].sum() if c_qtd else 0
         
-        # Inadimplência (Sincronizado com sua coluna 'Situação')
-        # Buscando o valor de títulos vencidos se a coluna existir
-        c_sit = 'Situação' if 'Situação' in df_perf_base.columns else None
-        inad_val = df_perf_base[df_perf_base[c_sit].astype(str).str.contains('Vencido', case=False, na=False)][c_tot].sum() if c_sit else 0
+        # Inadimplência e Prazo (Sincronizado com suas colunas)
+        inad_val = df_perf_base[df_perf_base['Situacao'].astype(str).str.contains('Vencido', case=False, na=False)][c_tot].sum() if 'Situacao' in df_perf_base.columns and c_tot else 0
         inad_pct = (inad_val / faturamento_liquido * 100) if faturamento_liquido > 0 else 0
+        prazo_m = df_perf_base['Prazo'].mean() if 'Prazo' in df_perf_base.columns else 28
 
         # --- EXIBIÇÃO EM CARDS (USANDO SUA FUNÇÃO RENDER_KPI_CARD) ---
         c1, c2, c3, c4 = st.columns(4)
-        with c1: 
-            render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}", f"Bruto: R$ {faturamento_bruto:,.2f}")
-        with c2: 
-            render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", f"Base: {total_pedidos} Pedidos")
-        with c3: 
-            render_kpi_card("Positivação", f"{clientes_atendidos} Cli.", icon="👥")
-        with c4: 
-            render_kpi_card("Volume Total", f"{volume_total:,.0f} un.", icon="📦")
+        with c1: render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.2f}", f"Bruto: R$ {faturamento_bruto:,.2f}")
+        with c2: render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", f"Base: {total_pedidos} Pedidos")
+        with c3: render_kpi_card("Positivação", f"{clientes_atendidos} Cli.", icon="👥")
+        with c4: render_kpi_card("Volume Total", f"{volume_total:,.0f} un.", icon="📦")
 
         c1b, c2b, c3b, c4b = st.columns(4)
-        with c1b:
-            render_kpi_card("Inadimplência", f"{inad_pct:.1f}%", f"R$ {inad_val:,.2f}", color="#EF4444")
-        with c2b:
-            comissao_calc = faturamento_liquido * 0.035 # Base 3.5%
-            render_kpi_card("Comissão Est.", f"R$ {comissao_calc:,.2f}", "Ref: 3.5% Médio", color="#10B981")
-        with c3b:
-            # Prazo médio baseado na sua coluna de Prazo
-            prazo_m = df_perf_base['Prazo'].mean() if 'Prazo' in df_perf_base.columns else 28
-            render_kpi_card("Prazo Médio", f"{int(prazo_m)} Dias", icon="📅")
-        with c4b:
-            render_kpi_card("Capilaridade", f"{clientes_atendidos}", icon="📍")
+        with c1b: render_kpi_card("Inadimplência", f"{inad_pct:.1f}%", f"R$ {inad_val:,.2f}", color="#EF4444")
+        with c2b: 
+            comissao_est = faturamento_liquido * 0.035
+            render_kpi_card("Comissão Est.", f"R$ {comissao_est:,.2f}", "Ref: 3.5% Médio", color="#10B981")
+        with c3b: render_kpi_card("Prazo Médio", f"{int(prazo_m)} Dias", icon="📅")
+        with c4b: render_kpi_card("Devoluções", f"R$ {valor_devolucao:,.2f}", color="#F59E0B")
 
         # --- ANÁLISE GRÁFICA ---
         t1, t2 = st.tabs(["📊 Mix & Ranking", "📈 Evolução Diária"])
         with t1:
             ga, gb = st.columns(2)
             with ga:
-                mix = vendas_df.groupby(c_prd)[c_tot].sum().nlargest(10).reset_index()
-                st.plotly_chart(px.pie(mix, values=c_tot, names=c_prd, hole=.4, title="Top 10 Produtos"), use_container_width=True)
+                if c_prd:
+                    mix = vendas_df.groupby(c_prd)[c_tot].sum().nlargest(10).reset_index()
+                    st.plotly_chart(px.pie(mix, values=c_tot, names=c_prd, hole=.4, title="Top 10 Produtos"), use_container_width=True)
             with gb:
-                # Ranking por faturamento líquido usando notas únicas
                 rank_v = notas_venda_unicas.groupby('Vendedor')[c_tot].sum().sort_values(ascending=True).reset_index()
                 st.plotly_chart(px.bar(rank_v, x=c_tot, y='Vendedor', orientation='h', title="Ranking Faturamento"), use_container_width=True)
         
@@ -4802,10 +4796,10 @@ if menu == "Performance de Vendedores":
             evol = notas_venda_unicas.groupby(notas_venda_unicas['DataEmissao'].dt.date)[c_tot].sum().reset_index()
             st.plotly_chart(px.area(evol, x='DataEmissao', y=c_tot, title="Curva de Faturamento"), use_container_width=True)
 
-        # --- EXPORTAÇÃO (USANDO SUA FUNÇÃO TO_EXCEL) ---
+        # --- EXPORTAÇÃO ---
         st.markdown("---")
         st.download_button(
-            label="📥 Baixar Relatório de Performance (Excel)",
+            label="📥 Baixar Relatório Executivo (Excel)",
             data=to_excel(df_perf_base),
             file_name=f"Performance_{datetime.now().strftime('%d%m%Y')}.xlsx",
             mime="application/vnd.ms-excel"
