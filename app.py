@@ -4717,7 +4717,7 @@ elif menu == "Rankings":
             f"ranking_top{top_n}_clientes.xlsx",
             "application/vnd.ms-excel"
         )
-# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (VERSÃO FINAL BLINDADA) ======================
+# ====================== MÓDULO: PERFORMANCE DE VENDEDORES (DIAGNÓSTICO FINAL) ======================
 if menu == "Performance de Vendedores":
     import base64
     import tempfile
@@ -4726,141 +4726,140 @@ if menu == "Performance de Vendedores":
     try:
         from fpdf import FPDF
     except ImportError:
-        st.error("⚠️ Biblioteca 'fpdf' não encontrada. Adicione 'fpdf' ao seu requirements.txt.")
+        st.error("⚠️ Biblioteca 'fpdf' necessária. Adicione 'fpdf' ao seu arquivo requirements.txt.")
         st.stop()
 
     st.markdown('<h2 style="color:#1F4788;">📈 Diagnóstico de Performance de Vendas</h2>', unsafe_allow_html=True)
     
-    # 1. Diagnóstico de Colunas (Evita KeyError)
+    # 1. Recuperação da Base Filtrada (df_filtrado já vem com filtros de Vendedor/Data do seu app)
     df_perf_base = df_filtrado.copy()
     
     if not df_perf_base.empty:
-        # Função interna para encontrar colunas por similaridade
-        def localizar_coluna(termos, dataframe):
-            for t in termos:
+        # --- MAPEAMENTO DINÂMICO DE COLUNAS (Evita o KeyError) ---
+        def get_col(possibilidades, dataframe):
+            for p in possibilidades:
                 for col in dataframe.columns:
-                    if t.lower() in col.lower(): return col
+                    if p.lower() in col.lower().strip(): return col
             return None
 
-        # Mapeamento Dinâmico
-        c_valor = localizar_coluna(['vlr. total', 'totalproduto', 'valor total'], df_perf_base)
-        c_qtd   = localizar_coluna(['qtde.', 'quantidade', 'qtd'], df_perf_base)
-        c_nf    = localizar_coluna(['nf', 'nota', 'numnota'], df_perf_base)
-        c_cli   = localizar_coluna(['cpf_cnpj', 'cnpj', 'cliente'], df_perf_base)
-        c_tipo  = localizar_coluna(['tipomov', 'tipo'], df_perf_base)
+        c_vlr = get_col(['vlr. total', 'totalproduto', 'valor total'], df_perf_base)
+        c_qtd = get_col(['qtde.', 'quantidade', 'volume'], df_perf_base)
+        c_prd = get_col(['descricao', 'descrição', 'produto', 'item'], df_perf_base)
+        c_cli = get_col(['cpf_cnpj', 'cnpj', 'cliente'], df_perf_base)
+        c_mov = get_col(['tipomov', 'tipo'], df_perf_base)
 
-        # --- PROCESSAMENTO CORPORATIVO ---
-        # Filtro de Vendas e Devoluções
-        vendas_df = df_perf_base[df_perf_base[c_tipo].str.contains('Venda', case=False, na=False)].copy()
-        devol_df  = df_perf_base[df_perf_base[c_tipo].str.contains('Devolucao|Devolução|Dev.Venda', case=False, na=False)].copy()
+        # --- PROCESSAMENTO DOS INDICADORES CORPORATIVOS ---
+        vendas_df = df_perf_base[df_perf_base[c_mov].str.contains('Venda', case=False, na=False)].copy()
+        devol_df  = df_perf_base[df_perf_base[c_mov].str.contains('Devolu', case=False, na=False)].copy()
         
-        # Uso da função nativa do seu app para limpar duplicidade de itens por nota
+        # Uso da sua função 'obter_notas_unicas' para cálculo de Ticket Médio Real
         notas_venda_unicas = obter_notas_unicas(vendas_df)
         
-        # Cálculos de Performance (Uso de .get() ou verificação para evitar novos KeyErrors)
-        fat_bruto = notas_venda_unicas[c_valor].sum() if c_valor in notas_venda_unicas.columns else 0
-        val_dev   = devol_df[c_valor].sum() if c_valor in devol_df.columns else 0
-        fat_liq   = fat_bruto - val_dev
+        # Cálculos Financeiros
+        fat_bruto = notas_venda_unicas[c_vlr].sum()
+        val_devol = devol_df[c_vlr].sum()
+        fat_liq   = fat_bruto - val_devol
         
         n_pedidos = len(notas_venda_unicas)
-        n_clientes = vendas_df[c_cli].nunique() if c_cli else 0
-        volume_total = vendas_df[c_qtd].sum() if c_qtd else 0
+        n_clientes = vendas_df[c_cli].nunique()
+        volume_total = vendas_df[c_qtd].sum()
         
         ticket_medio = fat_liq / n_pedidos if n_pedidos > 0 else 0
-        positivacao_pct = (n_clientes / df['CPF_CNPJ'].nunique() * 100) if n_clientes > 0 else 0
+        comissao_est = fat_liq * 0.035  # Base de 3.5%
 
-        # --- DASHBOARD DE INDICADORES ---
-        st.subheader("📌 Resumo Geral do Período")
+        # --- VISUALIZAÇÃO NO APP (DASHBOARD) ---
+        st.subheader("📌 Resumo Executivo")
         k1, k2, k3, k4 = st.columns(4)
         with k1: render_kpi_card("Faturamento Líquido", f"R$ {fat_liq:,.2f}", f"Bruto: R$ {fat_bruto:,.2f}")
         with k2: render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", f"Base: {n_pedidos} Pedidos")
         with k3: render_kpi_card("Positivação", f"{n_clientes} Clientes", icon="👥")
         with k4: 
-            inad_val = df_perf_base[df_perf_base['Situação'].astype(str).str.contains('Vencido', case=False, na=False)][c_valor].sum() if 'Situação' in df_perf_base.columns else 0
+            # Inadimplência Real
+            inad_val = df_perf_base[df_perf_base['Situação'].astype(str).str.contains('Vencido', case=False, na=False)][c_vlr].sum() if 'Situação' in df_perf_base.columns else 0
             render_kpi_card("Inadimplência", f"R$ {inad_val:,.2f}", color="#EF4444")
 
-        # --- ANÁLISE GRÁFICA NO APP ---
         st.markdown("---")
-        g1, g2 = st.columns(2)
         
+        # --- GRÁFICOS NO APP ---
+        g1, g2 = st.columns(2)
         with g1:
-            evol_data = notas_venda_unicas.groupby(notas_venda_unicas['DataEmissao'].dt.date)[c_valor].sum().reset_index()
-            fig_evol = px.area(evol_data, x='DataEmissao', y=c_valor, title="Curva de Faturamento Diário", color_discrete_sequence=['#1F4788'])
+            evol_df = notas_venda_unicas.groupby(notas_venda_unicas['DataEmissao'].dt.date)[c_vlr].sum().reset_index()
+            fig_evol = px.area(evol_df, x='DataEmissao', y=c_vlr, title="Evolução de Faturamento Diário", color_discrete_sequence=['#1F4788'])
             st.plotly_chart(aplicar_layout_grafico(fig_evol), use_container_width=True)
             
         with g2:
-            mix_data = vendas_df.groupby('Descricao')[c_valor].sum().nlargest(10).reset_index()
-            fig_mix = px.pie(mix_data, values=c_valor, names='Descricao', hole=.4, title="Mix Top 10 Produtos (R$)")
+            mix_df = vendas_df.groupby(c_prd)[c_vlr].sum().nlargest(10).reset_index()
+            fig_mix = px.pie(mix_df, values=c_vlr, names=c_prd, hole=.4, title="Mix de Produtos (Top 10)")
             st.plotly_chart(fig_mix, use_container_width=True)
 
-        # --- FUNÇÃO GERADORA DE PDF ROBUSTO ---
-        def exportar_pdf_diagnostico():
+        # --- GERADOR DE PDF PROFISSIONAL ---
+        def gerar_pdf_diagnostico():
             pdf = FPDF()
             pdf.add_page()
             
-            # Header Corporativo
+            # Layout do Header
             pdf.set_fill_color(31, 71, 136)
-            pdf.rect(0, 0, 210, 35, 'F')
+            pdf.rect(0, 0, 210, 40, 'F')
             pdf.set_text_color(255, 255, 255)
-            pdf.set_font("Arial", 'B', 14)
-            pdf.cell(190, 15, "RELATÓRIO DE PERFORMANCE E DIAGNÓSTICO", 0, 1, 'C')
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(190, 20, "DIAGNÓSTICO DE PERFORMANCE - MEDTEXTIL", 0, 1, 'C')
             pdf.set_font("Arial", '', 10)
-            pdf.cell(190, 5, f"Vendedor: {vendedor_sel} | Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'C')
+            pdf.cell(190, 5, f"Vendedor: {vendedor_sel} | Período Analisado: {periodo[0].strftime('%d/%m/%Y')} a {periodo[1].strftime('%d/%m/%Y')}", 0, 1, 'C')
             
-            # Tabela de KPIs
-            pdf.ln(20)
+            # Tabela de Indicadores
+            pdf.ln(25)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Arial", 'B', 12)
-            pdf.cell(190, 10, "1. INDICADORES DE PERFORMANCE (LÍQUIDO)", 0, 1, 'L')
-            pdf.set_font("Arial", '', 10)
+            pdf.cell(190, 10, "1. RESUMO DOS INDICADORES CORPORATIVOS", 0, 1, 'L')
+            pdf.set_font("Arial", '', 11)
             
-            headers = ["Indicador", "Valor"]
-            data = [
-                ["Faturamento Líquido", f"R$ {fat_liq:,.2f}"],
+            rows = [
+                ["Faturamento Líquido Real", f"R$ {fat_liq:,.2f}"],
                 ["Ticket Médio por Pedido", f"R$ {ticket_medio:,.2f}"],
                 ["Quantidade de Pedidos", str(n_pedidos)],
-                ["Clientes Positivados", str(n_clientes)],
-                ["Volume de Itens Vendidos", f"{volume_total:,.0f} un."],
-                ["Total Devoluções", f"R$ {val_dev:,.2f}"]
+                ["Clientes Atendidos (Positivação)", str(n_clientes)],
+                ["Volume Total (Unidades)", f"{volume_total:,.0f}"],
+                ["Valor de Devoluções", f"R$ {val_devol:,.2f}"],
+                ["Comissão Estimada (3.5%)", f"R$ {comissao_est:,.2f}"]
             ]
             
-            for row in data:
-                pdf.cell(100, 10, row[0], 1)
-                pdf.cell(90, 10, row[1], 1, 1, 'C')
+            for row in rows:
+                pdf.cell(110, 10, row[0], 1)
+                pdf.cell(80, 10, row[1], 1, 1, 'C')
 
-            # Diagnóstico de Gráfico
+            # Inclusão do Gráfico no PDF
             try:
                 pdf.ln(10)
                 pdf.set_font("Arial", 'B', 12)
-                pdf.cell(190, 10, "2. EVOLUÇÃO TEMPORAL", 0, 1, 'L')
+                pdf.cell(190, 10, "2. ANÁLISE DE TENDÊNCIA (EVOLUÇÃO)", 0, 1, 'L')
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                     fig_evol.write_image(tmp.name)
                     pdf.image(tmp.name, x=15, y=pdf.get_y(), w=170)
             except:
-                pdf.cell(190, 10, "(Gráfico indisponível no PDF - Requer Kaleido)", 0, 1)
+                pdf.cell(190, 10, "(Gráfico não disponível - Requer Kaleido no requirements.txt)", 0, 1)
 
             return pdf.output(dest='S').encode('latin-1', 'replace')
 
-        # --- BOTÕES DE EXPORTAÇÃO ---
+        # --- AÇÕES DE EXPORTAÇÃO ---
         st.markdown("---")
         b1, b2 = st.columns(2)
         with b1:
-            if st.button("📄 Gerar Diagnóstico em PDF"):
+            if st.button("📄 Gerar Relatório Diagnóstico em PDF"):
                 st.download_button(
-                    label="📥 Baixar PDF Agora",
-                    data=exportar_pdf_diagnostico(),
-                    file_name=f"Diagnostico_{vendedor_sel}_{datetime.now().strftime('%d%m%Y')}.pdf",
+                    label="📥 Clique para Baixar PDF",
+                    data=gerar_pdf_diagnostico(),
+                    file_name=f"Performance_{vendedor_sel}_{datetime.now().strftime('%d%m%Y')}.pdf",
                     mime="application/pdf"
                 )
         with b2:
             st.download_button(
-                label="📥 Baixar Dados em Excel",
+                label="📥 Baixar Dados Detalhados (Excel)",
                 data=to_excel(df_perf_base),
                 file_name=f"Dados_Performance_{datetime.now().strftime('%d%m%Y')}.xlsx",
                 mime="application/vnd.ms-excel"
             )
     else:
-        st.warning("Selecione os filtros na barra lateral para processar a performance.")
+        st.warning("Selecione um vendedor e período com dados na barra lateral.")
 # ====================== CONSULTA CLIENTES ======================
 elif menu == "Consulta Clientes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Consulta de Preços por Cliente</h2>', unsafe_allow_html=True)
