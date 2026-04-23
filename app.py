@@ -4718,7 +4718,153 @@ elif menu == "Rankings":
             "application/vnd.ms-excel"
         )
 
+# ==============================================================================
+# MÓDULO: PERFORMANCE COMERCIAL (DIAGNÓSTICO ROBUSTO & PDF)
+# ==============================================================================
+if menu == "Performance de Vendedores": # Ou o nome exato do seu menu
+    import tempfile
+    from datetime import datetime
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        st.error("Biblioteca 'fpdf' não encontrada. Adicione 'fpdf' ao requirements.txt")
+        st.stop()
 
+    st.markdown('<h2 style="color:#1F4788;">📊 Diagnóstico de Performance Comercial</h2>', unsafe_allow_html=True)
+
+    # 1. PADRONIZAÇÃO AUTOMÁTICA DE COLUNAS (Resiliência a nomenclaturas)
+    def mapear_dados(df_origem):
+        mapa = {
+            'vendedor': ['vendedor', 'funcionario', 'consultor', 'representante'],
+            'valor': ['vlr. total', 'totalproduto', 'valor', 'valor liquido', 'faturamento'],
+            'data': ['dataemissao', 'data', 'emissao', 'dt_venda'],
+            'produto': ['descricao', 'descrição', 'produto', 'item'],
+            'quantidade': ['qtde.', 'quantidade', 'qtd', 'volume'],
+            'cliente': ['cpf_cnpj', 'cnpj', 'cliente', 'razao social'],
+            'movimento': ['tipomov', 'tipo', 'movimentação'],
+            'situacao': ['situação', 'situacao', 'status', 'pagamento']
+        }
+        df_new = df_origem.copy()
+        cols_encontradas = {}
+        for logico, variantes in mapa.items():
+            col = next((c for c in df_origem.columns if c.lower().strip() in variantes), None)
+            if col:
+                df_new = df_new.rename(columns={col: logico})
+                cols_encontradas[logico] = col
+        
+        # Tipagem forçada para cálculos
+        if 'valor' in df_new.columns: df_new['valor'] = pd.to_numeric(df_new['valor'], errors='coerce').fillna(0)
+        if 'quantidade' in df_new.columns: df_new['quantidade'] = pd.to_numeric(df_new['quantidade'], errors='coerce').fillna(0)
+        if 'data' in df_new.columns: df_new['data'] = pd.to_datetime(df_new['data'], errors='coerce')
+        return df_new, cols_encontradas
+
+    # Processamento Inicial
+    df_p, mapeamento = mapear_dados(df_filtrado)
+    
+    if not df_p.empty:
+        # 2. CÁLCULO DE MÉTRICAS (Lógica de Vendas vs Devoluções)
+        # Filtramos vendas e devoluções se a coluna movimento existir
+        if 'movimento' in df_p.columns:
+            vendas_df = df_p[df_p['movimento'].str.contains('Venda', case=False, na=False)]
+            devol_df = df_p[df_p['movimento'].str.contains('Devolu', case=False, na=False)]
+        else:
+            vendas_df = df_p
+            devol_df = pd.DataFrame()
+
+        # KPIs Principais
+        notas_vendas = obter_notas_unicas(vendas_df) if 'vendas_df' in locals() else vendas_df
+        fat_bruto = notas_vendas['valor'].sum() if 'valor' in notas_vendas.columns else 0
+        val_devol = devol_df['valor'].sum() if not devol_df.empty and 'valor' in devol_df.columns else 0
+        fat_liq = fat_bruto - val_devol
+        
+        n_pedidos = len(notas_vendas)
+        n_clientes = vendas_df['cliente'].nunique() if 'cliente' in vendas_df.columns else 0
+        ticket_medio = fat_liq / n_pedidos if n_pedidos > 0 else 0
+        mix_produtos = vendas_df['produto'].nunique() if 'produto' in vendas_df.columns else 0
+
+        # 3. INTERFACE DE VISUALIZAÇÃO (Cards & Gráficos)
+        st.subheader("📌 Resumo Executivo")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: render_kpi_card("Faturamento Líquido", f"R$ {fat_liq:,.2f}", f"Bruto: R$ {fat_bruto:,.2f}")
+        with c2: render_kpi_card("Ticket Médio", f"R$ {ticket_medio:,.2f}", f"Ped: {n_pedidos}")
+        with c3: render_kpi_card("Positivação", f"{n_clientes} Clientes", icon="👥")
+        with c4: render_kpi_card("Mix de Produtos", f"{mix_produtos} Itens", icon="📦")
+
+        st.markdown("---")
+        g1, g2 = st.columns(2)
+        
+        with g1:
+            if 'data' in df_p.columns:
+                evol = notas_vendas.groupby(notas_vendas['data'].dt.date)['valor'].sum().reset_index()
+                fig_evol = px.area(evol, x='data', y='valor', title="Evolução Diária de Vendas", color_discrete_sequence=['#1F4788'])
+                st.plotly_chart(aplicar_layout_grafico(fig_evol), use_container_width=True)
+        
+        with g2:
+            if 'produto' in df_p.columns:
+                mix = vendas_df.groupby('produto')['valor'].sum().nlargest(10).reset_index()
+                fig_mix = px.pie(mix, values='valor', names='produto', hole=.4, title="Top 10 Produtos (Valor)")
+                st.plotly_chart(fig_mix, use_container_width=True)
+
+        # 4. GERAÇÃO DE RELATÓRIO PDF (Sob Demanda)
+        def exportar_pdf():
+            pdf = FPDF()
+            pdf.add_page()
+            
+            # Header Estilizado
+            pdf.set_fill_color(31, 71, 136)
+            pdf.rect(0, 0, 210, 40, 'F')
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(190, 15, "RELATÓRIO DE PERFORMANCE COMERCIAL", 0, 1, 'C')
+            pdf.set_font("Arial", '', 10)
+            
+            # Identificação de Vendedor/Período do seu sistema
+            vendedor_rel = vendedor if 'vendedor' in locals() else "Geral"
+            pdf.cell(190, 5, f"Vendedor: {vendedor_rel} | Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'C')
+            
+            # Tabela de Indicadores
+            pdf.ln(25)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(190, 10, "1. INDICADORES CHAVE (KPIs)", 0, 1, 'L')
+            pdf.set_font("Arial", '', 11)
+            
+            indicadores = [
+                ["Faturamento Líquido", f"R$ {fat_liq:,.2f}"],
+                ["Ticket Médio / Pedido", f"R$ {ticket_medio:,.2f}"],
+                ["Número de Pedidos", str(n_pedidos)],
+                ["Clientes Positivados", str(n_clientes)],
+                ["Mix de Produtos Distintos", str(mix_produtos)],
+                ["Total em Devoluções", f"R$ {val_devol:,.2f}"]
+            ]
+            for label, valor in indicadores:
+                pdf.cell(110, 10, label, 1)
+                pdf.cell(80, 10, valor, 1, 1, 'C')
+
+            # Gráfico no PDF (Requer Kaleido)
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    fig_evol.write_image(tmp.name)
+                    pdf.ln(10)
+                    pdf.set_font("Arial", 'B', 12)
+                    pdf.cell(190, 10, "2. ANÁLISE DE TENDÊNCIA", 0, 1, 'L')
+                    pdf.image(tmp.name, x=15, y=pdf.get_y(), w=180)
+            except:
+                pdf.cell(190, 10, "(Gráfico indisponível - verifique instalação do Kaleido)", 0, 1)
+
+            return pdf.output(dest='S').encode('latin-1', 'replace')
+
+        st.markdown("---")
+        if st.button("📄 Gerar Relatório Executivo em PDF"):
+            pdf_bytes = exportar_pdf()
+            st.download_button(
+                label="📥 Baixar PDF Agora",
+                data=pdf_bytes,
+                file_name=f"Performance_Comercial_{datetime.now().strftime('%d%m%Y')}.pdf",
+                mime="application/pdf"
+            )
+    else:
+        st.warning("Dados não encontrados para os filtros selecionados.")
 # ====================== CONSULTA CLIENTES ======================
 elif menu == "Consulta Clientes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Consulta de Preços por Cliente</h2>', unsafe_allow_html=True)
