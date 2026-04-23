@@ -4480,8 +4480,21 @@ elif menu == "Pedidos Pendentes":
                         except:
                             pass
 
+                # Gramatura lookup (mesma lógica do módulo consulta tabela)
+                gram_col_g = next((c for c in df_prod_prev.columns if 'GRAMATUR' in c), None) if df_prod_prev is not None else None
+                gram_lookup = {}
+                if df_prod_prev is not None and gram_col_g:
+                    for _, row in df_prod_prev.iterrows():
+                        try:
+                            k = str(int(float(str(row['ID_COD_N'])))).strip()
+                            gv = str(row.get(gram_col_g, '')).strip()
+                            if gv and gv.lower() not in ('nan', '0', '0.0', ''):
+                                gram_lookup[k] = gv
+                        except:
+                            pass
+
                 COLUNAS = [
-                    'Cliente', 'Código', 'Volumes (cx)', 'Descrição',
+                    'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
                     'Contratado', 'Entregue', 'Pendente',
                     'Valor Unitário', 'Valor Pendente',
                     'Data Emissão', 'Dias Pendentes', 'Vendedor',
@@ -4531,9 +4544,14 @@ elif menu == "Pedidos Pendentes":
                     except:
                         pass
 
+                    # Gramatura pelo código
+                    gram_val = gram_lookup.get(cod_n, '')
+
                     abas_data[aba].append([
+                        str(row.get('NumeroPedido', '')),  # N° Pedido
                         row.get('Cliente', ''),
                         cod,
+                        gram_val,      # Gramatura
                         volumes_cx,
                         desc_pura,
                         qtd_cont,
@@ -4592,14 +4610,14 @@ elif menu == "Pedidos Pendentes":
                             if fill.fill_type:
                                 cell.fill = fill
                             # Formatar moeda
-                            if col_idx in (8, 9):
+                            if col_idx in (10, 11):
                                 cell.number_format = 'R$ #,##0.00'
                             # Formatar números inteiros
-                            if col_idx in (5, 6, 7):
+                            if col_idx in (7, 8, 9):
                                 cell.number_format = '#,##0'
 
                     # Larguras de coluna
-                    larguras = [30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
                     for i, larg in enumerate(larguras, 1):
                         ws.column_dimensions[get_column_letter(i)].width = larg
 
