@@ -720,7 +720,7 @@ def check_password():
         "admin123": {
             "tipo": "administrador",
             "nome": "Administrador",
-            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Consulta Clientes"]
+            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Performance de Vendedores", "Consulta Clientes"]
         },
         "colaborador123": {  # ⬅️ MUDE ESTA SENHA
             "tipo": "colaborador",
@@ -1806,6 +1806,7 @@ _DESC = {
     "Preço Médio":        "Análise de preços por produto",
     "Pedidos Pendentes":  "Itens aguardando faturamento",
     "Rankings":           "Top vendedores e clientes",
+    "Performance de Vendedores": "Painel completo de KPIs por vendedor",
 }
 _INFO_CARD = {}  # preenchido depois dos dados
 
@@ -1820,7 +1821,7 @@ if 'menu_option' not in st.session_state:
 
 modulos_visiveis = modulos_permitidos if modulos_permitidos else [
     "Dashboard","Positivação","Inadimplência","Clientes sem Compra",
-    "Histórico","Preço Médio","Pedidos Pendentes","Rankings"
+    "Histórico","Preço Médio","Pedidos Pendentes","Rankings","Performance de Vendedores"
 ]
 
 # ══════════════════════════════════════════════════════════════════
@@ -1984,12 +1985,12 @@ div[data-testid="stHorizontalBlock"].filter-bar { background: #F2F5FA !important
 _ICONES_NAV = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
-    "Pedidos Pendentes":"▣","Rankings":"▲",
+    "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
 }
 _ICONES_CARD = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
-    "Pedidos Pendentes":"▣","Rankings":"▲",
+    "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
 }
 
 with st.sidebar:
@@ -2140,6 +2141,7 @@ if st.session_state.menu_option == '__home__':
         {'nome':'Preço Médio',         'info':'Análise por produto'},
         {'nome':'Pedidos Pendentes',   'info':_info_pend},
         {'nome':'Rankings',            'info':_info_rank},
+        {'nome':'Performance de Vendedores', 'info':'Análise completa por vendedor'},
     ]
     cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
 
@@ -4639,6 +4641,806 @@ elif menu == "Pedidos Pendentes":
                     "application/vnd.ms-excel",
                     key="dl_fat_data"
                 )
+
+
+# ====================== PERFORMANCE DE VENDEDORES ======================
+elif menu == "Performance de Vendedores":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">📈 Performance de Vendedores</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Painel gerencial completo — análise individual e comparativa por vendedor</p>', unsafe_allow_html=True)
+
+    # ── Filtros locais do módulo ──────────────────────────────────────────────
+    with st.expander("⚙️ Filtros do Módulo", expanded=True):
+        _pv_c1, _pv_c2, _pv_c3 = st.columns(3)
+        with _pv_c1:
+            _pv_vendedores_lista = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
+            _pv_vendedor = st.selectbox("👤 Vendedor", _pv_vendedores_lista, key="pv_vendedor")
+        with _pv_c2:
+            _pv_regioes_lista = ['Todas'] + sorted(df['Estado'].dropna().unique().tolist())
+            _pv_regiao = st.selectbox("🗺️ Região (Estado)", _pv_regioes_lista, key="pv_regiao")
+        with _pv_c3:
+            _pv_periodo = st.selectbox(
+                "📅 Período",
+                ["Filtro Global", "Mês Atual", "Últimos 3 Meses", "Últimos 6 Meses", "Ano Atual", "Personalizado"],
+                key="pv_periodo"
+            )
+        if _pv_periodo == "Personalizado":
+            _pv_d1, _pv_d2 = st.columns(2)
+            with _pv_d1:
+                _pv_data_ini = st.date_input("De", value=None, key="pv_data_ini", format="DD/MM/YYYY")
+            with _pv_d2:
+                _pv_data_fim = st.date_input("Até", value=None, key="pv_data_fim", format="DD/MM/YYYY")
+        else:
+            _pv_data_ini = None
+            _pv_data_fim = None
+
+    # ── Aplicar filtros ───────────────────────────────────────────────────────
+    _pv_now = pd.Timestamp.now()
+    _pv_df = df.copy()
+
+    # Filtro período
+    if _pv_periodo == "Filtro Global":
+        _pv_df = df_filtrado.copy()
+    elif _pv_periodo == "Mês Atual":
+        _pv_df = _pv_df[
+            (_pv_df['DataEmissao'].dt.month == _pv_now.month) &
+            (_pv_df['DataEmissao'].dt.year == _pv_now.year)
+        ]
+    elif _pv_periodo == "Últimos 3 Meses":
+        _pv_df = _pv_df[_pv_df['DataEmissao'] >= (_pv_now - pd.DateOffset(months=3))]
+    elif _pv_periodo == "Últimos 6 Meses":
+        _pv_df = _pv_df[_pv_df['DataEmissao'] >= (_pv_now - pd.DateOffset(months=6))]
+    elif _pv_periodo == "Ano Atual":
+        _pv_df = _pv_df[_pv_df['DataEmissao'].dt.year == _pv_now.year]
+    elif _pv_periodo == "Personalizado":
+        if _pv_data_ini:
+            _pv_df = _pv_df[_pv_df['DataEmissao'] >= pd.to_datetime(_pv_data_ini)]
+        if _pv_data_fim:
+            _pv_df = _pv_df[_pv_df['DataEmissao'] <= pd.to_datetime(_pv_data_fim)]
+
+    # Filtro região
+    if _pv_regiao != 'Todas':
+        _pv_df = _pv_df[_pv_df['Estado'] == _pv_regiao]
+
+    # Filtro vendedor
+    if _pv_vendedor != 'Todos':
+        _pv_df = _pv_df[_pv_df['Vendedor'] == _pv_vendedor]
+
+    # Base apenas vendas e devoluções
+    _pv_vendas = _pv_df[_pv_df['TipoMov'] == 'NF Venda'].copy()
+    _pv_devol  = _pv_df[_pv_df['TipoMov'] == 'NF Dev.Venda'].copy()
+    _pv_notas  = obter_notas_unicas(_pv_df)
+    _pv_notas_v = _pv_notas[_pv_notas['TipoMov'] == 'NF Venda']
+    _pv_notas_d = _pv_notas[_pv_notas['TipoMov'] == 'NF Dev.Venda']
+
+    # ── KPIs Consolidados ─────────────────────────────────────────────────────
+    _pv_fat_bruto   = _pv_notas_v['TotalProduto'].sum()
+    _pv_fat_devol   = _pv_notas_d['TotalProduto'].sum()
+    _pv_fat_liq     = _pv_fat_bruto - _pv_fat_devol
+    _pv_clientes    = _pv_vendas['CPF_CNPJ'].nunique()
+    _pv_qtd_notas   = len(_pv_notas_v)
+    _pv_ticket      = _pv_fat_bruto / _pv_clientes if _pv_clientes > 0 else 0
+    _pv_vol_total   = _pv_vendas['Quantidade'].sum() if 'Quantidade' in _pv_vendas.columns else 0
+
+    # Prazo médio
+    def _pv_prazo_medio(df_v):
+        try:
+            if 'PrazoHistorico' not in df_v.columns:
+                return 0
+            prazos = []
+            for val in df_v['PrazoHistorico'].dropna():
+                for p in str(val).split('/'):
+                    try:
+                        prazos.append(int(p))
+                    except:
+                        pass
+            return sum(prazos) / len(prazos) if prazos else 0
+        except:
+            return 0
+
+    _pv_prazo = _pv_prazo_medio(_pv_vendas)
+
+    # Comissão média
+    def _pv_comissao_media(df_v):
+        try:
+            if 'Comissao' not in df_v.columns:
+                return "N/D"
+            mapa = {'4%': 4.0, '3%': 3.0, '2,5%': 2.5, '2%': 2.0}
+            vals = df_v['Comissao'].map(mapa).dropna()
+            if len(vals) == 0:
+                return "N/D"
+            return f"{vals.mean():.2f}%"
+        except:
+            return "N/D"
+
+    _pv_comissao = _pv_comissao_media(_pv_vendas)
+
+    # ── Exibir KPI Cards ─────────────────────────────────────────────────────
+    _pv_k1, _pv_k2, _pv_k3, _pv_k4 = st.columns(4)
+    with _pv_k1:
+        render_kpi_card("Faturamento Líquido", f"R$ {_pv_fat_liq:,.0f}", icon="💰", color="#1F4788")
+    with _pv_k2:
+        render_kpi_card("Faturamento Bruto", f"R$ {_pv_fat_bruto:,.0f}", icon="💵", color="#2E86AB")
+    with _pv_k3:
+        render_kpi_card("Devoluções", f"R$ {_pv_fat_devol:,.0f}", icon="↩️", color="#EF4444")
+    with _pv_k4:
+        render_kpi_card("Clientes Positivados", f"{_pv_clientes:,}", icon="👥", color="#28A745")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    _pv_k5, _pv_k6, _pv_k7, _pv_k8 = st.columns(4)
+    with _pv_k5:
+        render_kpi_card("Ticket Médio", f"R$ {_pv_ticket:,.0f}", icon="🎯", color="#F4A261")
+    with _pv_k6:
+        render_kpi_card("Volume Vendido", f"{_pv_vol_total:,.0f} un", icon="📦", color="#6C757D")
+    with _pv_k7:
+        render_kpi_card("Prazo Médio", f"{_pv_prazo:.0f} dias", icon="📅", color="#163561")
+    with _pv_k8:
+        render_kpi_card("Comissão Média", _pv_comissao, icon="💎", color="#1B5E8A")
+
+    st.markdown("---")
+
+    # ── Inadimplência por Vendedor ─────────────────────────────────────────
+    _pv_df_inad = None
+    _pv_inad_vendedor = 0
+    _pv_inad_total = 0
+    _pv_perc_inad = 0.0
+    if planilhas_disponiveis.get('inadimplencia'):
+        try:
+            _pv_raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
+            if _pv_raw_inad is not None:
+                _pv_df_inad = processar_inadimplencia(_pv_raw_inad)
+                if _pv_vendedor != 'Todos' and 'Vendedor' in _pv_df_inad.columns:
+                    _pv_inad_vend_df = _pv_df_inad[_pv_df_inad['Vendedor'] == _pv_vendedor]
+                else:
+                    _pv_inad_vend_df = _pv_df_inad.copy()
+                if _pv_regiao != 'Todas' and 'Estado' in _pv_df_inad.columns:
+                    _pv_inad_vend_df = _pv_inad_vend_df[_pv_inad_vend_df['Estado'] == _pv_regiao]
+                _pv_inad_vendedor = _pv_inad_vend_df['ValorLiquido'].sum() if 'ValorLiquido' in _pv_inad_vend_df.columns else 0
+                _pv_inad_total    = _pv_df_inad['ValorLiquido'].sum() if 'ValorLiquido' in _pv_df_inad.columns else 0
+                _pv_perc_inad     = (_pv_inad_vendedor / _pv_fat_bruto * 100) if _pv_fat_bruto > 0 else 0
+        except:
+            pass
+
+    # Card de inadimplência
+    _pv_ki1, _pv_ki2 = st.columns(2)
+    with _pv_ki1:
+        render_kpi_card(
+            "Índice de Inadimplência (R$)",
+            f"R$ {_pv_inad_vendedor:,.0f}",
+            icon="⚠️",
+            color="#EF4444" if _pv_inad_vendedor > 0 else "#28A745"
+        )
+    with _pv_ki2:
+        render_kpi_card(
+            "Inadimplência sobre Faturamento",
+            f"{_pv_perc_inad:.1f}%",
+            icon="📊",
+            color="#EF4444" if _pv_perc_inad > 5 else "#F4A261"
+        )
+
+    st.markdown("---")
+
+    # ── Tabs de análise ───────────────────────────────────────────────────────
+    _pv_tab1, _pv_tab2, _pv_tab3, _pv_tab4 = st.tabs([
+        "📊 Comparativo", "📈 Evolução Temporal", "🌐 Capilaridade", "🛒 Mix de Produtos"
+    ])
+
+    # ─── Tab 1: Comparativo de Vendedores ────────────────────────────────────
+    with _pv_tab1:
+        st.markdown("#### Comparativo de Desempenho por Vendedor")
+
+        _pv_comp = _pv_notas_v.groupby('Vendedor').agg(
+            FaturamentoBruto=('TotalProduto', 'sum'),
+            QtdNotas=('Numero_NF', 'count'),
+            ClientesAtendidos=('CPF_CNPJ', 'nunique'),
+        ).reset_index()
+
+        # Ticket médio por vendedor
+        _pv_comp['TicketMedio'] = _pv_comp['FaturamentoBruto'] / _pv_comp['ClientesAtendidos'].replace(0, 1)
+
+        # Volume por vendedor
+        if 'Quantidade' in _pv_vendas.columns:
+            _pv_vol_vend = _pv_vendas.groupby('Vendedor')['Quantidade'].sum().reset_index()
+            _pv_vol_vend.columns = ['Vendedor', 'VolumeTotal']
+            _pv_comp = _pv_comp.merge(_pv_vol_vend, on='Vendedor', how='left')
+        else:
+            _pv_comp['VolumeTotal'] = 0
+
+        # Comissão média por vendedor
+        if 'Comissao' in _pv_vendas.columns:
+            _mapa_com = {'4%': 4.0, '3%': 3.0, '2,5%': 2.5, '2%': 2.0}
+            _pv_vendas_c = _pv_vendas.copy()
+            _pv_vendas_c['ComissaoNum'] = _pv_vendas_c['Comissao'].map(_mapa_com)
+            _pv_com_vend = _pv_vendas_c.groupby('Vendedor')['ComissaoNum'].mean().reset_index()
+            _pv_com_vend.columns = ['Vendedor', 'ComissaoMedia']
+            _pv_comp = _pv_comp.merge(_pv_com_vend, on='Vendedor', how='left')
+        else:
+            _pv_comp['ComissaoMedia'] = None
+
+        # Prazo médio por vendedor
+        if 'PrazoHistorico' in _pv_vendas.columns:
+            def _prazo_med_vend(series):
+                prazos = []
+                for val in series.dropna():
+                    for p in str(val).split('/'):
+                        try:
+                            prazos.append(int(p))
+                        except:
+                            pass
+                return sum(prazos) / len(prazos) if prazos else 0
+            _pv_prazo_vend = _pv_vendas.groupby('Vendedor')['PrazoHistorico'].apply(_prazo_med_vend).reset_index()
+            _pv_prazo_vend.columns = ['Vendedor', 'PrazoMedio']
+            _pv_comp = _pv_comp.merge(_pv_prazo_vend, on='Vendedor', how='left')
+        else:
+            _pv_comp['PrazoMedio'] = 0
+
+        _pv_comp = _pv_comp.sort_values('FaturamentoBruto', ascending=False)
+
+        # Gráfico comparativo faturamento
+        _pv_cv1, _pv_cv2 = st.columns(2)
+        with _pv_cv1:
+            _fig_fat = px.bar(
+                _pv_comp.head(15),
+                x='Vendedor', y='FaturamentoBruto',
+                title='Faturamento Bruto por Vendedor',
+                labels={'FaturamentoBruto': 'R$', 'Vendedor': ''},
+                color='FaturamentoBruto',
+                color_continuous_scale=['#A8C4E8', '#1F4788']
+            )
+            _fig_fat = aplicar_layout_grafico(_fig_fat, height=340)
+            _fig_fat.update_traces(
+                hovertemplate='<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>'
+            )
+            st.plotly_chart(_fig_fat, use_container_width=True)
+
+        with _pv_cv2:
+            _fig_cli = px.bar(
+                _pv_comp.head(15),
+                x='Vendedor', y='ClientesAtendidos',
+                title='Clientes Atendidos por Vendedor',
+                labels={'ClientesAtendidos': 'Clientes', 'Vendedor': ''},
+                color='ClientesAtendidos',
+                color_continuous_scale=['#B8E0C8', '#28A745']
+            )
+            _fig_cli = aplicar_layout_grafico(_fig_cli, height=340)
+            _fig_cli.update_traces(
+                hovertemplate='<b>%{x}</b><br>%{y} clientes<extra></extra>'
+            )
+            st.plotly_chart(_fig_cli, use_container_width=True)
+
+        _pv_cv3, _pv_cv4 = st.columns(2)
+        with _pv_cv3:
+            _fig_ticket = px.bar(
+                _pv_comp.head(15),
+                x='Vendedor', y='TicketMedio',
+                title='Ticket Médio por Vendedor',
+                labels={'TicketMedio': 'R$', 'Vendedor': ''},
+                color='TicketMedio',
+                color_continuous_scale=['#F8D9B8', '#F4A261']
+            )
+            _fig_ticket = aplicar_layout_grafico(_fig_ticket, height=340)
+            _fig_ticket.update_traces(
+                hovertemplate='<b>%{x}</b><br>Ticket: R$ %{y:,.2f}<extra></extra>'
+            )
+            st.plotly_chart(_fig_ticket, use_container_width=True)
+
+        with _pv_cv4:
+            if _pv_comp['ComissaoMedia'].notna().any():
+                _fig_com = px.bar(
+                    _pv_comp[_pv_comp['ComissaoMedia'].notna()].head(15),
+                    x='Vendedor', y='ComissaoMedia',
+                    title='Comissão Média por Vendedor (%)',
+                    labels={'ComissaoMedia': 'Comissão (%)', 'Vendedor': ''},
+                    color='ComissaoMedia',
+                    color_continuous_scale=['#C5D5F0', '#163561']
+                )
+                _fig_com = aplicar_layout_grafico(_fig_com, height=340)
+                _fig_com.update_traces(
+                    hovertemplate='<b>%{x}</b><br>Comissão: %{y:.2f}%<extra></extra>'
+                )
+                st.plotly_chart(_fig_com, use_container_width=True)
+            else:
+                st.info("Dados de comissão não disponíveis. Verifique se a planilha de produtos está carregada.")
+
+        # Tabela consolidada
+        st.markdown("#### Tabela Consolidada de Performance")
+        _pv_comp_disp = _pv_comp.copy()
+        _pv_comp_disp['FaturamentoBruto'] = _pv_comp_disp['FaturamentoBruto'].apply(formatar_moeda)
+        _pv_comp_disp['TicketMedio']      = _pv_comp_disp['TicketMedio'].apply(formatar_moeda)
+        _pv_comp_disp['VolumeTotal']      = _pv_comp_disp['VolumeTotal'].apply(lambda x: f"{x:,.0f} un")
+        _pv_comp_disp['ComissaoMedia']    = _pv_comp_disp['ComissaoMedia'].apply(
+            lambda x: f"{x:.2f}%" if pd.notnull(x) else "N/D"
+        )
+        _pv_comp_disp['PrazoMedio']       = _pv_comp_disp['PrazoMedio'].apply(lambda x: f"{x:.0f} dias")
+        _pv_comp_disp.insert(0, 'Posição', range(1, len(_pv_comp_disp) + 1))
+        _pv_comp_disp = _pv_comp_disp.rename(columns={
+            'FaturamentoBruto': 'Faturamento',
+            'QtdNotas':         'Nº Notas',
+            'ClientesAtendidos':'Clientes',
+            'TicketMedio':      'Ticket Médio',
+            'VolumeTotal':      'Volume',
+            'ComissaoMedia':    'Comissão Média',
+            'PrazoMedio':       'Prazo Médio',
+        })
+        st.dataframe(_pv_comp_disp, use_container_width=True)
+
+        st.download_button(
+            "📥 Exportar Comparativo (Excel)",
+            to_excel(_pv_comp),
+            "performance_vendedores.xlsx",
+            "application/vnd.ms-excel",
+            key="pv_dl_comp"
+        )
+
+    # ─── Tab 2: Evolução Temporal ─────────────────────────────────────────────
+    with _pv_tab2:
+        st.markdown("#### Evolução de Vendas ao Longo do Tempo")
+
+        _pv_evol = _pv_notas_v.groupby(['MesAno', 'Vendedor'])['TotalProduto'].sum().reset_index()
+        _pv_evol = _pv_evol.sort_values('MesAno')
+
+        if _pv_vendedor != 'Todos':
+            # Exibir linha única do vendedor selecionado
+            _pv_evol_filt = _pv_evol[_pv_evol['Vendedor'] == _pv_vendedor]
+            if len(_pv_evol_filt) > 0:
+                _fig_evol = px.line(
+                    _pv_evol_filt, x='MesAno', y='TotalProduto',
+                    title=f'Evolução Mensal — {_pv_vendedor}',
+                    labels={'MesAno': 'Período', 'TotalProduto': 'R$'},
+                    markers=True
+                )
+                _fig_evol.update_traces(line_color='#1F4788', line_width=3, marker=dict(size=7, color='#1F4788'))
+                _fig_evol = aplicar_layout_grafico(_fig_evol, height=380)
+                st.plotly_chart(_fig_evol, use_container_width=True)
+            else:
+                st.info("Nenhuma venda encontrada para este vendedor no período.")
+        else:
+            # Multi-linha: top 8 vendedores
+            _top_vend = _pv_notas_v.groupby('Vendedor')['TotalProduto'].sum().nlargest(8).index.tolist()
+            _pv_evol_top = _pv_evol[_pv_evol['Vendedor'].isin(_top_vend)]
+            _fig_evol = px.line(
+                _pv_evol_top, x='MesAno', y='TotalProduto',
+                color='Vendedor',
+                title='Evolução Mensal — Top 8 Vendedores',
+                labels={'MesAno': 'Período', 'TotalProduto': 'R$', 'Vendedor': 'Vendedor'},
+                markers=True,
+                color_discrete_sequence=CORES_INST
+            )
+            _fig_evol.update_traces(line_width=2)
+            _fig_evol = aplicar_layout_grafico(_fig_evol, height=420)
+            st.plotly_chart(_fig_evol, use_container_width=True)
+
+        # Evolução do ticket médio
+        st.markdown("#### Evolução do Ticket Médio")
+        _pv_tick_evol = _pv_notas_v.groupby(['MesAno', 'Vendedor']).agg(
+            Fat=('TotalProduto', 'sum'),
+            Cli=('CPF_CNPJ', 'nunique')
+        ).reset_index()
+        _pv_tick_evol['TicketMedio'] = _pv_tick_evol['Fat'] / _pv_tick_evol['Cli'].replace(0, 1)
+        _pv_tick_evol = _pv_tick_evol.sort_values('MesAno')
+
+        if _pv_vendedor != 'Todos':
+            _pv_tick_filt = _pv_tick_evol[_pv_tick_evol['Vendedor'] == _pv_vendedor]
+            _fig_tick = px.area(
+                _pv_tick_filt, x='MesAno', y='TicketMedio',
+                title=f'Ticket Médio Mensal — {_pv_vendedor}',
+                labels={'MesAno': 'Período', 'TicketMedio': 'R$'},
+                color_discrete_sequence=['#2E86AB']
+            )
+        else:
+            _pv_tick_top = _pv_tick_evol[_pv_tick_evol['Vendedor'].isin(_top_vend[:5])]
+            _fig_tick = px.line(
+                _pv_tick_top, x='MesAno', y='TicketMedio',
+                color='Vendedor',
+                title='Ticket Médio Mensal — Top 5 Vendedores',
+                labels={'MesAno': 'Período', 'TicketMedio': 'R$'},
+                color_discrete_sequence=CORES_INST
+            )
+        _fig_tick = aplicar_layout_grafico(_fig_tick, height=340)
+        st.plotly_chart(_fig_tick, use_container_width=True)
+
+    # ─── Tab 3: Capilaridade ─────────────────────────────────────────────────
+    with _pv_tab3:
+        st.markdown("#### Análise de Capilaridade — Clientes Atendidos por Vendedor")
+
+        _pv_cap = _pv_vendas.groupby(['Vendedor', 'Estado'])['CPF_CNPJ'].nunique().reset_index()
+        _pv_cap.columns = ['Vendedor', 'Estado', 'Clientes']
+
+        if _pv_vendedor != 'Todos':
+            _pv_cap_filt = _pv_cap[_pv_cap['Vendedor'] == _pv_vendedor]
+            _fig_cap = px.bar(
+                _pv_cap_filt.sort_values('Clientes', ascending=False),
+                x='Estado', y='Clientes',
+                title=f'Clientes por Estado — {_pv_vendedor}',
+                labels={'Estado': 'Estado', 'Clientes': 'Nº de Clientes'},
+                color='Clientes',
+                color_continuous_scale=['#B8E0C8', '#1E7B34']
+            )
+            _fig_cap = aplicar_layout_grafico(_fig_cap, height=380)
+            st.plotly_chart(_fig_cap, use_container_width=True)
+
+            # Mapa de calor vendedor × estado
+            st.markdown("#### Heatmap de Faturamento por Estado")
+            _pv_heat_v = _pv_notas_v[_pv_notas_v['Vendedor'] == _pv_vendedor].groupby('Estado')['TotalProduto'].sum().reset_index()
+            _fig_heat = px.bar(
+                _pv_heat_v.sort_values('TotalProduto', ascending=True).tail(15),
+                x='TotalProduto', y='Estado', orientation='h',
+                title=f'Faturamento por Estado — {_pv_vendedor}',
+                labels={'TotalProduto': 'R$', 'Estado': ''},
+                color='TotalProduto',
+                color_continuous_scale=['#C5D5F0', '#1F4788']
+            )
+            _fig_heat = aplicar_layout_grafico(_fig_heat, height=380)
+            st.plotly_chart(_fig_heat, use_container_width=True)
+
+        else:
+            # Heatmap vendedor × estado
+            _pv_heat = _pv_vendas.groupby(['Vendedor', 'Estado'])['CPF_CNPJ'].nunique().reset_index()
+            _pv_heat_pivot = _pv_heat.pivot(index='Vendedor', columns='Estado', values='CPF_CNPJ').fillna(0)
+
+            _fig_heat = go.Figure(data=go.Heatmap(
+                z=_pv_heat_pivot.values,
+                x=_pv_heat_pivot.columns.tolist(),
+                y=_pv_heat_pivot.index.tolist(),
+                colorscale=[[0, '#FFFFFF'], [0.5, '#A8C4E8'], [1, '#1F4788']],
+                hovertemplate='Vendedor: %{y}<br>Estado: %{x}<br>Clientes: %{z}<extra></extra>'
+            ))
+            _fig_heat.update_layout(
+                title='Capilaridade — Clientes por Vendedor × Estado',
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(family='Inter, Segoe UI, sans-serif', size=11),
+                margin=dict(l=10, r=10, t=40, b=10),
+                height=480
+            )
+            st.plotly_chart(_fig_heat, use_container_width=True)
+
+            # Bubble chart: faturamento vs clientes
+            _pv_bubble = _pv_notas_v.groupby('Vendedor').agg(
+                Fat=('TotalProduto', 'sum'),
+                Cli=('CPF_CNPJ', 'nunique'),
+                Notas=('Numero_NF', 'count')
+            ).reset_index()
+            _fig_bub = px.scatter(
+                _pv_bubble,
+                x='Cli', y='Fat',
+                size='Notas', color='Vendedor',
+                hover_name='Vendedor',
+                title='Faturamento × Clientes Atendidos (tamanho = Qtd Notas)',
+                labels={'Cli': 'Clientes Atendidos', 'Fat': 'Faturamento (R$)'},
+                color_discrete_sequence=CORES_INST
+            )
+            _fig_bub = aplicar_layout_grafico(_fig_bub, height=420)
+            st.plotly_chart(_fig_bub, use_container_width=True)
+
+    # ─── Tab 4: Mix de Produtos ───────────────────────────────────────────────
+    with _pv_tab4:
+        st.markdown("#### Concentração de Vendas por Produto")
+
+        _pv_mix = _pv_vendas.groupby('NomeProduto').agg(
+            Total=('TotalProduto', 'sum'),
+            Volume=('Quantidade', 'sum') if 'Quantidade' in _pv_vendas.columns else ('TotalProduto', 'count'),
+            Clientes=('CPF_CNPJ', 'nunique')
+        ).reset_index().sort_values('Total', ascending=False)
+
+        _pv_tot_mix = _pv_mix['Total'].sum()
+        _pv_mix['Participacao'] = (_pv_mix['Total'] / _pv_tot_mix * 100).round(2)
+        _pv_mix['CumulativaPerc'] = _pv_mix['Participacao'].cumsum()
+
+        # Top 15 pizza
+        _pv_top15 = _pv_mix.head(15)
+        _fig_pie = px.pie(
+            _pv_top15, names='NomeProduto', values='Total',
+            title='Top 15 Produtos por Faturamento',
+            color_discrete_sequence=CORES_INST,
+            hole=0.45
+        )
+        _fig_pie.update_traces(textposition='inside', textinfo='percent+label',
+                               hovertemplate='<b>%{label}</b><br>R$ %{value:,.2f}<br>%{percent}<extra></extra>')
+        _fig_pie.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(family='Inter, Segoe UI, sans-serif', size=11),
+            margin=dict(l=10, r=10, t=40, b=10),
+            height=420,
+            showlegend=False
+        )
+        st.plotly_chart(_fig_pie, use_container_width=True)
+
+        # Curva ABC
+        st.markdown("#### Curva ABC de Produtos")
+        _fig_abc = go.Figure()
+        _fig_abc.add_trace(go.Bar(
+            x=_pv_top15['NomeProduto'], y=_pv_top15['Total'],
+            name='Faturamento', marker_color='#1F4788',
+            hovertemplate='<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>'
+        ))
+        _fig_abc.add_trace(go.Scatter(
+            x=_pv_top15['NomeProduto'], y=_pv_top15['CumulativaPerc'].head(15),
+            name='% Acumulado', yaxis='y2',
+            line=dict(color='#EF4444', width=2, dash='dash'),
+            marker=dict(size=5, color='#EF4444'),
+            hovertemplate='%{x}<br>Acumulado: %{y:.1f}%<extra></extra>'
+        ))
+        _fig_abc.update_layout(
+            title='Curva ABC — Top 15 Produtos',
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(family='Inter, Segoe UI, sans-serif', size=11),
+            margin=dict(l=10, r=10, t=40, b=10),
+            height=380,
+            yaxis=dict(title='Faturamento (R$)', showgrid=True, gridcolor='#F0F0F0'),
+            yaxis2=dict(title='% Acumulado', overlaying='y', side='right', range=[0, 110]),
+            legend=dict(orientation='h', y=1.08),
+            hoverlabel=dict(bgcolor='#1F4788', font_color='white')
+        )
+        st.plotly_chart(_fig_abc, use_container_width=True)
+
+        # Tabela de mix
+        _pv_mix_disp = _pv_mix.copy()
+        _pv_mix_disp['Total']        = _pv_mix_disp['Total'].apply(formatar_moeda)
+        _pv_mix_disp['Participacao'] = _pv_mix_disp['Participacao'].apply(lambda x: f"{x:.2f}%")
+        _pv_mix_disp['CumulativaPerc'] = _pv_mix_disp['CumulativaPerc'].apply(lambda x: f"{x:.2f}%")
+        _pv_mix_disp = _pv_mix_disp.rename(columns={
+            'NomeProduto':    'Produto',
+            'Total':          'Faturamento',
+            'Participacao':   '% Part.',
+            'CumulativaPerc': '% Acum.',
+            'Clientes':       'Clientes'
+        })
+        st.dataframe(_pv_mix_disp, use_container_width=True)
+
+        st.download_button(
+            "📥 Exportar Mix de Produtos (Excel)",
+            to_excel(_pv_mix),
+            "mix_produtos.xlsx",
+            "application/vnd.ms-excel",
+            key="pv_dl_mix"
+        )
+
+    # ── Geração de PDF ────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📄 Exportar Relatório PDF")
+    st.markdown('<p style="color:#6C757D;font-size:0.84rem;">Gera um relatório executivo em PDF com base nos filtros aplicados.</p>', unsafe_allow_html=True)
+
+    if st.button("🖨️ Gerar Relatório PDF", type="primary", key="pv_gerar_pdf"):
+        try:
+            from fpdf import FPDF
+            import math
+
+            class PerformancePDF(FPDF):
+                def header(self):
+                    # Logo
+                    try:
+                        import tempfile, os
+                        _resp_logo = requests.get("https://i.imgur.com/gt3rgyL.png", timeout=8)
+                        if _resp_logo.status_code == 200:
+                            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as _ftmp:
+                                _ftmp.write(_resp_logo.content)
+                                _tmp_path = _ftmp.name
+                            self.image(_tmp_path, x=10, y=8, w=28)
+                            os.unlink(_tmp_path)
+                    except Exception:
+                        pass
+                    self.set_xy(42, 10)
+                    self.set_font('Helvetica', 'B', 13)
+                    self.set_text_color(31, 71, 136)
+                    self.cell(0, 6, 'MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES', ln=True)
+                    self.set_xy(42, 17)
+                    self.set_font('Helvetica', '', 8)
+                    self.set_text_color(108, 117, 125)
+                    self.cell(0, 5, 'CNPJ: 40.357.820/0001-50  |  Dashboard Comercial BI 2.0', ln=True)
+                    self.ln(4)
+                    self.set_draw_color(31, 71, 136)
+                    self.set_line_width(0.8)
+                    self.line(10, self.get_y(), 200, self.get_y())
+                    self.ln(3)
+
+                def footer(self):
+                    self.set_y(-14)
+                    self.set_font('Helvetica', 'I', 7)
+                    self.set_text_color(173, 181, 189)
+                    self.cell(0, 5, f'Performance de Vendedores  ·  Gerado em {_pv_now.strftime("%d/%m/%Y %H:%M")}  ·  Pág. {self.page_no()}', align='C')
+
+            pdf = PerformancePDF()
+            pdf.set_auto_page_break(auto=True, margin=18)
+            pdf.add_page()
+            pdf.set_margins(12, 12, 12)
+
+            # ── Título do relatório ───────────────────────────────────────
+            pdf.set_font('Helvetica', 'B', 16)
+            pdf.set_text_color(31, 71, 136)
+            pdf.cell(0, 10, 'RELATÓRIO DE PERFORMANCE DE VENDEDORES', ln=True, align='C')
+            pdf.set_font('Helvetica', '', 9)
+            pdf.set_text_color(108, 117, 125)
+            _pv_label_periodo = f"Período: {_pv_periodo}"
+            if _pv_data_ini and _pv_periodo == "Personalizado":
+                _pv_label_periodo = f"Período: {_pv_data_ini.strftime('%d/%m/%Y') if hasattr(_pv_data_ini,'strftime') else str(_pv_data_ini)} a {_pv_data_fim.strftime('%d/%m/%Y') if _pv_data_fim and hasattr(_pv_data_fim,'strftime') else '—'}"
+            pdf.cell(0, 6, f"Vendedor: {_pv_vendedor}  |  Região: {_pv_regiao}  |  {_pv_label_periodo}", ln=True, align='C')
+            pdf.ln(5)
+
+            # ── Resumo Executivo ──────────────────────────────────────────
+            pdf.set_fill_color(31, 71, 136)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 9)
+            pdf.cell(0, 7, '  RESUMO EXECUTIVO', fill=True, border=0, ln=True)
+            pdf.set_text_color(50, 50, 50)
+            pdf.set_font('Helvetica', '', 8)
+
+            _pv_kpis_pdf = [
+                ('Faturamento Líquido',       f"R$ {_pv_fat_liq:,.2f}"),
+                ('Faturamento Bruto',          f"R$ {_pv_fat_bruto:,.2f}"),
+                ('Devoluções',                 f"R$ {_pv_fat_devol:,.2f}"),
+                ('Clientes Positivados',       f"{_pv_clientes:,}"),
+                ('Ticket Médio',               f"R$ {_pv_ticket:,.2f}"),
+                ('Volume Vendido',             f"{_pv_vol_total:,.0f} un"),
+                ('Prazo Médio de Venda',       f"{_pv_prazo:.0f} dias"),
+                ('Comissão Média',             _pv_comissao),
+                ('Índice de Inadimplência',    f"R$ {_pv_inad_vendedor:,.2f}"),
+                ('Inadimplência / Fat. Bruto', f"{_pv_perc_inad:.1f}%"),
+            ]
+            w1, w2 = 85, 95
+            fill_kpi = False
+            for k, v in _pv_kpis_pdf:
+                pdf.set_fill_color(240, 244, 255) if fill_kpi else pdf.set_fill_color(255, 255, 255)
+                pdf.set_font('Helvetica', 'B', 8)
+                pdf.cell(w1, 6, f'  {k}:', border='LB', fill=True)
+                pdf.set_font('Helvetica', '', 8)
+                pdf.cell(w2, 6, f'  {v}', border='RB', fill=True, ln=True)
+                fill_kpi = not fill_kpi
+            pdf.ln(6)
+
+            # ── Tabela Comparativa de Vendedores ─────────────────────────
+            pdf.set_fill_color(31, 71, 136)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 9)
+            pdf.cell(0, 7, '  COMPARATIVO DE VENDEDORES', fill=True, border=0, ln=True)
+
+            _pv_cols_pdf    = ['Vendedor', 'Faturamento (R$)', 'Clientes', 'Ticket Médio', 'Vol.', 'Prazo (d)', 'Comissão']
+            _pv_widths_pdf  = [50, 32, 16, 28, 15, 20, 22]
+
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 7)
+            for col, w in zip(_pv_cols_pdf, _pv_widths_pdf):
+                pdf.cell(w, 7, col, border=1, fill=True, align='C')
+            pdf.ln()
+
+            _pv_comp_sorted = _pv_comp.sort_values('FaturamentoBruto', ascending=False).head(20)
+            fill_row_pdf = False
+            for _, row in _pv_comp_sorted.iterrows():
+                pdf.set_fill_color(240, 244, 255) if fill_row_pdf else pdf.set_fill_color(255, 255, 255)
+                pdf.set_text_color(50, 50, 50)
+                pdf.set_font('Helvetica', '', 7)
+                _vend_str = str(row['Vendedor'])[:22]
+                _fat_str  = f"R$ {row['FaturamentoBruto']:,.2f}"
+                _cli_str  = str(int(row['ClientesAtendidos']))
+                _tick_str = f"R$ {row['TicketMedio']:,.2f}"
+                _vol_str  = f"{row.get('VolumeTotal', 0):,.0f}"
+                _prz_str  = f"{row.get('PrazoMedio', 0):.0f}"
+                _com_str  = f"{row['ComissaoMedia']:.2f}%" if pd.notnull(row.get('ComissaoMedia')) else "N/D"
+                _row_vals = [_vend_str, _fat_str, _cli_str, _tick_str, _vol_str, _prz_str, _com_str]
+                _aligns   = ['L', 'R', 'C', 'R', 'C', 'C', 'C']
+                for val, w, align in zip(_row_vals, _pv_widths_pdf, _aligns):
+                    pdf.cell(w, 6, val, border=1, fill=True, align=align)
+                pdf.ln()
+                fill_row_pdf = not fill_row_pdf
+            pdf.ln(6)
+
+            # ── Top Produtos ──────────────────────────────────────────────
+            pdf.set_fill_color(31, 71, 136)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 9)
+            pdf.cell(0, 7, '  MIX DE PRODUTOS — TOP 15', fill=True, border=0, ln=True)
+
+            _pv_mix_pdf_cols = ['Produto', 'Faturamento (R$)', '% Part.', '% Acum.', 'Clientes']
+            _pv_mix_pdf_w    = [70, 32, 18, 18, 18]
+            pdf.set_font('Helvetica', 'B', 7)
+            for col, w in zip(_pv_mix_pdf_cols, _pv_mix_pdf_w):
+                pdf.cell(w, 7, col, border=1, fill=True, align='C')
+            pdf.ln()
+
+            fill_mix = False
+            for _, row in _pv_mix.head(15).iterrows():
+                pdf.set_fill_color(240, 244, 255) if fill_mix else pdf.set_fill_color(255, 255, 255)
+                pdf.set_text_color(50, 50, 50)
+                pdf.set_font('Helvetica', '', 7)
+                _prod_str = str(row['NomeProduto'])[:38]
+                _fat_str  = f"R$ {row['Total']:,.2f}"
+                _part_str = f"{row['Participacao']:.2f}%"
+                _acum_str = f"{row['CumulativaPerc']:.2f}%"
+                _cli_str  = str(int(row['Clientes']))
+                _mix_vals = [_prod_str, _fat_str, _part_str, _acum_str, _cli_str]
+                _mix_al   = ['L', 'R', 'C', 'C', 'C']
+                for val, w, al in zip(_mix_vals, _pv_mix_pdf_w, _mix_al):
+                    pdf.cell(w, 6, val, border=1, fill=True, align=al)
+                pdf.ln()
+                fill_mix = not fill_mix
+            pdf.ln(6)
+
+            # ── Inadimplência resumida ────────────────────────────────────
+            if _pv_df_inad is not None and _pv_inad_vendedor > 0:
+                pdf.set_fill_color(239, 68, 68)
+                pdf.set_text_color(255, 255, 255)
+                pdf.set_font('Helvetica', 'B', 9)
+                pdf.cell(0, 7, '  INADIMPLÊNCIA', fill=True, border=0, ln=True)
+                pdf.set_text_color(50, 50, 50)
+                pdf.set_font('Helvetica', '', 8)
+                pdf.set_fill_color(255, 240, 240)
+                pdf.cell(95, 6, f'  Valor em Aberto: R$ {_pv_inad_vendedor:,.2f}', border='LB', fill=True)
+                pdf.cell(90, 6, f'  % sobre Fat. Bruto: {_pv_perc_inad:.1f}%', border='RB', fill=True, ln=True)
+                pdf.ln(4)
+
+            # ── Rodapé do relatório ───────────────────────────────────────
+            pdf.set_font('Helvetica', 'I', 7)
+            pdf.set_text_color(173, 181, 189)
+            pdf.multi_cell(0, 5,
+                'Este relatório é gerado automaticamente com base nos dados filtrados do sistema BI Medtextil. '
+                'As informações refletem o período e os filtros selecionados no momento da geração.')
+
+            _pv_pdf_bytes = pdf.output()
+            st.download_button(
+                label="⬇️ Baixar PDF",
+                data=bytes(_pv_pdf_bytes),
+                file_name=f"performance_vendedores_{_pv_now.strftime('%Y%m%d_%H%M')}.pdf",
+                mime="application/pdf",
+                key="pv_dl_pdf_btn"
+            )
+            st.success("✅ PDF gerado com sucesso! Clique em 'Baixar PDF' para salvar.")
+
+        except ImportError:
+            # Fallback ReportLab
+            try:
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib import colors
+                from reportlab.lib.units import mm
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+                _pv_buf = io.BytesIO()
+                _pv_doc = SimpleDocTemplate(_pv_buf, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=20*mm, bottomMargin=15*mm)
+                _pv_styles = getSampleStyleSheet()
+                _azul = colors.HexColor('#1F4788')
+                _elements_rl = []
+
+                _st_titulo = ParagraphStyle('T', parent=_pv_styles['Heading1'], fontSize=14, textColor=_azul, alignment=TA_CENTER)
+                _st_normal = ParagraphStyle('N', parent=_pv_styles['Normal'], fontSize=8)
+
+                _elements_rl.append(Paragraph('RELATÓRIO DE PERFORMANCE DE VENDEDORES', _st_titulo))
+                _elements_rl.append(Paragraph(f"Vendedor: {_pv_vendedor}  |  Região: {_pv_regiao}  |  Período: {_pv_periodo}", _st_normal))
+                _elements_rl.append(Spacer(1, 5*mm))
+
+                # KPI Table
+                _kpi_data = [['Indicador', 'Valor']]
+                for k, v in _pv_kpis_pdf:
+                    _kpi_data.append([k, v])
+                _kpi_table = Table(_kpi_data, colWidths=[100*mm, 80*mm])
+                _kpi_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0),(-1,0), _azul),
+                    ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+                    ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0,0),(-1,-1), 8),
+                    ('ROWBACKGROUNDS', (0,1),(-1,-1), [colors.white, colors.HexColor('#F0F4FF')]),
+                    ('BOX', (0,0),(-1,-1), 0.5, colors.grey),
+                    ('INNERGRID', (0,0),(-1,-1), 0.3, colors.lightgrey),
+                    ('LEFTPADDING', (0,0),(-1,-1), 5),
+                ]))
+                _elements_rl.append(_kpi_table)
+                _pv_doc.build(_elements_rl)
+                _pv_buf.seek(0)
+
+                st.download_button(
+                    "⬇️ Baixar PDF",
+                    data=_pv_buf.getvalue(),
+                    file_name=f"performance_vendedores_{_pv_now.strftime('%Y%m%d_%H%M')}.pdf",
+                    mime="application/pdf",
+                    key="pv_dl_pdf_rl"
+                )
+                st.success("✅ PDF gerado com sucesso!")
+            except Exception as _e_rl:
+                st.error(f"❌ Erro ao gerar PDF: {_e_rl}")
+        except Exception as _e_pdf:
+            st.error(f"❌ Erro ao gerar PDF: {_e_pdf}")
+            st.info("💡 Verifique se a biblioteca fpdf2 está instalada: pip install fpdf2")
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
