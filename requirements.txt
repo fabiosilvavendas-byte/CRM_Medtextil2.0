@@ -10,3 +10,4 @@ Pillow
 streamlit-card
 fpdf
 kaleido
+fpdf2
