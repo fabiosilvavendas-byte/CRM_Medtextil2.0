@@ -2272,6 +2272,73 @@ if menu not in modulos_permitidos:
     </div>""", unsafe_allow_html=True)
     st.stop()
 # ====================== DASHBOARD ======================
+# ====================== PEDIDOS PENDENTES ======================
+# ── Helpers para base complementar (previsão/obs) no GitHub ──────────────
+def _gh_api(method, path, token, payload=None):
+    """Requisição autenticada à API do GitHub."""
+    import json as _json
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
+    if method == "GET":
+        r = requests.get(url, headers=headers, timeout=10)
+    else:
+        r = requests.put(url, headers=headers, data=_json.dumps(payload), timeout=15)
+    return r
+
+def _carregar_complementar(token):
+    """Lê pedidos_complementar.json do GitHub. Retorna dict {num_pedido: {previsao, obs}}."""
+    import json as _json, base64 as _b64
+    path = f"{GITHUB_FOLDER}/pedidos_complementar.json"
+    try:
+        if not token:
+            return {}, None
+        r = _gh_api("GET", path, token)
+        if r.status_code == 200:
+            data = r.json()
+            content = _b64.b64decode(data["content"]).decode("utf-8")
+            return _json.loads(content), data["sha"]
+        return {}, None
+    except:
+        return {}, None
+
+def _salvar_complementar(token, complementar, sha):
+    """Salva/atualiza pedidos_complementar.json no GitHub."""
+    import json as _json, base64 as _b64
+    path = f"{GITHUB_FOLDER}/pedidos_complementar.json"
+    try:
+        if not token:
+            return False, "Token GitHub não configurado"
+        content_b64 = _b64.b64encode(_json.dumps(complementar, ensure_ascii=False, indent=2).encode()).decode()
+        payload = {"message": "Atualiza complementar pedidos pendentes", "content": content_b64}
+        if sha:
+            payload["sha"] = sha
+        r = _gh_api("PUT", path, token, payload)
+        return r.status_code in (200, 201), r.json().get("message", "")
+    except Exception as e:
+        return False, str(e)
+
+def _buscar_gramatura(codigo_produto, df_prod):
+    """Busca gramatura na tabela de produtos (igual ao módulo consulta tabela)."""
+    if df_prod is None or codigo_produto is None:
+        return ""
+    cols = df_prod.columns.tolist()
+    gram_col = next((c for c in cols if "GRAMATUR" in c), None)
+    cod_col  = next((c for c in cols if any(x in c for x in ["ID_COD", "CODIGO", "COD"])), None)
+    if not gram_col or not cod_col:
+        return ""
+    try:
+        def _norm(v):
+            try: return str(int(float(str(v).strip())))
+            except: return str(v).strip()
+        cod_n = _norm(codigo_produto)
+        match = df_prod[df_prod[cod_col].apply(_norm) == cod_n]
+        if len(match) == 0:
+            return ""
+        gv = str(match.iloc[0].get(gram_col, "")).strip()
+        return "" if gv.lower() in ("nan", "0", "0.0", "") else gv
+    except:
+        return ""
+
 if menu == "Dashboard":
     # KPIs principais com cards customizados
     col1, col2, col3, col4 = st.columns(4)
@@ -3926,7 +3993,6 @@ elif menu == "Preço Médio":
         key="download_preco_medio"
     )
 
-# ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
     
@@ -4041,8 +4107,24 @@ elif menu == "Pedidos Pendentes":
             if len(df_pendentes) == 0:
                 st.warning("⚠️ Nenhum pedido pendente encontrado na planilha")
                 st.stop()
-            
-            
+
+            # ── Carregar gramatura ────────────────────────────────────────
+            _df_prod_gram = None
+            if planilhas_disponiveis.get("produtos_agrupados"):
+                _df_prod_gram = carregar_planilha_github(planilhas_disponiveis["produtos_agrupados"]["url"])
+                if _df_prod_gram is not None:
+                    _df_prod_gram.columns = _df_prod_gram.columns.str.upper().str.strip()
+            df_pendentes["Gramatura"] = df_pendentes["CodigoProduto"].apply(lambda c: _buscar_gramatura(c, _df_prod_gram))
+
+            # ── Mesclar base complementar (previsão/obs) ──────────────────
+            _token = (st.secrets.get("GITHUB_TOKEN", "") if hasattr(st, "secrets") else (GITHUB_TOKEN or ""))
+            _complementar, _comp_sha = _carregar_complementar(_token)
+            if "pend_complementar" not in st.session_state or _comp_sha != st.session_state.get("pend_comp_sha"):
+                st.session_state["pend_complementar"] = _complementar
+                st.session_state["pend_comp_sha"]    = _comp_sha
+            df_pendentes["Previsao"]   = df_pendentes["NumeroPedido"].apply(lambda n: st.session_state["pend_complementar"].get(str(n), {}).get("previsao", ""))
+            df_pendentes["Observacoes"] = df_pendentes["NumeroPedido"].apply(lambda n: st.session_state["pend_complementar"].get(str(n), {}).get("obs", ""))
+
         except Exception as e:
             st.error(f"❌ Erro ao processar planilha: {str(e)}")
             st.stop()
@@ -4147,44 +4229,61 @@ elif menu == "Pedidos Pendentes":
     # Tabela detalhada
     st.subheader("📋 Detalhamento de Pedidos Pendentes")
     
-    # Preparar dados para exibição
+    # Preparar dados para exibição (inclui Gramatura + colunas manuais)
     df_pend_display = df_pend_filtrado[[
-        'Cliente', 'NumeroPedido', 'CodigoProduto', 'Descricao', 
+        'Cliente', 'NumeroPedido', 'CodigoProduto', 'Gramatura', 'Descricao',
         'QtdContratada', 'QtdEntregue', 'QtdPendente',
-        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor'
+        'ValorUnit', 'ValorPendente', 'PercEntregue', 'DataEmissao', 'Vendedor',
+        'Previsao', 'Observacoes'
     ]].copy()
-    
-    # Formatar valores
-    df_pend_display['ValorUnit'] = df_pend_display['ValorUnit'].apply(
-        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
-    )
-    df_pend_display['ValorPendente'] = df_pend_display['ValorPendente'].apply(
-        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
-    )
-    df_pend_display['DataEmissao'] = df_pend_display['DataEmissao'].apply(
-        lambda x: x.strftime('%d/%m/%Y') if pd.notnull(x) else ''
-    )
-    df_pend_display['PercEntregue'] = df_pend_display['PercEntregue'].apply(
-        lambda x: f"{x:.1f}%" if pd.notnull(x) else "0%"
-    )
-    
-    # Renomear colunas
+    df_pend_display['ValorUnit']     = df_pend_display['ValorUnit'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+    df_pend_display['ValorPendente'] = df_pend_display['ValorPendente'].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
+    df_pend_display['DataEmissao']   = df_pend_display['DataEmissao'].apply(lambda x: x.strftime('%d/%m/%Y') if pd.notnull(x) else '')
+    df_pend_display['PercEntregue']  = df_pend_display['PercEntregue'].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else "0%")
     df_pend_display = df_pend_display.rename(columns={
-        'Cliente': 'Cliente',
-        'NumeroPedido': 'N° Pedido',
-        'CodigoProduto': 'Código',
-        'Descricao': 'Descrição',
-        'QtdContratada': 'Qtd Contratada',
-        'QtdEntregue': 'Qtd Entregue',
-        'QtdPendente': 'Qtd Pendente',
-        'ValorUnit': 'Valor Unit.',
-        'ValorPendente': 'Valor Pendente',
-        'PercEntregue': '% Entregue',
-        'DataEmissao': 'Data Emissão',
-        'Vendedor': 'Vendedor'
+        'NumeroPedido': 'N° Pedido', 'CodigoProduto': 'Código', 'Gramatura': 'Gramatura',
+        'Descricao': 'Descrição', 'QtdContratada': 'Qtd Contratada', 'QtdEntregue': 'Qtd Entregue',
+        'QtdPendente': 'Qtd Pendente', 'ValorUnit': 'Valor Unit.', 'ValorPendente': 'Valor Pendente',
+        'PercEntregue': '% Entregue', 'DataEmissao': 'Data Emissão',
+        'Previsao': 'Previsão', 'Observacoes': 'Observações'
     })
-    
     st.dataframe(df_pend_display, use_container_width=True, height=400)
+
+    # ── Edição de informações manuais (Previsão / Observações) ───────────
+    st.markdown("---")
+    _token_edit = (st.secrets.get("GITHUB_TOKEN", "") if hasattr(st, "secrets") else (GITHUB_TOKEN or ""))
+    _tem_token  = bool(_token_edit)
+    with st.expander("✏️ Editar Previsão e Observações por Pedido" + ("" if _tem_token else " ⚠️ Token não configurado"), expanded=False):
+        if not _tem_token:
+            st.warning("Configure GITHUB_TOKEN em st.secrets ou na variável GITHUB_TOKEN para salvar dados manuais.")
+        else:
+            # Selecionar pedido a editar
+            _pedidos_unicos = sorted(df_pend_filtrado['NumeroPedido'].dropna().unique().tolist())
+            _ped_sel = st.selectbox("Número do Pedido", _pedidos_unicos, key="pend_edit_ped")
+            _comp_now = st.session_state["pend_complementar"]
+            _prev_atual = _comp_now.get(str(_ped_sel), {}).get("previsao", "")
+            _obs_atual  = _comp_now.get(str(_ped_sel), {}).get("obs", "")
+
+            _col_p, _col_o = st.columns(2)
+            with _col_p:
+                _nova_prev = st.text_input("Previsão de Faturamento", value=_prev_atual, key="pend_nova_prev",
+                                           placeholder="ex: 25/05/2025")
+            with _col_o:
+                _nova_obs  = st.text_area("Observações", value=_obs_atual, key="pend_nova_obs", height=80)
+
+            if st.button("💾 Salvar", key="pend_salvar_comp"):
+                _comp_upd = dict(st.session_state["pend_complementar"])
+                _comp_upd[str(_ped_sel)] = {"previsao": _nova_prev.strip(), "obs": _nova_obs.strip()}
+                _ok, _msg = _salvar_complementar(_token_edit, _comp_upd, st.session_state.get("pend_comp_sha"))
+                if _ok:
+                    st.session_state["pend_complementar"] = _comp_upd
+                    # Atualizar sha após salvar
+                    _, _novo_sha = _carregar_complementar(_token_edit)
+                    st.session_state["pend_comp_sha"] = _novo_sha
+                    st.success(f"✅ Previsão/Observações do pedido {_ped_sel} salvas!")
+                    st.rerun()
+                else:
+                    st.error(f"❌ Erro ao salvar: {_msg}")
     
     # Botão de download — nome do arquivo reflete o vendedor filtrado
     _nome_arquivo_pend = (
@@ -4481,7 +4580,7 @@ elif menu == "Pedidos Pendentes":
                             pass
 
                 COLUNAS = [
-                    'Cliente', 'Código', 'Volumes (cx)', 'Descrição',
+                    'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
                     'Contratado', 'Entregue', 'Pendente',
                     'Valor Unitário', 'Valor Pendente',
                     'Data Emissão', 'Dias Pendentes', 'Vendedor',
@@ -4531,9 +4630,17 @@ elif menu == "Pedidos Pendentes":
                     except:
                         pass
 
+                    # Previsão/Obs da base complementar
+                    _num_ped = str(row.get('NumeroPedido', ''))
+                    _comp_row = st.session_state.get('pend_complementar', {}).get(_num_ped, {})
+                    _prev_row = _comp_row.get('previsao', '') or row.get('Previsao', '')
+                    _obs_row  = _comp_row.get('obs', '')    or row.get('Observacoes', '')
+
                     abas_data[aba].append([
+                        _num_ped,
                         row.get('Cliente', ''),
                         cod,
+                        row.get('Gramatura', ''),
                         volumes_cx,
                         desc_pura,
                         qtd_cont,
@@ -4545,9 +4652,9 @@ elif menu == "Pedidos Pendentes":
                         dias_pend,
                         row.get('Vendedor', ''),
                         f"{perc_ent:.1f}%",
-                        '',            # Previsão — branco
+                        _prev_row,
                         categoria,
-                        '',            # Observações — branco
+                        _obs_row,
                     ])
 
                 # Criar workbook
@@ -4592,14 +4699,14 @@ elif menu == "Pedidos Pendentes":
                             if fill.fill_type:
                                 cell.fill = fill
                             # Formatar moeda
-                            if col_idx in (8, 9):
+                            if col_idx in (10, 11):
                                 cell.number_format = 'R$ #,##0.00'
                             # Formatar números inteiros
-                            if col_idx in (5, 6, 7):
+                            if col_idx in (7, 8, 9):
                                 cell.number_format = '#,##0'
 
                     # Larguras de coluna
-                    larguras = [30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
                     for i, larg in enumerate(larguras, 1):
                         ws.column_dimensions[get_column_letter(i)].width = larg
 
