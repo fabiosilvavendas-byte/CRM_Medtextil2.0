@@ -4726,18 +4726,30 @@ elif menu == "Pedidos Pendentes":
                     if _i_obs  is None and ('OBSERV' in _hu or _hu == 'OBS'):
                         _i_obs = _i
 
-                # diagnóstico: mostrar cabeçalho e índices encontrados
-                st.caption(f"📋 Aba '{_ws_ant.title}' — cabeçalho: {_hdr} | i_num={_i_num} i_prev={_i_prev} i_obs={_i_obs}")
+                # detectar também coluna Código e Cliente para chave composta (fallback)
+                _i_cod = _i_cli = None
+                for _i, _h in enumerate(_hdr):
+                    _hu = _h.upper()
+                    if _i_cod is None and any(x in _hu for x in ['CÓDIGO','CODIGO']) and 'N°' not in _hu:
+                        _i_cod = _i
+                    if _i_cli is None and 'CLIENTE' in _hu:
+                        _i_cli = _i
 
-                if _i_num is None:
-                    st.warning(f"⚠️ Aba '{_ws_ant.title}': coluna N° Pedido não encontrada — pulando")
+                # se não tem N° Pedido E não tem nenhuma coluna útil, pular
+                if _i_num is None and _i_cod is None:
                     continue
 
                 for _row in _all_rows[1:]:
-                    # chave: número do pedido como string limpa
-                    _raw_num = _row[_i_num] if _i_num < len(_row) else None
-                    _k = str(_raw_num).strip() if _raw_num not in (None, '', 'None') else ''
-                    if not _k or _k.upper() == 'TOTAL':
+                    # chave primária: N° Pedido; fallback: Código|Cliente
+                    if _i_num is not None:
+                        _raw_num = _row[_i_num] if _i_num < len(_row) else None
+                        _k = str(_raw_num).strip() if _raw_num not in (None, '', 'None') else ''
+                    else:
+                        _cod_v = str(_row[_i_cod]).strip() if _i_cod < len(_row) and _row[_i_cod] not in (None,'','None') else ''
+                        _cli_v = str(_row[_i_cli]).strip() if _i_cli is not None and _i_cli < len(_row) and _row[_i_cli] not in (None,'','None') else ''
+                        _k = f"{_cod_v}|{_cli_v}" if _cod_v else ''
+
+                    if not _k or _k.upper().startswith('TOTAL'):
                         continue
 
                     _prev_v = ''
@@ -4865,20 +4877,30 @@ elif menu == "Pedidos Pendentes":
 
                     # extrair N° Pedido desta linha
                     _num = ''
-                    if _si_num < len(_rv) and _rv[_si_num] not in (None, '', 'None'):
+                    if _si_num is not None and _si_num < len(_rv) and _rv[_si_num] not in (None, '', 'None'):
                         _num = str(_rv[_si_num]).strip()
 
                     # extrair código para gramatura
                     _gram_val = ''
+                    _ck = ''
                     if _si_cod is not None and _si_cod < len(_rv) and _rv[_si_cod] not in (None, ''):
                         try:    _ck = str(int(float(str(_rv[_si_cod]))))
                         except: _ck = str(_rv[_si_cod]).strip()
                         _gram_val = _gram_map.get(_ck, '')
 
-                    # buscar previsão/obs do mapa
+                    # buscar previsão/obs: chave primária = N° Pedido
+                    # fallback = Código|Cliente (para arquivos gerados antes da correção)
                     _prev_val = _obs_val = ''
-                    if _num and _num.upper() != 'TOTAL':
-                        _entry = _obs_map.get(_num, {})
+                    _lookup_key = _num if _num and _num.upper() != 'TOTAL' else ''
+                    if not _lookup_key and _ck:
+                        _cli_v = ''
+                        _si_cli = next((i for i,h in enumerate(_hdr_out) if 'CLIENTE' in h.upper()), None)
+                        if _si_cli is not None and _si_cli < len(_rv):
+                            _cli_v = str(_rv[_si_cli]).strip() if _rv[_si_cli] not in (None,'','None') else ''
+                        _lookup_key = f"{_ck}|{_cli_v}"
+
+                    if _lookup_key:
+                        _entry = _obs_map.get(_lookup_key, {})
                         _prev_val = _entry.get('previsao', '')
                         _obs_val  = _entry.get('obs', '')
                         if _prev_val or _obs_val:
