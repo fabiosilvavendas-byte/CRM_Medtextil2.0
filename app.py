@@ -4687,7 +4687,16 @@ elif menu == "Pedidos Pendentes":
             label_visibility="collapsed"
         )
 
-    if _f_atual and _f_anterior:
+    # Salvar bytes em session_state para sobreviver reruns
+    if _f_atual:
+        st.session_state['_conc_bytes_atual']    = _f_atual.read()
+    if _f_anterior:
+        st.session_state['_conc_bytes_anterior'] = _f_anterior.read()
+
+    _bytes_atual    = st.session_state.get('_conc_bytes_atual')
+    _bytes_anterior = st.session_state.get('_conc_bytes_anterior')
+
+    if _bytes_atual and _bytes_anterior:
         try:
             import openpyxl
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -4696,7 +4705,7 @@ elif menu == "Pedidos Pendentes":
 
             # ── PASSO 1: extrair mapa {N°Pedido -> {previsao, obs}} do arquivo ANTERIOR ──
             _obs_map = {}
-            _wb_ant  = openpyxl.load_workbook(_BIO(_f_anterior.read()), data_only=True)
+            _wb_ant  = openpyxl.load_workbook(_BIO(_bytes_anterior), data_only=True)
 
             for _ws_ant in _wb_ant.worksheets:
                 _all_rows = list(_ws_ant.iter_rows(values_only=True))
@@ -4717,8 +4726,11 @@ elif menu == "Pedidos Pendentes":
                     if _i_obs  is None and ('OBSERV' in _hu or _hu == 'OBS'):
                         _i_obs = _i
 
+                # diagnóstico: mostrar cabeçalho e índices encontrados
+                st.caption(f"📋 Aba '{_ws_ant.title}' — cabeçalho: {_hdr} | i_num={_i_num} i_prev={_i_prev} i_obs={_i_obs}")
+
                 if _i_num is None:
-                    # sem coluna de pedido nesta aba, pular
+                    st.warning(f"⚠️ Aba '{_ws_ant.title}': coluna N° Pedido não encontrada — pulando")
                     continue
 
                 for _row in _all_rows[1:]:
@@ -4763,7 +4775,7 @@ elif menu == "Pedidos Pendentes":
                                 _gram_map[_gk] = _gv
 
             # ── PASSO 3: copiar arquivo ATUAL aba a aba injetando os valores ──
-            _wb_at  = openpyxl.load_workbook(_BIO(_f_atual.read()))
+            _wb_at  = openpyxl.load_workbook(_BIO(_bytes_atual))
             _wb_out = openpyxl.Workbook()
             _wb_out.remove(_wb_out.active)
 
@@ -4976,7 +4988,7 @@ elif menu == "Pedidos Pendentes":
             st.error(f"❌ Erro na conciliação: {_e}")
             st.code(traceback.format_exc())
 
-    elif _f_atual or _f_anterior:
+    elif _bytes_atual or _bytes_anterior:
         st.info("⬆️ Carregue os dois arquivos para habilitar a conciliação.")
 
 # ====================== PERFORMANCE DE VENDEDORES ======================
