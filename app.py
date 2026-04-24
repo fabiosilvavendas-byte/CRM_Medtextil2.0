@@ -2456,7 +2456,7 @@ elif menu == "Positivação":
         st.download_button(
             "📥 Exportar Positivação por Vendedor",
             to_excel(relatorio_positivacao),
-            "positivacao_vendedor.xlsx",
+            f"POSITIVAÇÃO_{vendedor_filtro.upper().replace(' ', '_')}.xlsx" if vendedor_filtro != 'Todos' else "POSITIVAÇÃO_GERAL.xlsx",
             "application/vnd.ms-excel"
         )
         
@@ -2490,7 +2490,7 @@ elif menu == "Positivação":
             st.download_button(
                 f"📥 Exportar Clientes - {vendedor_selecionado}",
                 to_excel(clientes_vendedor),
-                f"clientes_{vendedor_selecionado}.xlsx",
+                f"POSITIVAÇÃO_{vendedor_selecionado.upper().replace(' ', '_')}.xlsx",
                 "application/vnd.ms-excel"
             )
     
@@ -2716,9 +2716,9 @@ elif menu == "Inadimplência":
         
         # Botão de download
         _nome_inad = (
-            f"{vendedor_inad_filtro.upper().replace(' ', '_')}_INADIMPLENCIA.xlsx"
+            f"INADIMPLENCIA_{vendedor_inad_filtro.upper().replace(' ', '_')}.xlsx"
             if vendedor_inad_filtro != 'Todos'
-            else "RELATORIO_INADIMPLENCIA.xlsx"
+            else "INADIMPLENCIA_GERAL.xlsx"
         )
         st.download_button(
             "📥 Exportar Relatório Completo",
@@ -2863,7 +2863,7 @@ elif menu == "Clientes sem Compra":
     st.download_button(
         "📥 Exportar Clientes sem Compra",
         to_excel(clientes_sem_compra),
-        "clientes_sem_compra.xlsx",
+        f"CLIENTES SEM COMPRA_{vendedor_churn_filtro.upper().replace(' ', '_')}.xlsx" if vendedor_churn_filtro != 'Todos' else "CLIENTES SEM COMPRA_GERAL.xlsx",
         "application/vnd.ms-excel"
     )
 
@@ -4188,9 +4188,9 @@ elif menu == "Pedidos Pendentes":
     
     # Botão de download — nome do arquivo reflete o vendedor filtrado
     _nome_arquivo_pend = (
-        f"{vendedor_pend_filtro.upper().replace(' ', '_')}_PENDENTES.xlsx"
+        f"PENDENTES_{vendedor_pend_filtro.upper().replace(' ', '_')}.xlsx"
         if vendedor_pend_filtro != 'Todos'
-        else "PEDIDOS_PENDENTES.xlsx"
+        else "PENDENTES_GERAL.xlsx"
     )
     st.download_button(
         "📥 Exportar Pedidos Pendentes (Separado por Tipo)",
@@ -4647,7 +4647,7 @@ elif menu == "Pedidos Pendentes":
                     _gerar_relatorio_previsao(
                         _df_merge, _df_prod_prev, _cx_col, _preco_col, _desc_col
                     ),
-                    "RELATORIO_FINAL_COM_PREVISAO.xlsx",
+                    "PEDIDOS PENDENTES_NOVO.xlsx",
                     "application/vnd.ms-excel",
                     key="dl_previsao_final"
                 )
