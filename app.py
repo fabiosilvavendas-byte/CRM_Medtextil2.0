@@ -2026,7 +2026,218 @@ with st.sidebar:
         st.session_state.menu_option = 'Consulta Clientes'
         st.rerun()
 
-# ── Tela Home ─────────────────────────────────────────────────────────────
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("""<div style="font-size:0.62rem;font-weight:700;color:#ADB5BD;
+        letter-spacing:0.1em;text-transform:uppercase;
+        margin-bottom:5px;padding-left:4px;">Relatório Semanal</div>""",
+        unsafe_allow_html=True)
+
+    if st.button("📦 Gerar Relatório Semanal", key="btn_semanal", use_container_width=True):
+        import zipfile, io as _io
+        from datetime import date
+
+        _hoje = pd.Timestamp.now()
+        _inicio_mes = _hoje.replace(day=1)
+
+        _zip_buf = _io.BytesIO()
+
+        with st.sidebar.spinner("Gerando relatórios..."):
+            try:
+                # ── Carregar inadimplência ──
+                _df_inad_sem = None
+                if planilhas_disponiveis.get('inadimplencia'):
+                    _raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
+                    if _raw_inad is not None:
+                        _df_inad_sem = processar_inadimplencia(_raw_inad)
+
+                # ── Carregar pedidos pendentes ──
+                _df_pend_sem = None
+                if planilhas_disponiveis.get('pedidos_pendentes'):
+                    try:
+                        import zipfile as _zf, xml.etree.ElementTree as _ET
+                        _resp_p = requests.get(planilhas_disponiveis['pedidos_pendentes']['url'])
+                        _ef = _io.BytesIO(_resp_p.content)
+                        _data_p = []
+                        _cur_cli = None
+                        with _zf.ZipFile(_ef) as _z:
+                            with _z.open('xl/sharedStrings.xml') as _f:
+                                _st = _ET.parse(_f)
+                                _ns_s = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                                _ss = [si.text if si.text else '' for si in _st.findall('.//ss:t', _ns_s)]
+                            with _z.open('xl/worksheets/sheet1.xml') as _f:
+                                _sh = _ET.parse(_f)
+                                _ns = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                                for _row in _sh.findall('.//ss:row', _ns):
+                                    _rd = {}
+                                    for _cell in _row.findall('.//ss:c', _ns):
+                                        _ref = _cell.get('r', '')
+                                        _col = ''.join([c for c in _ref if c.isalpha()])
+                                        _ve = _cell.find('.//ss:v', _ns)
+                                        if _ve is not None and _ve.text:
+                                            if _cell.get('t', 'n') == 's':
+                                                _idx = int(_ve.text)
+                                                _rd[_col] = _ss[_idx] if _idx < len(_ss) else _ve.text
+                                            else:
+                                                _rd[_col] = _ve.text
+                                    if not _rd:
+                                        continue
+                                    _ca, _cb = _rd.get('A', ''), _rd.get('B', '')
+                                    if _ca and not _cb and 'N° do pedido' not in _ca and 'Valor Total' not in _ca and _ca != 'Subgrupo:':
+                                        _cur_cli = _ca
+                                    elif 'N° do pedido' in _ca:
+                                        _desc = _rd.get('C', '')
+                                        if _desc and ' - ' in _desc:
+                                            try:
+                                                _qtdc = float(_rd.get('D', 0))
+                                                _vunit = float(_rd.get('E', 0))
+                                                _qtde = float(_rd.get('H', 0))
+                                                _qtdp = _qtdc - _qtde
+                                                _dt_v = _rd.get('G', '')
+                                                _dt_em = (pd.Timestamp('1899-12-30') + pd.Timedelta(days=float(_dt_v))) if _dt_v else None
+                                                _data_p.append({
+                                                    'Cliente': _cur_cli,
+                                                    'NumeroPedido': _cb,
+                                                    'CodigoProduto': _desc.split(' - ')[0].strip(),
+                                                    'Descricao': _desc,
+                                                    'QtdContratada': _qtdc,
+                                                    'QtdEntregue': _qtde,
+                                                    'QtdPendente': _qtdp,
+                                                    'ValorUnit': _vunit,
+                                                    'ValorPendente': _qtdp * _vunit,
+                                                    'DataEmissao': _dt_em,
+                                                    'Vendedor': _rd.get('J', ''),
+                                                    'PercEntregue': float(_rd.get('I', 0))
+                                                })
+                                            except:
+                                                continue
+                        _df_pend_sem = pd.DataFrame(_data_p)
+                        # Filtrar: primeiro dia do mês até hoje
+                        if len(_df_pend_sem) > 0 and 'DataEmissao' in _df_pend_sem.columns:
+                            _df_pend_sem = _df_pend_sem[_df_pend_sem['QtdPendente'] > 0]
+                            _df_pend_sem = _df_pend_sem[
+                                (_df_pend_sem['DataEmissao'] >= _inicio_mes) &
+                                (_df_pend_sem['DataEmissao'] <= _hoje)
+                            ]
+                    except:
+                        _df_pend_sem = None
+
+                # ── Faturados: primeiro dia do mês até hoje ──
+                _df_fat_sem = df[
+                    (df['TipoMov'] == 'NF Venda') &
+                    (df['DataEmissao'] >= _inicio_mes) &
+                    (df['DataEmissao'] <= _hoje)
+                ].copy()
+
+                # ── Lista de vendedores ativos ──
+                _vendedores_ativos = sorted(df[
+                    (df['TipoMov'] == 'NF Venda') &
+                    (df['DataEmissao'] >= _inicio_mes)
+                ]['Vendedor'].dropna().unique().tolist())
+
+                with zipfile.ZipFile(_zip_buf, 'w', zipfile.ZIP_DEFLATED) as _zout:
+                    for _vend in _vendedores_ativos:
+                        _vend_pasta = _vend.upper().replace(' ', '_')
+                        _prefixo = f"RELATORIO SEMANAL/{_vend_pasta}/"
+
+                        # ── 1. FATURADOS ──
+                        _df_v_fat = _df_fat_sem[_df_fat_sem['Vendedor'] == _vend].copy()
+                        if len(_df_v_fat) > 0:
+                            _cols = [c for c in ['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado', 'Vendedor',
+                                                  'DataEmissao', 'Numero_NF', 'TipoMov',
+                                                  'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit',
+                                                  'TotalProduto', 'Valor_Real'] if c in _df_v_fat.columns]
+                            _df_exp_f = _df_v_fat[_cols].copy()
+                            _df_exp_f['DataEmissao'] = _df_exp_f['DataEmissao'].dt.strftime('%d/%m/%Y')
+
+                            # Aba FATURAMENTO TOTAL: dedup Numero_NF + soma
+                            _cols_oc = ['CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto', 'Valor_Real']
+                            _cols_ft = [c for c in _cols if c not in _cols_oc]
+                            _df_ft = _df_v_fat.drop_duplicates(subset=['Numero_NF'], keep='first')[_cols_ft + ['TotalProduto']].copy()
+                            _df_ft['DataEmissao'] = _df_ft['DataEmissao'].dt.strftime('%d/%m/%Y')
+                            _soma_ft = _df_ft['TotalProduto'].sum()
+                            _ln_tot = {c: '' for c in _df_ft.columns}
+                            _ln_tot['TotalProduto'] = _soma_ft
+                            _ln_tot['RazaoSocial'] = 'TOTAL'
+                            _df_ft = pd.concat([_df_ft, pd.DataFrame([_ln_tot])], ignore_index=True)
+
+                            _buf_f = _io.BytesIO()
+                            with pd.ExcelWriter(_buf_f, engine='xlsxwriter') as _wr:
+                                _wb = _wr.book
+                                _df_exp_f.to_excel(_wr, index=False, sheet_name='PRODUTOS POR CLIENTE')
+                                _ws1 = _wr.sheets['PRODUTOS POR CLIENTE']
+                                if len(_df_exp_f) > 0:
+                                    _ws1.add_table(0, 0, len(_df_exp_f), len(_df_exp_f.columns)-1, {
+                                        'name': f'TblPC_{_vend_pasta[:10]}',
+                                        'style': 'Table Style Medium 2',
+                                        'columns': [{'header': c} for c in _df_exp_f.columns]
+                                    })
+                                _df_ft.to_excel(_wr, index=False, sheet_name='FATURAMENTO TOTAL')
+                                _ws2 = _wr.sheets['FATURAMENTO TOTAL']
+                                _nft = len(_df_ft) - 1
+                                if _nft > 0:
+                                    _ws2.add_table(0, 0, _nft, len(_df_ft.columns)-1, {
+                                        'name': f'TblFT_{_vend_pasta[:10]}',
+                                        'style': 'Table Style Medium 2',
+                                        'columns': [{'header': c} for c in _df_ft.columns]
+                                    })
+                                _fmt_b = _wb.add_format({'bold': True, 'num_format': '#,##0.00'})
+                                _sc = list(_df_ft.columns).index('TotalProduto')
+                                _ws2.write(_nft + 1, _sc, _soma_ft, _fmt_b)
+                            _zout.writestr(_prefixo + f"{_vend_pasta}_FATURADOS.xlsx", _buf_f.getvalue())
+
+                        # ── 2. PENDENTES ──
+                        if _df_pend_sem is not None and len(_df_pend_sem) > 0:
+                            _df_v_pend = _df_pend_sem[_df_pend_sem['Vendedor'] == _vend].copy()
+                            if len(_df_v_pend) > 0:
+                                _buf_p = _io.BytesIO()
+                                with pd.ExcelWriter(_buf_p, engine='xlsxwriter') as _wr:
+                                    _df_v_pend.to_excel(_wr, index=False, sheet_name='PENDENTES')
+                                    _wsp = _wr.sheets['PENDENTES']
+                                    _wsp.add_table(0, 0, len(_df_v_pend), len(_df_v_pend.columns)-1, {
+                                        'name': f'TblPend_{_vend_pasta[:10]}',
+                                        'style': 'Table Style Medium 2',
+                                        'columns': [{'header': c} for c in _df_v_pend.columns]
+                                    })
+                                _zout.writestr(_prefixo + f"PENDENTES_{_vend_pasta}.xlsx", _buf_p.getvalue())
+
+                        # ── 3. INADIMPLÊNCIA ──
+                        if _df_inad_sem is not None and len(_df_inad_sem) > 0:
+                            _df_v_inad = _df_inad_sem[_df_inad_sem['Vendedor'] == _vend].copy()
+                            if len(_df_v_inad) > 0:
+                                _cols_inad = [c for c in ['Vendedor', 'Cliente', 'NumeroDoc', 'DataVencimento',
+                                                           'ValorLiquido', 'DiasAtraso', 'FaixaAtraso', 'Banco', 'Estado']
+                                              if c in _df_v_inad.columns]
+                                _df_v_inad = _df_v_inad[_cols_inad].copy()
+                                if 'DataVencimento' in _df_v_inad.columns:
+                                    _df_v_inad['DataVencimento'] = _df_v_inad['DataVencimento'].dt.strftime('%d/%m/%Y')
+                                _buf_i = _io.BytesIO()
+                                with pd.ExcelWriter(_buf_i, engine='xlsxwriter') as _wr:
+                                    _df_v_inad.to_excel(_wr, index=False, sheet_name='INADIMPLENCIA')
+                                    _wsi = _wr.sheets['INADIMPLENCIA']
+                                    _wsi.add_table(0, 0, len(_df_v_inad), len(_df_v_inad.columns)-1, {
+                                        'name': f'TblInad_{_vend_pasta[:10]}',
+                                        'style': 'Table Style Medium 2',
+                                        'columns': [{'header': c} for c in _df_v_inad.columns]
+                                    })
+                                _zout.writestr(_prefixo + f"INADIMPLENCIA_{_vend_pasta}.xlsx", _buf_i.getvalue())
+
+                st.session_state['_zip_semanal'] = _zip_buf.getvalue()
+                st.session_state['_zip_semanal_nome'] = f"RELATORIO_SEMANAL_{_hoje.strftime('%d-%m-%Y')}.zip"
+                st.rerun()
+
+            except Exception as _e:
+                st.sidebar.error(f"Erro: {_e}")
+
+    if st.session_state.get('_zip_semanal'):
+        st.sidebar.download_button(
+            "💾 Baixar ZIP Semanal",
+            st.session_state['_zip_semanal'],
+            st.session_state.get('_zip_semanal_nome', 'RELATORIO_SEMANAL.zip'),
+            "application/zip",
+            key="download_zip_semanal"
+        )
+
+
 if st.session_state.menu_option == '__home__':
     usuario_info = st.session_state.get("usuario", {})
 
