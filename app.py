@@ -2417,7 +2417,7 @@ elif menu == "Positivação":
 
     st.markdown("---")
 
-    tab1, tab2 = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado"])
+    tab1, tab2, tab3_fat = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado", "🧾 Pedidos Faturados"])
     
     with tab1:
         base_vendedor = df.groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
@@ -2456,7 +2456,7 @@ elif menu == "Positivação":
         st.download_button(
             "📥 Exportar Positivação por Vendedor",
             to_excel(relatorio_positivacao),
-            f"POSITIVAÇÃO_{vendedor_filtro.upper().replace(' ', '_')}.xlsx" if vendedor_filtro != 'Todos' else "POSITIVAÇÃO_GERAL.xlsx",
+            "positivacao_vendedor.xlsx",
             "application/vnd.ms-excel"
         )
         
@@ -2490,7 +2490,7 @@ elif menu == "Positivação":
             st.download_button(
                 f"📥 Exportar Clientes - {vendedor_selecionado}",
                 to_excel(clientes_vendedor),
-                f"POSITIVAÇÃO_{vendedor_selecionado.upper().replace(' ', '_')}.xlsx",
+                f"clientes_{vendedor_selecionado}.xlsx",
                 "application/vnd.ms-excel"
             )
     
@@ -2556,6 +2556,125 @@ elif menu == "Positivação":
             "positivacao_estado.xlsx",
             "application/vnd.ms-excel"
         )
+
+    with tab3_fat:
+        st.subheader("🧾 Relatório de Pedidos Faturados")
+
+        # ── Filtros locais ──
+        _fc1, _fc2, _fc3 = st.columns(3)
+        with _fc1:
+            _fat_vendedores = ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist())
+            _fat_vend = st.selectbox("👤 Vendedor", _fat_vendedores, key="fat_vend")
+        with _fc2:
+            _fat_regioes = ['Todos'] + sorted(df['Estado'].dropna().unique().tolist())
+            _fat_reg = st.selectbox("🗺️ Estado/Região", _fat_regioes, key="fat_reg")
+        with _fc3:
+            _fat_col1, _fat_col2 = st.columns(2)
+            with _fat_col1:
+                _fat_di = st.date_input("📅 De", value=None, key="fat_di", format="DD/MM/YYYY")
+            with _fat_col2:
+                _fat_df = st.date_input("📅 Até", value=None, key="fat_df", format="DD/MM/YYYY")
+
+        # ── Aplicar filtros ──
+        _df_fat = df[df['TipoMov'] == 'NF Venda'].copy()
+        if _fat_vend != 'Todos':
+            _df_fat = _df_fat[_df_fat['Vendedor'] == _fat_vend]
+        if _fat_reg != 'Todos':
+            _df_fat = _df_fat[_df_fat['Estado'] == _fat_reg]
+        if _fat_di:
+            _df_fat = _df_fat[_df_fat['DataEmissao'] >= pd.to_datetime(_fat_di)]
+        if _fat_df:
+            _df_fat = _df_fat[_df_fat['DataEmissao'] <= pd.to_datetime(_fat_df)]
+
+        if len(_df_fat) == 0:
+            st.info("Nenhum registro encontrado com os filtros selecionados.")
+        else:
+            # ── KPIs ──
+            _fk1, _fk2, _fk3 = st.columns(3)
+            with _fk1:
+                st.metric("Total Faturado", f"R$ {_df_fat['TotalProduto'].sum():,.2f}")
+            with _fk2:
+                st.metric("Notas Fiscais", obter_notas_unicas(_df_fat)['Numero_NF'].nunique())
+            with _fk3:
+                st.metric("Clientes", _df_fat['CPF_CNPJ'].nunique())
+
+            # ── Colunas para exibição/exportação ──
+            _cols_base = ['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado', 'Vendedor',
+                          'DataEmissao', 'Numero_NF', 'TipoMov',
+                          'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit',
+                          'TotalProduto', 'Valor_Real']
+            _cols_disp = [c for c in _cols_base if c in _df_fat.columns]
+            _df_fat_disp = _df_fat[_cols_disp].copy()
+            _df_fat_disp['DataEmissao'] = _df_fat_disp['DataEmissao'].dt.strftime('%d/%m/%Y')
+            st.dataframe(_df_fat_disp, use_container_width=True, height=400)
+
+            # ── Exportar Excel com duas abas como tabela ──
+            def _gerar_excel_faturado(df_src, nome_vend):
+                import io
+                _cols = [c for c in ['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado', 'Vendedor',
+                                     'DataEmissao', 'Numero_NF', 'TipoMov',
+                                     'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit',
+                                     'TotalProduto', 'Valor_Real'] if c in df_src.columns]
+                _df_exp = df_src[_cols].copy()
+                _df_exp['DataEmissao'] = _df_exp['DataEmissao'].dt.strftime('%d/%m/%Y')
+
+                # Aba FATURAMENTO TOTAL: dedup por Numero_NF + soma TotalProduto
+                _cols_ocultas = ['CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto', 'Valor_Real']
+                _cols_fat_total = [c for c in _cols if c not in _cols_ocultas]
+                _df_fat_total = (
+                    df_src.drop_duplicates(subset=['Numero_NF'], keep='first')
+                    [_cols_fat_total + ['TotalProduto']]
+                    .copy()
+                )
+                _df_fat_total['DataEmissao'] = _df_fat_total['DataEmissao'].dt.strftime('%d/%m/%Y')
+                _soma = _df_fat_total['TotalProduto'].sum()
+                _linha_total = {c: '' for c in _df_fat_total.columns}
+                _linha_total['TotalProduto'] = _soma
+                _linha_total['RazaoSocial'] = 'TOTAL'
+                _df_fat_total = pd.concat([_df_fat_total, pd.DataFrame([_linha_total])], ignore_index=True)
+
+                import io
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    wb = writer.book
+
+                    # ── Aba 1: PRODUTOS POR CLIENTE ──
+                    _df_exp.to_excel(writer, index=False, sheet_name='PRODUTOS POR CLIENTE')
+                    ws1 = writer.sheets['PRODUTOS POR CLIENTE']
+                    if len(_df_exp) > 0:
+                        ws1.add_table(0, 0, len(_df_exp), len(_df_exp.columns) - 1, {
+                            'name': 'TblProdutosCliente',
+                            'style': 'Table Style Medium 2',
+                            'columns': [{'header': c} for c in _df_exp.columns]
+                        })
+
+                    # ── Aba 2: FATURAMENTO TOTAL ──
+                    _df_fat_total.to_excel(writer, index=False, sheet_name='FATURAMENTO TOTAL')
+                    ws2 = writer.sheets['FATURAMENTO TOTAL']
+                    _nrows_ft = len(_df_fat_total) - 1  # última linha é total, fora da tabela
+                    if _nrows_ft > 0:
+                        ws2.add_table(0, 0, _nrows_ft, len(_df_fat_total.columns) - 1, {
+                            'name': 'TblFaturamentoTotal',
+                            'style': 'Table Style Medium 2',
+                            'columns': [{'header': c} for c in _df_fat_total.columns]
+                        })
+                    # Linha de soma logo após a tabela
+                    _fmt_bold = wb.add_format({'bold': True, 'num_format': '#,##0.00'})
+                    _soma_row = _nrows_ft + 1
+                    _soma_col = list(_df_fat_total.columns).index('TotalProduto')
+                    ws2.write(_soma_row, _soma_col, _soma, _fmt_bold)
+
+                return output.getvalue()
+
+            _nome_arquivo_fat = f"{_fat_vend.upper().replace(' ', '_')}.xlsx" if _fat_vend != 'Todos' else "FATURADO_GERAL.xlsx"
+
+            st.download_button(
+                "📥 Exportar Pedidos Faturados",
+                _gerar_excel_faturado(_df_fat, _fat_vend),
+                _nome_arquivo_fat,
+                "application/vnd.ms-excel",
+                key="download_fat"
+            )
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
@@ -2716,9 +2835,9 @@ elif menu == "Inadimplência":
         
         # Botão de download
         _nome_inad = (
-            f"INADIMPLENCIA_{vendedor_inad_filtro.upper().replace(' ', '_')}.xlsx"
+            f"{vendedor_inad_filtro.upper().replace(' ', '_')}_INADIMPLENCIA.xlsx"
             if vendedor_inad_filtro != 'Todos'
-            else "INADIMPLENCIA_GERAL.xlsx"
+            else "RELATORIO_INADIMPLENCIA.xlsx"
         )
         st.download_button(
             "📥 Exportar Relatório Completo",
@@ -2863,7 +2982,7 @@ elif menu == "Clientes sem Compra":
     st.download_button(
         "📥 Exportar Clientes sem Compra",
         to_excel(clientes_sem_compra),
-        f"CLIENTES SEM COMPRA_{vendedor_churn_filtro.upper().replace(' ', '_')}.xlsx" if vendedor_churn_filtro != 'Todos' else "CLIENTES SEM COMPRA_GERAL.xlsx",
+        "clientes_sem_compra.xlsx",
         "application/vnd.ms-excel"
     )
 
@@ -4188,9 +4307,9 @@ elif menu == "Pedidos Pendentes":
     
     # Botão de download — nome do arquivo reflete o vendedor filtrado
     _nome_arquivo_pend = (
-        f"PENDENTES_{vendedor_pend_filtro.upper().replace(' ', '_')}.xlsx"
+        f"{vendedor_pend_filtro.upper().replace(' ', '_')}_PENDENTES.xlsx"
         if vendedor_pend_filtro != 'Todos'
-        else "PENDENTES_GERAL.xlsx"
+        else "PEDIDOS_PENDENTES.xlsx"
     )
     st.download_button(
         "📥 Exportar Pedidos Pendentes (Separado por Tipo)",
@@ -4647,7 +4766,7 @@ elif menu == "Pedidos Pendentes":
                     _gerar_relatorio_previsao(
                         _df_merge, _df_prod_prev, _cx_col, _preco_col, _desc_col
                     ),
-                    "PEDIDOS PENDENTES_NOVO.xlsx",
+                    "RELATORIO_FINAL_COM_PREVISAO.xlsx",
                     "application/vnd.ms-excel",
                     key="dl_previsao_final"
                 )
