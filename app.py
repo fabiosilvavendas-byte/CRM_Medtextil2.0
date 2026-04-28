@@ -3115,7 +3115,9 @@ elif menu == "Inadimplência":
 elif menu == "Clientes sem Compra":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
 
-    # ── Filtro exclusivo de meses sem compra ──────────────────────────────
+    # ── Filtro de meses sem compra ────────────────────────────────────────
+    # Define a janela de positivação: clientes que compraram dentro dessa janela
+    # são EXCLUÍDOS do relatório. Os demais (sem compra na janela) aparecem.
     st.markdown("#### 🗓️ Filtro por Tempo sem Compra")
     _opcoes_faixa = (
         ["Selecione..."]
@@ -3130,21 +3132,33 @@ elif menu == "Clientes sem Compra":
             key="faixa_churn_meses"
         )
 
-    # Calcular datas de corte com base na faixa selecionada
+    # ── Calcular janela de positivação ────────────────────────────────────
+    # A lógica é: "sem compra há N meses" = não fez nenhuma NF Venda
+    # nos últimos N meses (janela: de hoje-N_meses até hoje).
+    # Para "12 a 24 meses": não comprou nos últimos 12 meses E comprou
+    # há pelo menos 12 meses (ou seja, última compra entre 12 e 24 meses atrás).
     _hoje_churn = pd.Timestamp.now().normalize()
+
     if _faixa_selecionada == "Selecione...":
-        _data_corte_ini = None
-        _data_corte_fim = None
-        _label_faixa = "todos os períodos"
+        # Sem filtro de faixa: usa o período do sidebar global
+        _janela_ini = None
+        _janela_fim = None
+        _label_faixa = "período definido na barra lateral"
     elif _faixa_selecionada == "12 a 24 meses":
-        _data_corte_ini = _hoje_churn - pd.DateOffset(months=24)
-        _data_corte_fim = _hoje_churn - pd.DateOffset(months=12)
+        # Excluir quem comprou nos últimos 24 meses E incluir só quem
+        # tem última compra entre 12 e 24 meses atrás
+        _janela_ini = _hoje_churn - pd.DateOffset(months=24)
+        _janela_fim = _hoje_churn
+        _ultima_compra_min = _hoje_churn - pd.DateOffset(months=24)
+        _ultima_compra_max = _hoje_churn - pd.DateOffset(months=12)
         _label_faixa = "entre 12 e 24 meses sem compra"
     else:
         _n_meses = int(_faixa_selecionada.split()[0])
-        # Sem compra há exatamente N meses = última compra entre (hoje - N meses - 30 dias) e (hoje - N meses)
-        _data_corte_ini = _hoje_churn - pd.DateOffset(months=_n_meses + 1)
-        _data_corte_fim = _hoje_churn - pd.DateOffset(months=_n_meses)
+        # Janela de positivação: últimos N meses (quem comprou aqui é excluído)
+        _janela_ini = _hoje_churn - pd.DateOffset(months=_n_meses)
+        _janela_fim = _hoje_churn
+        _ultima_compra_min = None
+        _ultima_compra_max = None
         _label_faixa = f"há {_faixa_selecionada} sem compra"
 
     st.markdown("---")
@@ -3175,41 +3189,47 @@ elif menu == "Clientes sem Compra":
             key="busca_churn"
         )
 
-    # ── Lógica de período (filtro global da barra lateral) ────────────────
-    # O período da barra lateral define QUAIS clientes positivaram (compraram).
-    # Clientes que compraram nesse período são EXCLUÍDOS do relatório.
-    if data_inicial and data_final:
-        _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
-        _df_periodo = df[
-            (df['DataEmissao'] >= pd.to_datetime(data_inicial)) &
-            (df['DataEmissao'] <= pd.to_datetime(data_final))
-        ]
-    elif data_inicial:
-        _label_periodo = f"A partir de {data_inicial.strftime('%d/%m/%Y')}"
-        _df_periodo = df[df['DataEmissao'] >= pd.to_datetime(data_inicial)]
-    elif data_final:
-        _label_periodo = f"Até {data_final.strftime('%d/%m/%Y')}"
-        _df_periodo = df[df['DataEmissao'] <= pd.to_datetime(data_final)]
-    else:
-        _mes_now = pd.Timestamp.now().month
-        _ano_now = pd.Timestamp.now().year
-        _label_periodo = f"Mês vigente ({_mes_now:02d}/{_ano_now})"
-        _df_periodo = df[
-            (df['DataEmissao'].dt.month == _mes_now) &
-            (df['DataEmissao'].dt.year == _ano_now)
-        ]
-
-    st.info(f"📅 Período de positivação: **{_label_periodo}** — clientes que NÃO compraram neste período · Faixa: **{_label_faixa}**")
-
-    # ── Lógica corrigida: base de clientes por vendedor usando histórico completo ──
-    # clientes_com_venda = quem positivou (NF Venda) no período selecionado
-    clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-
-    # Base: apenas NF Venda do histórico completo
+    # ── Base: somente NF Venda no histórico completo ──────────────────────
     _df_nf = df[df['TipoMov'] == 'NF Venda'].copy()
     _df_nf['DataEmissao'] = pd.to_datetime(_df_nf['DataEmissao'], errors='coerce')
 
-    # Dados cadastrais: RazaoSocial, Cidade, Estado do último registro de cada CPF
+    # ── Definir quem POSITIVOU na janela selecionada ──────────────────────
+    if _faixa_selecionada == "Selecione...":
+        # Fallback: usar o período do sidebar global
+        if data_inicial and data_final:
+            _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
+            _df_janela = _df_nf[
+                (_df_nf['DataEmissao'] >= pd.to_datetime(data_inicial)) &
+                (_df_nf['DataEmissao'] <= pd.to_datetime(data_final))
+            ]
+        elif data_inicial:
+            _label_periodo = f"A partir de {data_inicial.strftime('%d/%m/%Y')}"
+            _df_janela = _df_nf[_df_nf['DataEmissao'] >= pd.to_datetime(data_inicial)]
+        elif data_final:
+            _label_periodo = f"Até {data_final.strftime('%d/%m/%Y')}"
+            _df_janela = _df_nf[_df_nf['DataEmissao'] <= pd.to_datetime(data_final)]
+        else:
+            _mes_now = _hoje_churn.month
+            _ano_now = _hoje_churn.year
+            _label_periodo = f"Mês vigente ({_mes_now:02d}/{_ano_now})"
+            _df_janela = _df_nf[
+                (_df_nf['DataEmissao'].dt.month == _mes_now) &
+                (_df_nf['DataEmissao'].dt.year == _ano_now)
+            ]
+    else:
+        _label_periodo = f"{_janela_ini.strftime('%d/%m/%Y')} a {_janela_fim.strftime('%d/%m/%Y')}"
+        _df_janela = _df_nf[
+            (_df_nf['DataEmissao'] >= _janela_ini) &
+            (_df_nf['DataEmissao'] <= _janela_fim)
+        ]
+
+    # CPFs que positivaram (compraram) na janela — serão excluídos do relatório
+    _cpfs_positivaram = set(_df_janela['CPF_CNPJ'].unique())
+
+    st.info(f"📅 Janela de positivação: **{_label_periodo}** — clientes que NÃO compraram neste período · Faixa: **{_label_faixa}**")
+
+    # ── Montar base cadastral de todos os clientes com histórico de NF Venda ──
+    # Dados cadastrais: último registro de cada CPF
     _cadastro = (
         _df_nf.sort_values('DataEmissao')
         .groupby('CPF_CNPJ')
@@ -3217,8 +3237,9 @@ elif menu == "Clientes sem Compra":
         .reset_index()[['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']]
     )
 
-    # Vendedor principal de cada CPF: vendedor com MAIS NF Vendas no histórico
-    # (evita que um registro avulso troque o vendedor do cliente)
+    # Vendedor do cliente: usa TODOS os vínculos históricos (não apenas o principal).
+    # Assim um cliente do Mario que eventualmente teve NF de outro vendedor
+    # ainda aparece na carteira do Mario.
     _vendedor_principal = (
         _df_nf.groupby(['CPF_CNPJ', 'Vendedor'])
         .size()
@@ -3229,62 +3250,64 @@ elif menu == "Clientes sem Compra":
         .reset_index()[['CPF_CNPJ', 'Vendedor']]
     )
 
-    # Última compra de cada CPF (usado no filtro de faixa de meses e exibição)
-    _ultima_compra = (
+    # Última compra de cada CPF no histórico completo
+    _ultima_compra_hist = (
         _df_nf.groupby('CPF_CNPJ')['DataEmissao']
         .max()
         .reset_index()
-        .rename(columns={'DataEmissao': 'DataEmissao'})
+        .rename(columns={'DataEmissao': 'UltimaCompra'})
     )
 
-    # ValorHistorico = soma total de NF Venda no histórico completo
-    valor_historico = (
+    # Valor histórico total
+    _valor_historico = (
         _df_nf.groupby('CPF_CNPJ')['TotalProduto']
         .sum()
         .reset_index()
+        .rename(columns={'TotalProduto': 'ValorHistorico'})
     )
-    valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
 
-    # Montar todos_clientes: cadastro + vendedor principal + última compra + valor
+    # Montar todos_clientes
     todos_clientes = (
         _cadastro
-        .merge(_vendedor_principal, on='CPF_CNPJ', how='left')
-        .merge(_ultima_compra,      on='CPF_CNPJ', how='left')
-        .merge(valor_historico,     on='CPF_CNPJ', how='left')
+        .merge(_vendedor_principal,  on='CPF_CNPJ', how='left')
+        .merge(_ultima_compra_hist,  on='CPF_CNPJ', how='left')
+        .merge(_valor_historico,     on='CPF_CNPJ', how='left')
     )
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
-    todos_clientes['DataEmissao']    = pd.to_datetime(todos_clientes['DataEmissao'], errors='coerce')
+    todos_clientes['UltimaCompra']   = pd.to_datetime(todos_clientes['UltimaCompra'], errors='coerce')
 
-    # Clientes sem compra = base histórica MENOS quem comprou no período selecionado
-    clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)].copy()
+    # ── REGRA PRINCIPAL: excluir quem positivou na janela ────────────────
+    clientes_sem_compra = todos_clientes[
+        ~todos_clientes['CPF_CNPJ'].isin(_cpfs_positivaram)
+    ].copy()
 
-    # ── Aplicar filtro exclusivo de faixa de meses sem compra ─────────────
-    if _data_corte_ini is not None and _data_corte_fim is not None:
+    # ── Filtro adicional de faixa "12 a 24 meses" ────────────────────────
+    # Para essa faixa específica também filtramos pela última compra histórica
+    if _faixa_selecionada == "12 a 24 meses":
         clientes_sem_compra = clientes_sem_compra[
-            (clientes_sem_compra['DataEmissao'] >= _data_corte_ini) &
-            (clientes_sem_compra['DataEmissao'] <= _data_corte_fim)
-        ]
-    elif _data_corte_fim is not None:
-        clientes_sem_compra = clientes_sem_compra[
-            clientes_sem_compra['DataEmissao'] <= _data_corte_fim
+            (clientes_sem_compra['UltimaCompra'] >= _ultima_compra_min) &
+            (clientes_sem_compra['UltimaCompra'] <= _ultima_compra_max)
         ]
 
-    # Selecionar colunas relevantes
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'DataEmissao']]
-
+    # ── Filtro por vendedor ───────────────────────────────────────────────
     if vendedor_churn_filtro != 'Todos':
-        # Mesmo critério da positivação: todos os CPFs vinculados ao vendedor em qualquer NF Venda
+        # Todos os CPFs que já tiveram NF Venda com esse vendedor
         _cpfs_do_vendedor = set(_df_nf[_df_nf['Vendedor'] == vendedor_churn_filtro]['CPF_CNPJ'].unique())
-        clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['CPF_CNPJ'].isin(_cpfs_do_vendedor)]
+        clientes_sem_compra = clientes_sem_compra[
+            clientes_sem_compra['CPF_CNPJ'].isin(_cpfs_do_vendedor)
+        ]
+
     if estado_churn_filtro != 'Todos':
-        clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
+        clientes_sem_compra = clientes_sem_compra[
+            clientes_sem_compra['Estado'] == estado_churn_filtro
+        ]
 
     if busca_cliente_churn and len(busca_cliente_churn) >= 2:
         clientes_sem_compra = clientes_sem_compra[
             clientes_sem_compra['RazaoSocial'].str.contains(busca_cliente_churn, case=False, na=False)
         ]
 
-    # Lógica de Ordenação
+    # ── Ordenação ─────────────────────────────────────────────────────────
     if ordem == "Valor Histórico (Maior)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
     elif ordem == "Valor Histórico (Menor)":
@@ -3292,8 +3315,9 @@ elif menu == "Clientes sem Compra":
     elif ordem == "Nome (A-Z)":
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
     elif ordem == "Última Compra (Mais Recente)":
-        clientes_sem_compra = clientes_sem_compra.sort_values('DataEmissao', ascending=False)
+        clientes_sem_compra = clientes_sem_compra.sort_values('UltimaCompra', ascending=False)
 
+    # ── Métricas ──────────────────────────────────────────────────────────
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total de Clientes sem Compra", len(clientes_sem_compra))
@@ -3318,26 +3342,29 @@ elif menu == "Clientes sem Compra":
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
 
-    # Preparar visualização
-    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
-
-    clientes_sem_compra_display['DataEmissao'] = pd.to_datetime(clientes_sem_compra_display['DataEmissao']).dt.strftime('%d/%m/%Y')
+    # ── Tabela de exibição ────────────────────────────────────────────────
+    _display_cols = ['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'UltimaCompra']
+    clientes_sem_compra_display = clientes_sem_compra[_display_cols].copy()
+    clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra_display, ['ValorHistorico'])
+    clientes_sem_compra_display['UltimaCompra'] = pd.to_datetime(
+        clientes_sem_compra_display['UltimaCompra']
+    ).dt.strftime('%d/%m/%Y')
 
     clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
-        'RazaoSocial': 'Razão Social',
-        'CPF_CNPJ': 'CPF/CNPJ',
-        'Vendedor': 'Vendedor',
-        'Cidade': 'Cidade',
-        'Estado': 'Estado',
-        'ValorHistorico': 'Valor Histórico',
-        'DataEmissao': 'Última Compra'
+        'RazaoSocial':   'Razão Social',
+        'CPF_CNPJ':      'CPF/CNPJ',
+        'Vendedor':      'Vendedor',
+        'Cidade':        'Cidade',
+        'Estado':        'Estado',
+        'ValorHistorico':'Valor Histórico',
+        'UltimaCompra':  'Última Compra',
     })
 
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
 
     st.download_button(
         "📥 Exportar Clientes sem Compra",
-        to_excel(clientes_sem_compra),
+        to_excel(clientes_sem_compra[_display_cols]),
         "clientes_sem_compra.xlsx",
         "application/vnd.ms-excel"
     )
@@ -4133,189 +4160,8 @@ elif menu == "__novo_pedido__":
     endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade','')}/{dados_cliente.get('estado','')}" if dados_cliente else "", key="end_pedido_np")
     obs_cliente = st.text_area("Observação (Cliente)", key="obs_cli_pedido_np", height=80)
     st.markdown("---")
-
-    # ── Dados do Pedido ───────────────────────────────────────────────────
-    st.markdown("### 📋 Informações do Pedido")
-    col_ped1, col_ped2, col_ped3, col_ped4 = st.columns(4)
-    with col_ped1:
-        num_pedido = st.text_input("Nº do Pedido", key="num_pedido_np")
-    with col_ped2:
-        tabela_preco = st.text_input("Tabela de Preço", key="tab_preco_np")
-    with col_ped3:
-        tipo_frete = st.selectbox("Tipo de Frete", ["CIF", "FOB"], key="tipo_frete_np")
-    with col_ped4:
-        data_venda = st.date_input("Data da Venda", value=pd.Timestamp.now(), key="data_venda_np")
-    condicoes_pagto = st.text_input("Condições de Pagamento", key="cond_pagto_np")
-    st.markdown("---")
-
-    # ── Adicionar Produtos ────────────────────────────────────────────────
-    st.markdown("### 🛒 Adicionar Produtos ao Pedido")
-    col_prod1, col_prod2, col_prod3, col_prod4 = st.columns([2, 1, 1, 1])
-    with col_prod1:
-        tipo_busca_prod = st.radio("Buscar por:", ["Código", "Descrição"], horizontal=True, key="tipo_busca_prod_np")
-        if tipo_busca_prod == "Código":
-            if df_produtos_pedido is not None:
-                codigos = [""] + sorted(df_produtos_pedido["ID_COD"].dropna().astype(str).unique().tolist())
-                codigo_selecionado = st.selectbox("Código do Produto", codigos, key="cod_prod_pedido_np")
-            else:
-                codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_np")
-        else:
-            st.text_input("Descrição do Produto", key="desc_prod_pedido_np")
-            codigo_selecionado = None
-
-    produto_info = {}
-    if df_produtos_pedido is not None and codigo_selecionado:
-        prod_rows = df_produtos_pedido[df_produtos_pedido["ID_COD"].astype(str) == str(codigo_selecionado)]
-        if len(prod_rows) > 0:
-            prod = prod_rows.iloc[0]
-            descricao_completa = f"{prod.get('GRUPO', '')} {prod.get('DESCRIÇÃO', '') or prod.get('DESCRICAO', '')} {prod.get('LINHA', '') or prod.get('LINHAS', '')}".strip()
-            produto_info = {
-                "codigo": str(prod.get("ID_COD", "")),
-                "descricao": descricao_completa,
-                "peso": prod.get("GRAMATURA", ""),
-                "cx_embarque": prod.get("CX_EMB", ""),
-                "preco_ref": prod.get("PRECO", 0)
-            }
-            if cliente_selecionado:
-                hist_cli = df[(df["RazaoSocial"] == cliente_selecionado) &
-                              (df["CodigoProduto"].astype(str) == str(codigo_selecionado))]
-                if len(hist_cli) > 0:
-                    hist_cli = hist_cli.sort_values("DataEmissao", ascending=False)
-                    produto_info["preco_sugerido"]  = hist_cli.iloc[0]["PrecoUnit"]
-                    produto_info["preco_historico"] = hist_cli.iloc[0]["PrecoUnit"]
-                else:
-                    produto_info["preco_sugerido"]  = prod.get("PRECO", 0)
-                    produto_info["preco_historico"] = prod.get("PRECO", 0)
-            else:
-                produto_info["preco_sugerido"]  = prod.get("PRECO", 0)
-                produto_info["preco_historico"] = prod.get("PRECO", 0)
-
-    with col_prod2:
-        qtde_item = st.number_input("Quantidade", min_value=0, value=0, key="qtde_item_pedido_np")
-    with col_prod3:
-        valor_item = st.number_input("Valor Unit.", min_value=0.0,
-                                     value=float(produto_info.get("preco_sugerido", 0)),
-                                     format="%.2f", key="valor_item_pedido_np")
-    with col_prod4:
-        st.write("")
-        st.write("")
-        if st.button("➕ Adicionar Item", use_container_width=True, key="add_item_pedido_np"):
-            if produto_info and qtde_item > 0:
-                comissao = calcular_comissao(valor_item, produto_info.get("preco_ref", 0))
-                item = {
-                    "codigo": produto_info["codigo"],
-                    "descricao": produto_info["descricao"],
-                    "peso": produto_info.get("peso", ""),
-                    "cx_embarque": produto_info.get("cx_embarque", ""),
-                    "quantidade": qtde_item,
-                    "valor_unit": valor_item,
-                    "preco_historico": produto_info.get("preco_historico", 0),
-                    "total": qtde_item * valor_item,
-                    "comissao": comissao
-                }
-                st.session_state.itens_pedido.append(item)
-                st.success(f"✅ Item adicionado: {produto_info['descricao']}")
-                st.rerun()
-
-    # ── Preview em tempo real ─────────────────────────────────────────────
-    if produto_info and qtde_item > 0 and valor_item > 0:
-        st.markdown("---")
-        st.markdown("### 👁️ Preview do Item")
-        total_preview      = qtde_item * valor_item
-        comissao_preview   = calcular_comissao(valor_item, produto_info.get("preco_ref", 0))
-        preco_hist_preview = produto_info.get("preco_historico", 0)
-        preview_data = {
-            "Código": [produto_info["codigo"]],
-            "Produto": [produto_info["descricao"][:50]],
-            "Peso": [produto_info.get("peso", "")],
-            "Cx Embarque": [produto_info.get("cx_embarque", "")],
-            "Qtde": [f"{qtde_item:,.0f}"],
-            "Preço Histórico": [f"R$ {preco_hist_preview:,.2f}"],
-            "Valor Unit.": [f"R$ {valor_item:,.2f}"],
-            "Total": [f"R$ {total_preview:,.2f}"],
-            "Comissão%": [comissao_preview]
-        }
-        st.dataframe(pd.DataFrame(preview_data), use_container_width=True, hide_index=True)
-        if preco_hist_preview > 0:
-            variacao = ((valor_item - preco_hist_preview) / preco_hist_preview) * 100
-            if variacao > 0:
-                st.info(f"📈 Valor {variacao:.1f}% acima do histórico (R$ {preco_hist_preview:,.2f})")
-            elif variacao < 0:
-                st.warning(f"📉 Valor {abs(variacao):.1f}% abaixo do histórico (R$ {preco_hist_preview:,.2f})")
-            else:
-                st.success(f"✅ Valor igual ao histórico (R$ {preco_hist_preview:,.2f})")
-        st.markdown("---")
-
-    # ── Itens adicionados ─────────────────────────────────────────────────
-    if st.session_state.itens_pedido:
-        st.markdown("---")
-        st.markdown("### 📦 Itens do Pedido")
-        df_itens = pd.DataFrame(st.session_state.itens_pedido)
-        df_itens_display = df_itens.copy()
-        df_itens_display["preco_historico"] = df_itens_display["preco_historico"].apply(lambda x: f"R$ {x:,.2f}")
-        df_itens_display["valor_unit"]      = df_itens_display["valor_unit"].apply(lambda x: f"R$ {x:,.2f}")
-        df_itens_display["total"]           = df_itens_display["total"].apply(lambda x: f"R$ {x:,.2f}")
-        df_itens_display = df_itens_display.rename(columns={
-            "codigo": "COD.", "descricao": "PRODUTO", "peso": "PESO",
-            "cx_embarque": "CAIXA EMBARQUE", "quantidade": "QTDE",
-            "preco_historico": "PREÇO HISTÓRICO", "valor_unit": "VALOR",
-            "total": "TOTAL", "comissao": "COMISSÃO%"
-        })
-        st.dataframe(df_itens_display, use_container_width=True, height=300)
-
-        col_met1, col_met2, col_met3 = st.columns(3)
-        with col_met1:
-            st.metric("Qtde Total de Itens", f"{df_itens['quantidade'].sum():,.0f}")
-        with col_met2:
-            st.metric("Frete", tipo_frete)
-        with col_met3:
-            st.metric("Total Final", f"R$ {df_itens['total'].sum():,.2f}")
-
-        obs_pedido = st.text_area("Observação (Pedido)", key="obs_pedido_np", height=100)
-
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("🗑️ Limpar Pedido", use_container_width=True, key="limpar_pedido_np"):
-                st.session_state.itens_pedido = []
-                st.rerun()
-        with col_btn2:
-            if st.button("📄 Gerar PDF do Pedido", use_container_width=True, key="gerar_pdf_pedido_np", type="primary"):
-                try:
-                    dados_cliente_pdf = {
-                        "representante": representante,
-                        "razao_social":  cliente_selecionado,
-                        "nome_fantasia": nome_fantasia,
-                        "cnpj":          cnpj_pedido,
-                        "ie":            insc_estadual,
-                        "telefone":      telefone_pedido,
-                        "email":         email_pedido,
-                        "endereco":      endereco_pedido,
-                        "obs_cliente":   obs_cliente
-                    }
-                    dados_pedido_pdf = {
-                        "numero":          num_pedido,
-                        "tabela_preco":    tabela_preco,
-                        "tipo_frete":      tipo_frete,
-                        "data_venda":      data_venda.strftime("%d/%m/%Y"),
-                        "condicoes_pagto": condicoes_pagto
-                    }
-                    pdf_bytes = gerar_pdf_pedido(
-                        dados_cliente_pdf, dados_pedido_pdf,
-                        st.session_state.itens_pedido, obs_pedido
-                    )
-                    st.download_button(
-                        label="📥 Baixar PDF do Pedido",
-                        data=pdf_bytes,
-                        file_name=f"Pedido_{num_pedido or 'SN'}_{cliente_selecionado.replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        key="download_pdf_pedido_np"
-                    )
-                    st.success("✅ PDF gerado com sucesso!")
-                except Exception as e:
-                    st.error(f"❌ Erro ao gerar PDF: {str(e)}")
-                    st.info("💡 Certifique-se de que a biblioteca ReportLab está instalada")
-    else:
-        st.info("ℹ️ Nenhum item adicionado ao pedido ainda. Use o formulário acima para adicionar produtos.")
+    # Aviso para usar o módulo completo para geração de PDF
+    st.info("💡 Para gerar PDF e acessar todas as funcionalidades do pedido, utilize o módulo **Histórico** › aba **Pedidos**.")
 
 # ====================== HISTÓRICO DO CLIENTE (alias de Histórico > tab Por Cliente) ======================
 elif menu == "__historico_cliente__":
@@ -6922,3 +6768,4 @@ st.markdown("""
     &nbsp;·&nbsp; <span style="color:#4A7BC8;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
 </div>
 """, unsafe_allow_html=True)
+
