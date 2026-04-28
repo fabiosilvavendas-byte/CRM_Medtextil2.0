@@ -1810,6 +1810,38 @@ _DESC = {
 }
 _INFO_CARD = {}  # preenchido depois dos dados
 
+# ── Mapeamento de categorias na sidebar ──────────────────────────────────
+_CATEGORIAS_NAV = {
+    "GESTÃO COMERCIAL": [
+        "Dashboard",
+        "Performance de Vendedores",
+        "Positivação",
+        "Clientes sem Compra",
+        "Novo Pedido",
+    ],
+    "RELATÓRIOS E ATENÇÃO": [
+        "Pedidos Pendentes",
+        "Inadimplência",
+    ],
+    "CONSULTAS RÁPIDAS": [
+        "Tabela de Preços",
+        "Histórico do Cliente",
+    ],
+}
+
+# Alias: label exibido → nome real do módulo no session_state
+_ALIAS_MODULO = {
+    "Novo Pedido":         "__novo_pedido__",
+    "Tabela de Preços":    "Consulta Clientes",
+    "Histórico do Cliente":"__historico_cliente__",
+}
+_ICONES_NAV = {
+    "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
+    "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
+    "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
+    "Novo Pedido":"📝","Tabela de Preços":"＄","Histórico do Cliente":"◷",
+}
+
 if 'menu_option' not in st.session_state:
     # Admin vai para home; colaborador vai direto para primeiro módulo
     _tipo_usuario = usuario.get('tipo', 'administrador')
@@ -1851,33 +1883,13 @@ section[data-testid="stSidebar"] {
     background: var(--secondary-background-color) !important;
     border-right: 1px solid rgba(128,128,128,0.2) !important;
 }
-section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
-section[data-testid="stSidebar"] .stRadio > div {
-    display: flex !important; flex-direction: column !important; gap: 1px !important;
-}
-section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
-    padding: 9px 12px 9px 10px !important;
-    border-radius: 0 10px 10px 0 !important;
-    border-left: 3px solid transparent !important;
-    margin: 0 !important; cursor: pointer !important;
-    transition: all 0.15s !important; align-items: center !important;
-}
-section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
-    background: rgba(31,71,136,0.08) !important; border-left-color: #8EB3E8 !important;
-}
-section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
-    background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
-    border-left-color: #4A7BC8 !important;
-}
-section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #4A7BC8 !important; font-weight: 600 !important;
-}
-section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"],
-section[data-testid="stSidebar"] .stRadio div[class*="RadioMarkFill"],
-section[data-testid="stSidebar"] .stRadio svg { display:none !important; }
-section[data-testid="stSidebar"] .stRadio div[data-testid="stMarkdownContainer"] p {
-    font-size: 0.88rem !important; color: #495057 !important;
-    padding: 0 !important; margin: 0 !important;
+
+/* Category labels in sidebar */
+section[data-testid="stSidebar"] .sidebar-cat-label {
+    font-size: 0.60rem !important; font-weight: 700 !important;
+    color: #8A96A8 !important; letter-spacing: 0.09em !important;
+    text-transform: uppercase !important;
+    margin: 10px 0 3px 4px !important;
 }
 
 /* ── HOME: card visual (div.med-card) ── */
@@ -1991,6 +2003,7 @@ _ICONES_CARD = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
     "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
+    "Consulta Clientes":"＄","Histórico do Cliente":"◷","Novo Pedido":"📝",
 }
 
 with st.sidebar:
@@ -2000,31 +2013,58 @@ with st.sidebar:
         unsafe_allow_html=True)
 
     # Botão Início
-    if st.button("🏠  Início", key="nav_home", use_container_width=True, 
+    if st.button("🏠  Início", key="nav_home", use_container_width=True,
                  type="primary" if st.session_state.menu_option == '__home__' else "secondary"):
         st.session_state.menu_option = '__home__'
         st.rerun()
-    
-    # Botões dos módulos
-    for modulo in modulos_visiveis:
-        icone = _ICONES_NAV.get(modulo, '•')
-        is_selected = (st.session_state.menu_option == modulo)
-        
-        if st.button(f"{icone}  {modulo}", 
-                    key=f"nav_{modulo}", 
-                    use_container_width=True,
-                    type="primary" if is_selected else "secondary"):
-            st.session_state.menu_option = modulo
-            st.rerun()
 
     st.sidebar.markdown("---")
-    _cons_sel = st.session_state.menu_option == 'Consulta Clientes'
-    if st.button("🔎  Consulta Tabela",
-                 key="nav_consulta_clientes",
-                 use_container_width=True,
-                 type="primary" if _cons_sel else "secondary"):
-        st.session_state.menu_option = 'Consulta Clientes'
-        st.rerun()
+
+    # ── Navegação categorizada ──────────────────────────────────────────
+    _CAT_ICONS = {
+        "GESTÃO COMERCIAL":       "💰",
+        "RELATÓRIOS E ATENÇÃO":   "📋",
+        "CONSULTAS RÁPIDAS":      "🔍",
+    }
+    # Todos os módulos reais que o usuário tem acesso + aliases sempre visíveis
+    _todos_reais = set(modulos_visiveis) | {"Consulta Clientes"}
+
+    for _cat_label, _cat_itens in _CATEGORIAS_NAV.items():
+        _cat_icon = _CAT_ICONS.get(_cat_label, "•")
+        st.sidebar.markdown(
+            f"""<div style="font-size:0.60rem;font-weight:700;color:#8A96A8;
+            letter-spacing:0.09em;text-transform:uppercase;
+            margin:10px 0 3px 4px;">{_cat_icon} {_cat_label}</div>""",
+            unsafe_allow_html=True
+        )
+        for _item in _cat_itens:
+            # Resolver módulo real
+            _modulo_real = _ALIAS_MODULO.get(_item, _item)
+            # Verificar permissão: Novo Pedido e aliases especiais sempre visíveis
+            _especial = _modulo_real.startswith("__")
+            if not _especial and _modulo_real not in _todos_reais:
+                continue
+            _icone = _ICONES_NAV.get(_item, "•")
+            _sel = (st.session_state.menu_option == _modulo_real)
+            if st.button(f"{_icone}  {_item}", key=f"nav_{_item.replace(' ','_')}",
+                         use_container_width=True,
+                         type="primary" if _sel else "secondary"):
+                st.session_state.menu_option = _modulo_real
+                st.rerun()
+
+    # Rankings como item avulso (sem categoria nova)
+    if "Rankings" in _todos_reais:
+        st.sidebar.markdown(
+            """<div style="font-size:0.60rem;font-weight:700;color:#8A96A8;
+            letter-spacing:0.09em;text-transform:uppercase;
+            margin:10px 0 3px 4px;">📊 OUTROS</div>""",
+            unsafe_allow_html=True
+        )
+        if st.button("▲  Rankings", key="nav_Rankings",
+                     use_container_width=True,
+                     type="primary" if st.session_state.menu_option == "Rankings" else "secondary"):
+            st.session_state.menu_option = "Rankings"
+            st.rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("""<div style="font-size:0.62rem;font-weight:700;color:#ADB5BD;
@@ -2344,17 +2384,19 @@ if st.session_state.menu_option == '__home__':
         _info_rank = "Top vendedores e clientes"
 
     cards_data = [
-        {'nome':'Dashboard',          'info':f'R$ {vendas_mes:,.0f} no mês atual'},
-        {'nome':'Positivação',         'info':_info_posit},
-        {'nome':'Inadimplência',       'info':_info_inad},
-        {'nome':'Clientes sem Compra', 'info':_info_churn},
-        {'nome':'Histórico',           'info':'Por cliente ou vendedor'},
-        {'nome':'Preço Médio',         'info':'Análise por produto'},
-        {'nome':'Pedidos Pendentes',   'info':_info_pend},
-        {'nome':'Rankings',            'info':_info_rank},
-        {'nome':'Performance de Vendedores', 'info':'Análise completa por vendedor'},
+        # 💰 GESTÃO COMERCIAL
+        {'nome':'Dashboard',                'info':f'R$ {vendas_mes:,.0f} no mês atual',        'cat':'💰 Gestão Comercial'},
+        {'nome':'Performance de Vendedores','info':'Análise completa por vendedor',              'cat':'💰 Gestão Comercial'},
+        {'nome':'Positivação',              'info':_info_posit,                                  'cat':'💰 Gestão Comercial'},
+        {'nome':'Clientes sem Compra',      'info':_info_churn,                                  'cat':'💰 Gestão Comercial'},
+        # 📋 RELATÓRIOS E ATENÇÃO
+        {'nome':'Pedidos Pendentes',        'info':_info_pend,                                   'cat':'📋 Relatórios'},
+        {'nome':'Inadimplência',            'info':_info_inad,                                   'cat':'📋 Relatórios'},
+        # 🔍 CONSULTAS RÁPIDAS
+        {'nome':'Consulta Clientes',        'info':'Busca de produtos e preços por estado',      'cat':'🔍 Consultas'},
+        {'nome':'Histórico',                'info':'Por cliente, vendedor ou produto',            'cat':'🔍 Consultas'},
     ]
-    cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
+    cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis or c['nome'] in ('Consulta Clientes',)]
 
     st.markdown(f"""
     <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
@@ -2455,7 +2497,7 @@ if st.session_state.menu_option == '__home__':
                                     border-top:1px solid #F0F2F5;padding-top:7px;">{info}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                    if st.button(f"Abrir {nome}", key=f"hc_{nome}",
+                    if st.button(f"Abrir", key=f"hc_{nome}",
                                  use_container_width=True):
                         st.session_state.menu_option = nome
                         st.rerun()
@@ -2466,16 +2508,27 @@ if st.session_state.menu_option == '__home__':
 # ── Módulo ativo ──────────────────────────────────────────────────────────
 menu = st.session_state.menu_option
 
+# Resolver alias para nome de exibição no breadcrumb
+_ALIAS_DISPLAY = {
+    "__novo_pedido__":       "Novo Pedido",
+    "__historico_cliente__": "Histórico do Cliente",
+    "Consulta Clientes":     "Tabela de Preços",
+}
+_menu_display = _ALIAS_DISPLAY.get(menu, menu)
+
+# Módulos especiais que não precisam de verificação de permissão
+_MENU_ESPECIAIS = {"__novo_pedido__", "__historico_cliente__", "Consulta Clientes", "Rankings"}
+
 st.markdown(f"""
 <div style="font-size:0.74rem;color:#ADB5BD;margin-bottom:14px;
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
     <span style="color:#6C757D;">Início</span>
     <span style="margin:0 6px;color:#D0D5DE;">›</span>
-    <span style="color:#4A7BC8;font-weight:600;">{menu}</span>
+    <span style="color:#4A7BC8;font-weight:600;">{_menu_display}</span>
 </div>
 """, unsafe_allow_html=True)
 
-if menu not in modulos_permitidos:
+if menu not in modulos_permitidos and menu not in _MENU_ESPECIAIS:
     st.markdown("""
     <div style="background:#FFF3F3;border:1px solid #F5C6CB;border-radius:10px;
                 padding:16px 20px;color:#721C24;font-size:0.9rem;">
@@ -3061,6 +3114,46 @@ elif menu == "Inadimplência":
 elif menu == "Clientes sem Compra":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
 
+    # ── Filtro exclusivo de tempo sem compra ─────────────────────────────
+    _opcoes_periodo_churn = {
+        "1 mês sem compra":   1,
+        "2 meses sem compra": 2,
+        "3 meses sem compra": 3,
+        "4 meses sem compra": 4,
+        "5 meses sem compra": 5,
+        "6 meses sem compra": 6,
+        "7 meses sem compra": 7,
+        "8 meses sem compra": 8,
+        "9 meses sem compra": 9,
+        "10 meses sem compra": 10,
+        "11 meses sem compra": 11,
+        "12 meses sem compra": 12,
+        "Entre 12 e 24 meses sem compra": "12_24",
+    }
+
+    col_p1, col_p2 = st.columns([2, 2])
+    with col_p1:
+        _label_meses = st.selectbox(
+            "⏱️ Tempo sem compra",
+            list(_opcoes_periodo_churn.keys()),
+            index=5,
+            key="meses_churn"
+        )
+    _meses_val = _opcoes_periodo_churn[_label_meses]
+
+    # ── Data de referência: hoje ──────────────────────────────────────────
+    _hoje = pd.Timestamp.now().normalize()
+
+    if _meses_val == "12_24":
+        _data_corte_ini = _hoje - pd.DateOffset(months=24)  # última compra >= 24 meses atrás
+        _data_corte_fim = _hoje - pd.DateOffset(months=12)  # última compra <= 12 meses atrás
+        _label_periodo_churn = "Entre 12 e 24 meses sem compra"
+    else:
+        _data_corte_ini = None
+        _data_corte_fim = _hoje - pd.DateOffset(months=_meses_val)
+        _label_periodo_churn = f"{_meses_val} mês(es) sem compra"
+
+    # ── Demais filtros ────────────────────────────────────────────────────
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         vendedor_churn_filtro = st.selectbox(
@@ -3087,57 +3180,67 @@ elif menu == "Clientes sem Compra":
             key="busca_churn"
         )
 
-    # ── Lógica de período ─────────────────────────────────────────────────
-    if data_inicial and data_final:
-        _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
-        _df_periodo = df[
-            (df['DataEmissao'] >= pd.to_datetime(data_inicial)) &
-            (df['DataEmissao'] <= pd.to_datetime(data_final))
-        ]
-    elif data_inicial:
-        _label_periodo = f"A partir de {data_inicial.strftime('%d/%m/%Y')}"
-        _df_periodo = df[df['DataEmissao'] >= pd.to_datetime(data_inicial)]
-    elif data_final:
-        _label_periodo = f"Até {data_final.strftime('%d/%m/%Y')}"
-        _df_periodo = df[df['DataEmissao'] <= pd.to_datetime(data_final)]
-    else:
-        _mes_now = pd.Timestamp.now().month
-        _ano_now = pd.Timestamp.now().year
-        _label_periodo = f"Mês vigente ({_mes_now:02d}/{_ano_now})"
-        _df_periodo = df[
-            (df['DataEmissao'].dt.month == _mes_now) &
-            (df['DataEmissao'].dt.year == _ano_now)
-        ]
+    st.info(f"📅 Exibindo clientes com **{_label_periodo_churn}** — sem nenhuma NF Venda no período correspondente")
 
-    st.info(f"📅 Período analisado: **{_label_periodo}** — clientes da base que não realizaram compras neste período")
+    # ── Base cadastral: clientes com ao menos 1 NF Venda no histórico ────
+    _df_vendas_historico = df[df['TipoMov'] == 'NF Venda'].copy()
+    _cpfs_com_venda_historico = set(_df_vendas_historico['CPF_CNPJ'].unique())
 
-    clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-    
-    # Pegamos a última compra de cada cliente (DataEmissao)
-    todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-    
-    valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+    # Última data de compra por cliente (somente NF Venda) — fonte da verdade
+    _ultima_compra = (
+        _df_vendas_historico
+        .groupby('CPF_CNPJ')['DataEmissao']
+        .max()
+        .reset_index()
+        .rename(columns={'DataEmissao': 'UltimaCompra'})
+    )
+
+    # Dados cadastrais: último registro de cada cliente no histórico completo
+    _df_clientes_base = df[df['CPF_CNPJ'].isin(_cpfs_com_venda_historico)]
+    todos_clientes = (
+        _df_clientes_base
+        .sort_values('DataEmissao')
+        .groupby('CPF_CNPJ')
+        .last()
+        .reset_index()
+    )
+    todos_clientes = pd.merge(todos_clientes, _ultima_compra, on='CPF_CNPJ', how='left')
+
+    # ValorHistorico = soma total de NF Venda no histórico completo
+    valor_historico = _df_vendas_historico.groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
     valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
-    
     todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
-    
-    clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    
-    # ADICIONADO: DataEmissao incluída na seleção de colunas
-    clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'DataEmissao']]
-    
+
+    # ── Filtro exclusivo por tempo sem compra ────────────────────────────
+    # Clientes cuja ÚLTIMA NF Venda foi ANTES do corte (portanto inativos há X meses)
+    if _meses_val == "12_24":
+        # Última compra entre 12 e 24 meses atrás
+        clientes_sem_compra = todos_clientes[
+            (todos_clientes['UltimaCompra'] < _data_corte_fim) &
+            (todos_clientes['UltimaCompra'] >= _data_corte_ini)
+        ]
+    else:
+        # Última compra anterior ao corte (inativo há pelo menos X meses)
+        clientes_sem_compra = todos_clientes[
+            todos_clientes['UltimaCompra'] < _data_corte_fim
+        ]
+
+    clientes_sem_compra = clientes_sem_compra[
+        ['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'UltimaCompra']
+    ]
+
+    # ── Filtros secundários ───────────────────────────────────────────────
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
     if estado_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
-    
     if busca_cliente_churn and len(busca_cliente_churn) >= 2:
         clientes_sem_compra = clientes_sem_compra[
             clientes_sem_compra['RazaoSocial'].str.contains(busca_cliente_churn, case=False, na=False)
         ]
-    
-    # Lógica de Ordenação
+
+    # ── Ordenação ─────────────────────────────────────────────────────────
     if ordem == "Valor Histórico (Maior)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
     elif ordem == "Valor Histórico (Menor)":
@@ -3145,8 +3248,9 @@ elif menu == "Clientes sem Compra":
     elif ordem == "Nome (A-Z)":
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
     elif ordem == "Última Compra (Mais Recente)":
-        clientes_sem_compra = clientes_sem_compra.sort_values('DataEmissao', ascending=False)
-    
+        clientes_sem_compra = clientes_sem_compra.sort_values('UltimaCompra', ascending=False)
+
+    # ── Métricas ──────────────────────────────────────────────────────────
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total de Clientes sem Compra", len(clientes_sem_compra))
@@ -3155,7 +3259,7 @@ elif menu == "Clientes sem Compra":
     with col3:
         ticket_medio_churn = clientes_sem_compra['ValorHistorico'].mean() if len(clientes_sem_compra) > 0 else 0
         st.metric("Ticket Médio Histórico", f"R$ {ticket_medio_churn:,.2f}")
-    
+
     if len(clientes_sem_compra) > 0:
         top_churn = clientes_sem_compra.head(15)
         fig_churn = px.bar(
@@ -3170,26 +3274,25 @@ elif menu == "Clientes sem Compra":
         )
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
-    
-    # Preparar visualização
+
+    # ── Visualização da tabela ────────────────────────────────────────────
     clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
-    
-    # ADICIONADO: Formatação da data para o padrão brasileiro
-    clientes_sem_compra_display['DataEmissao'] = pd.to_datetime(clientes_sem_compra_display['DataEmissao']).dt.strftime('%d/%m/%Y')
-    
-    # Renomear colunas para exibição
+    clientes_sem_compra_display['UltimaCompra'] = pd.to_datetime(
+        clientes_sem_compra_display['UltimaCompra']
+    ).dt.strftime('%d/%m/%Y')
+
     clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
-        'RazaoSocial': 'Razão Social',
-        'CPF_CNPJ': 'CPF/CNPJ',
-        'Vendedor': 'Vendedor',
-        'Cidade': 'Cidade',
-        'Estado': 'Estado',
-        'ValorHistorico': 'Valor Histórico',
-        'DataEmissao': 'Última Compra'  # Coluna renomeada para a tabela
+        'RazaoSocial':   'Razão Social',
+        'CPF_CNPJ':      'CPF/CNPJ',
+        'Vendedor':      'Vendedor',
+        'Cidade':        'Cidade',
+        'Estado':        'Estado',
+        'ValorHistorico':'Valor Histórico',
+        'UltimaCompra':  'Última Compra',
     })
-    
+
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
-    
+
     st.download_button(
         "📥 Exportar Clientes sem Compra",
         to_excel(clientes_sem_compra),
@@ -3938,6 +4041,119 @@ elif menu == "Histórico":
                 key="dl_hist_produto"
             )
 
+
+# ====================== NOVO PEDIDO (alias de Histórico > tab Pedidos) ======================
+elif menu == "__novo_pedido__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">📝 Novo Pedido & Simulador</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Criação de pedidos e simulador de comissão</p>', unsafe_allow_html=True)
+
+    if 'itens_pedido' not in st.session_state:
+        st.session_state.itens_pedido = []
+
+    df_produtos_pedido = None
+    if planilhas_disponiveis.get('produtos_agrupados'):
+        with st.spinner("📥 Carregando catálogo de produtos..."):
+            df_produtos_pedido = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+            if df_produtos_pedido is not None:
+                df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
+
+    # Renderizar via Histórico tab3 — abrimos o mesmo bloco encapsulado em uma função inline
+    # Reutilizamos o mesmo código do Histórico mas sem os outros tabs
+    st.markdown("### 👤 Informações do Cliente")
+    col_cli1, col_cli2 = st.columns(2)
+    with col_cli1:
+        clientes_lista = sorted(df['RazaoSocial'].dropna().unique().tolist())
+        cliente_selecionado = st.selectbox("Selecione o Cliente", [''] + clientes_lista, key="cliente_pedido_np")
+    dados_cliente = {}
+    if cliente_selecionado:
+        df_cliente = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
+        dados_cliente = {
+            'razao_social': df_cliente.get('RazaoSocial', ''),
+            'cpf_cnpj': df_cliente.get('CPF_CNPJ', ''),
+            'cidade': df_cliente.get('Cidade', ''),
+            'estado': df_cliente.get('Estado', ''),
+            'vendedor': df_cliente.get('Vendedor', '')
+        }
+    with col_cli2:
+        representante = st.text_input("Representante", value=dados_cliente.get('vendedor', ''), key="representante_pedido_np")
+    col_cli3, col_cli4, col_cli5 = st.columns(3)
+    with col_cli3:
+        nome_fantasia = st.text_input("Nome Fantasia", value=dados_cliente.get('razao_social', ''), key="fantasia_pedido_np")
+    with col_cli4:
+        cnpj_pedido = st.text_input("CNPJ", value=dados_cliente.get('cpf_cnpj', ''), key="cnpj_pedido_np")
+    with col_cli5:
+        insc_estadual = st.text_input("Inscrição Estadual", key="ie_pedido_np")
+    col_cli6, col_cli7 = st.columns(2)
+    with col_cli6:
+        telefone_pedido = st.text_input("Telefone", key="tel_pedido_np")
+    with col_cli7:
+        email_pedido = st.text_input("Email NF-e", key="email_pedido_np")
+    endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade','')}/{dados_cliente.get('estado','')}" if dados_cliente else "", key="end_pedido_np")
+    obs_cliente = st.text_area("Observação (Cliente)", key="obs_cli_pedido_np", height=80)
+    st.markdown("---")
+    # Aviso para usar o módulo completo para geração de PDF
+    st.info("💡 Para gerar PDF e acessar todas as funcionalidades do pedido, utilize o módulo **Histórico** › aba **Pedidos**.")
+
+# ====================== HISTÓRICO DO CLIENTE (alias de Histórico > tab Por Cliente) ======================
+elif menu == "__historico_cliente__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">🔍 Histórico do Cliente</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Consulta passiva de compras anteriores por CNPJ ou Nome</p>', unsafe_allow_html=True)
+
+    col_busca1, col_busca2 = st.columns(2)
+    with col_busca1:
+        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True, key="busca_tipo_hc")
+    with col_busca2:
+        if busca_tipo == "Nome":
+            termo_busca = st.text_input("Digite o nome do cliente (mín. 3 caracteres)", key="busca_nome_hc", placeholder="Ex: Farmácia...")
+        else:
+            termo_busca = st.text_input("Digite o CPF/CNPJ", key="busca_cnpj_hc", placeholder="Ex: 12.345.678/0001-90")
+
+    if termo_busca and len(termo_busca) >= 3:
+        if busca_tipo == "Nome":
+            clientes_encontrados = df[df['RazaoSocial'].str.contains(termo_busca, case=False, na=False)]['RazaoSocial'].unique()
+        else:
+            clientes_encontrados = df[df['CPF_CNPJ'].str.contains(termo_busca, na=False)]['RazaoSocial'].unique()
+
+        if len(clientes_encontrados) > 0:
+            cliente_sel = st.selectbox("Selecione o cliente:", sorted(clientes_encontrados), key="cli_sel_hc")
+            historico_cli = df[df['RazaoSocial'] == cliente_sel].copy()
+            cliente_info = historico_cli.iloc[0].to_dict() if len(historico_cli) > 0 else {}
+
+            _hc1, _hc2, _hc3, _hc4 = st.columns(4)
+            with _hc1:
+                st.metric("CNPJ", cliente_info.get('CPF_CNPJ', ''))
+            with _hc2:
+                st.metric("Cidade/UF", f"{cliente_info.get('Cidade','')} / {cliente_info.get('Estado','')}")
+            with _hc3:
+                st.metric("Vendedor", cliente_info.get('Vendedor', ''))
+            with _hc4:
+                st.metric("Total Comprado", f"R$ {historico_cli[historico_cli['TipoMov']=='NF Venda']['TotalProduto'].sum():,.2f}")
+
+            st.markdown("---")
+            vendas_cli = historico_cli[historico_cli['TipoMov'] == 'NF Venda']
+            devolucoes_cli = historico_cli[historico_cli['TipoMov'] == 'NF Dev.Venda']
+            colunas_display_hc = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
+            _colunas_disp = [c for c in colunas_display_hc if c in historico_cli.columns]
+
+            _ht1, _ht2 = st.tabs(["🛒 Vendas", "↩️ Devoluções"])
+            with _ht1:
+                if len(vendas_cli) > 0:
+                    _vd = vendas_cli[_colunas_disp].copy()
+                    _vd['DataEmissao'] = _vd['DataEmissao'].dt.strftime('%d/%m/%Y')
+                    st.dataframe(_vd.sort_values('DataEmissao', ascending=False), use_container_width=True, height=350)
+                else:
+                    st.info("Sem vendas registradas")
+            with _ht2:
+                if len(devolucoes_cli) > 0:
+                    _dd = devolucoes_cli[_colunas_disp].copy()
+                    _dd['DataEmissao'] = _dd['DataEmissao'].dt.strftime('%d/%m/%Y')
+                    st.dataframe(_dd.sort_values('DataEmissao', ascending=False), use_container_width=True, height=350)
+                else:
+                    st.info("Sem devoluções registradas")
+        else:
+            st.warning("Nenhum cliente encontrado com esse critério.")
+    else:
+        st.info("👆 Digite pelo menos 3 caracteres para buscar um cliente")
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
@@ -4823,13 +5039,34 @@ elif menu == "Pedidos Pendentes":
                         except:
                             pass
 
-                COLUNAS = [
+                COLUNAS_COMPLETAS = [
                     'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
                     'Contratado', 'Entregue', 'Pendente',
                     'Valor Unitário', 'Valor Pendente',
                     'Data Emissão', 'Dias Pendentes', 'Vendedor',
                     '% Entregue', 'Previsão', 'Categoria', 'Observações'
                 ]
+
+                # Abas que NÃO exibem coluna Gramatura
+                ABAS_SEM_GRAMATURA = {'Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Esteril'}
+
+                # Abas que classificam por fios (09, 11, 13)
+                ABAS_COM_FIOS = {'Esteril', 'Tipo Queijo', 'Pacote'}
+
+                def extrair_fios(descricao):
+                    """Extrai número de fios da descrição (09, 11, 13). Retorna '09', '11', '13' ou 'Outros'."""
+                    import re
+                    if not descricao:
+                        return 'Outros'
+                    # Busca padrões: 9F, 11F, 13F, 09 FIO, 11 FIOS, etc.
+                    d = str(descricao).upper()
+                    for fio in ['13', '11', '09', '9']:
+                        if re.search(r'\b' + fio + r'\s*F', d) or re.search(r'\b' + fio + r'\s*FIO', d):
+                            return '09' if fio == '9' else fio
+                        # Também busca só o número precedido de espaço ex: "GAZE ESTERIL 11"
+                        if re.search(r'[\s\-_]' + fio + r'(\s|$)', d):
+                            return '09' if fio == '9' else fio
+                    return 'Outros'
 
                 # Agrupar linhas por aba
                 abas_data = {}
@@ -4918,6 +5155,17 @@ elif menu == "Pedidos Pendentes":
                     linhas = abas_data.get(nome_aba, [])
                     ws = wb.create_sheet(title=nome_aba)
 
+                    # Definir colunas da aba (sem Gramatura se necessário)
+                    if nome_aba in ABAS_SEM_GRAMATURA:
+                        COLUNAS = [c for c in COLUNAS_COMPLETAS if c != 'Gramatura']
+                        idx_gram = None  # sem gramatura
+                    else:
+                        COLUNAS = list(COLUNAS_COMPLETAS)
+                        idx_gram = COLUNAS_COMPLETAS.index('Gramatura')
+
+                    # Índice da coluna Gramatura na lista completa (para remover do dado)
+                    idx_gram_completo = COLUNAS_COMPLETAS.index('Gramatura')
+
                     # Cabeçalho
                     ws.append(COLUNAS)
                     for col_idx, _ in enumerate(COLUNAS, 1):
@@ -4929,42 +5177,121 @@ elif menu == "Pedidos Pendentes":
 
                     ws.row_dimensions[1].height = 30
 
-                    # Dados
-                    for r_idx, linha in enumerate(linhas, 2):
-                        ws.append(linha)
-                        fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
-                        for col_idx in range(1, len(COLUNAS) + 1):
-                            cell = ws.cell(row=r_idx, column=col_idx)
-                            cell.border = BORDER
-                            cell.alignment = Alignment(vertical="center")
-                            if fill.fill_type:
-                                cell.fill = fill
-                            # Formatar moeda
-                            if col_idx in (10, 11):
-                                cell.number_format = 'R$ #,##0.00'
-                            # Formatar números inteiros
-                            if col_idx in (7, 8, 9):
-                                cell.number_format = '#,##0'
+                    # Preparar linhas (remover gramatura se necessário)
+                    def _linha_para_aba(linha_completa, sem_gram):
+                        if sem_gram:
+                            return [v for i, v in enumerate(linha_completa) if i != idx_gram_completo]
+                        return linha_completa
+
+                    # Ordenar por fios se aba pertence ao grupo com fios
+                    if nome_aba in ABAS_COM_FIOS:
+                        # Índice de Descrição na lista completa
+                        idx_desc_completo = COLUNAS_COMPLETAS.index('Descrição')
+                        ORDEM_FIOS = ['09', '11', '13', 'Outros']
+                        grupos_fios = {f: [] for f in ORDEM_FIOS}
+                        for linha in linhas:
+                            desc_val = str(linha[idx_desc_completo]) if idx_desc_completo < len(linha) else ''
+                            fio = extrair_fios(desc_val)
+                            grupos_fios[fio].append(linha)
+
+                        # Estilo da linha separadora de grupo
+                        SEP_FILL = PatternFill("solid", fgColor="1F4788")
+                        SEP_FONT = Font(bold=True, color="FFFFFF", size=10)
+
+                        r_idx = 2
+                        linhas_escritas = []  # para calcular totais depois
+                        for fio in ORDEM_FIOS:
+                            grupo = grupos_fios[fio]
+                            if not grupo:
+                                continue
+                            # Linha separadora com descrição do grupo
+                            label = f"{fio} Fios" if fio != 'Outros' else "Outros"
+                            ws.cell(r_idx, 1, label)
+                            ws.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=len(COLUNAS))
+                            for col_idx in range(1, len(COLUNAS) + 1):
+                                cell = ws.cell(r_idx, col_idx)
+                                cell.fill = SEP_FILL
+                                cell.font = SEP_FONT
+                                cell.alignment = Alignment(horizontal="center", vertical="center")
+                                cell.border = BORDER
+                            ws.row_dimensions[r_idx].height = 20
+                            r_idx += 1
+
+                            for linha in grupo:
+                                linha_aba = _linha_para_aba(linha, nome_aba in ABAS_SEM_GRAMATURA)
+                                ws.append(linha_aba)
+                                linhas_escritas.append(linha)
+                                fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
+                                for col_idx in range(1, len(COLUNAS) + 1):
+                                    cell = ws.cell(row=r_idx, column=col_idx)
+                                    cell.border = BORDER
+                                    cell.alignment = Alignment(vertical="center")
+                                    if fill.fill_type:
+                                        cell.fill = fill
+                                    # Formatar moeda (Valor Unitário, Valor Pendente)
+                                    col_nome = COLUNAS[col_idx - 1]
+                                    if col_nome in ('Valor Unitário', 'Valor Pendente'):
+                                        cell.number_format = 'R$ #,##0.00'
+                                    if col_nome in ('Contratado', 'Entregue', 'Pendente'):
+                                        cell.number_format = '#,##0'
+                                r_idx += 1
+
+                        # Linha de totais — usar r_idx atual (correto, sem duplicar)
+                        if linhas_escritas:
+                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
+                            for col_idx, nome_col in enumerate(COLUNAS, 1):
+                                if nome_col in ('Contratado', 'Entregue', 'Pendente', 'Valor Pendente'):
+                                    # buscar índice na lista completa para pegar valor correto
+                                    idx_completo = COLUNAS_COMPLETAS.index(nome_col)
+                                    total = sum(
+                                        float(l[idx_completo]) if isinstance(l[idx_completo], (int, float)) else 0
+                                        for l in linhas_escritas
+                                    )
+                                    c = ws.cell(r_idx, col_idx, total)
+                                    c.font = Font(bold=True)
+                                    c.number_format = 'R$ #,##0.00' if nome_col == 'Valor Pendente' else '#,##0'
+
+                    else:
+                        # Abas sem agrupamento por fios
+                        r_idx = 2
+                        for linha in linhas:
+                            linha_aba = _linha_para_aba(linha, nome_aba in ABAS_SEM_GRAMATURA)
+                            ws.append(linha_aba)
+                            fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
+                            for col_idx in range(1, len(COLUNAS) + 1):
+                                cell = ws.cell(row=r_idx, column=col_idx)
+                                cell.border = BORDER
+                                cell.alignment = Alignment(vertical="center")
+                                if fill.fill_type:
+                                    cell.fill = fill
+                                col_nome = COLUNAS[col_idx - 1]
+                                if col_nome in ('Valor Unitário', 'Valor Pendente'):
+                                    cell.number_format = 'R$ #,##0.00'
+                                if col_nome in ('Contratado', 'Entregue', 'Pendente'):
+                                    cell.number_format = '#,##0'
+                            r_idx += 1
+
+                        # Linha de totais — r_idx aponta para a linha DEPOIS da última linha de dados
+                        if linhas:
+                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
+                            for col_idx, nome_col in enumerate(COLUNAS, 1):
+                                if nome_col in ('Contratado', 'Entregue', 'Pendente', 'Valor Pendente'):
+                                    idx_completo = COLUNAS_COMPLETAS.index(nome_col)
+                                    total = sum(
+                                        float(l[idx_completo]) if isinstance(l[idx_completo], (int, float)) else 0
+                                        for l in linhas
+                                    )
+                                    c = ws.cell(r_idx, col_idx, total)
+                                    c.font = Font(bold=True)
+                                    c.number_format = 'R$ #,##0.00' if nome_col == 'Valor Pendente' else '#,##0'
 
                     # Larguras de coluna
-                    larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    if nome_aba in ABAS_SEM_GRAMATURA:
+                        larguras = [14, 30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    else:
+                        larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
                     for i, larg in enumerate(larguras, 1):
                         ws.column_dimensions[get_column_letter(i)].width = larg
-
-                    # Rodapé com totais (última linha)
-                    if linhas:
-                        ultima = len(linhas) + 2
-                        ws.cell(ultima, 1, 'TOTAL').font = Font(bold=True)
-                        # Somar Contratado, Entregue, Pendente, ValorPendente
-                        for col_idx, nome_col in enumerate(COLUNAS, 1):
-                            if nome_col in ('Contratado', 'Entregue', 'Pendente', 'Valor Pendente'):
-                                total = sum(
-                                    float(linha[col_idx - 1]) if isinstance(linha[col_idx - 1], (int, float)) else 0
-                                    for linha in linhas
-                                )
-                                c = ws.cell(ultima, col_idx, total)
-                                c.font = Font(bold=True)
-                                c.number_format = '#,##0.00' if nome_col == 'Valor Pendente' else '#,##0'
 
                 output = BytesIO()
                 wb.save(output)
