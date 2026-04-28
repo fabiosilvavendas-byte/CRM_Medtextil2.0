@@ -1810,6 +1810,38 @@ _DESC = {
 }
 _INFO_CARD = {}  # preenchido depois dos dados
 
+# ── Mapeamento de categorias na sidebar ──────────────────────────────────
+_CATEGORIAS_NAV = {
+    "GESTÃO COMERCIAL": [
+        "Dashboard",
+        "Performance de Vendedores",
+        "Positivação",
+        "Clientes sem Compra",
+        "Novo Pedido",
+    ],
+    "RELATÓRIOS E ATENÇÃO": [
+        "Pedidos Pendentes",
+        "Inadimplência",
+    ],
+    "CONSULTAS RÁPIDAS": [
+        "Tabela de Preços",
+        "Histórico do Cliente",
+    ],
+}
+
+# Alias: label exibido → nome real do módulo no session_state
+_ALIAS_MODULO = {
+    "Novo Pedido":         "__novo_pedido__",
+    "Tabela de Preços":    "Consulta Clientes",
+    "Histórico do Cliente":"__historico_cliente__",
+}
+_ICONES_NAV = {
+    "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
+    "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
+    "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
+    "Novo Pedido":"📝","Tabela de Preços":"＄","Histórico do Cliente":"◷",
+}
+
 if 'menu_option' not in st.session_state:
     # Admin vai para home; colaborador vai direto para primeiro módulo
     _tipo_usuario = usuario.get('tipo', 'administrador')
@@ -1851,33 +1883,13 @@ section[data-testid="stSidebar"] {
     background: var(--secondary-background-color) !important;
     border-right: 1px solid rgba(128,128,128,0.2) !important;
 }
-section[data-testid="stSidebar"] .stRadio > label { display:none !important; }
-section[data-testid="stSidebar"] .stRadio > div {
-    display: flex !important; flex-direction: column !important; gap: 1px !important;
-}
-section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
-    padding: 9px 12px 9px 10px !important;
-    border-radius: 0 10px 10px 0 !important;
-    border-left: 3px solid transparent !important;
-    margin: 0 !important; cursor: pointer !important;
-    transition: all 0.15s !important; align-items: center !important;
-}
-section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:hover {
-    background: rgba(31,71,136,0.08) !important; border-left-color: #8EB3E8 !important;
-}
-section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
-    background: linear-gradient(90deg,#EEF3FC,#F4F7FD) !important;
-    border-left-color: #4A7BC8 !important;
-}
-section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #4A7BC8 !important; font-weight: 600 !important;
-}
-section[data-testid="stSidebar"] .stRadio div[class*="RadioMark"],
-section[data-testid="stSidebar"] .stRadio div[class*="RadioMarkFill"],
-section[data-testid="stSidebar"] .stRadio svg { display:none !important; }
-section[data-testid="stSidebar"] .stRadio div[data-testid="stMarkdownContainer"] p {
-    font-size: 0.88rem !important; color: #495057 !important;
-    padding: 0 !important; margin: 0 !important;
+
+/* Category labels in sidebar */
+section[data-testid="stSidebar"] .sidebar-cat-label {
+    font-size: 0.60rem !important; font-weight: 700 !important;
+    color: #8A96A8 !important; letter-spacing: 0.09em !important;
+    text-transform: uppercase !important;
+    margin: 10px 0 3px 4px !important;
 }
 
 /* ── HOME: card visual (div.med-card) ── */
@@ -1991,6 +2003,7 @@ _ICONES_CARD = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
     "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
+    "Consulta Clientes":"＄","Histórico do Cliente":"◷","Novo Pedido":"📝",
 }
 
 with st.sidebar:
@@ -2000,31 +2013,58 @@ with st.sidebar:
         unsafe_allow_html=True)
 
     # Botão Início
-    if st.button("🏠  Início", key="nav_home", use_container_width=True, 
+    if st.button("🏠  Início", key="nav_home", use_container_width=True,
                  type="primary" if st.session_state.menu_option == '__home__' else "secondary"):
         st.session_state.menu_option = '__home__'
         st.rerun()
-    
-    # Botões dos módulos
-    for modulo in modulos_visiveis:
-        icone = _ICONES_NAV.get(modulo, '•')
-        is_selected = (st.session_state.menu_option == modulo)
-        
-        if st.button(f"{icone}  {modulo}", 
-                    key=f"nav_{modulo}", 
-                    use_container_width=True,
-                    type="primary" if is_selected else "secondary"):
-            st.session_state.menu_option = modulo
-            st.rerun()
 
     st.sidebar.markdown("---")
-    _cons_sel = st.session_state.menu_option == 'Consulta Clientes'
-    if st.button("🔎  Consulta Tabela",
-                 key="nav_consulta_clientes",
-                 use_container_width=True,
-                 type="primary" if _cons_sel else "secondary"):
-        st.session_state.menu_option = 'Consulta Clientes'
-        st.rerun()
+
+    # ── Navegação categorizada ──────────────────────────────────────────
+    _CAT_ICONS = {
+        "GESTÃO COMERCIAL":       "💰",
+        "RELATÓRIOS E ATENÇÃO":   "📋",
+        "CONSULTAS RÁPIDAS":      "🔍",
+    }
+    # Todos os módulos reais que o usuário tem acesso + aliases sempre visíveis
+    _todos_reais = set(modulos_visiveis) | {"Consulta Clientes"}
+
+    for _cat_label, _cat_itens in _CATEGORIAS_NAV.items():
+        _cat_icon = _CAT_ICONS.get(_cat_label, "•")
+        st.sidebar.markdown(
+            f"""<div style="font-size:0.60rem;font-weight:700;color:#8A96A8;
+            letter-spacing:0.09em;text-transform:uppercase;
+            margin:10px 0 3px 4px;">{_cat_icon} {_cat_label}</div>""",
+            unsafe_allow_html=True
+        )
+        for _item in _cat_itens:
+            # Resolver módulo real
+            _modulo_real = _ALIAS_MODULO.get(_item, _item)
+            # Verificar permissão: Novo Pedido e aliases especiais sempre visíveis
+            _especial = _modulo_real.startswith("__")
+            if not _especial and _modulo_real not in _todos_reais:
+                continue
+            _icone = _ICONES_NAV.get(_item, "•")
+            _sel = (st.session_state.menu_option == _modulo_real)
+            if st.button(f"{_icone}  {_item}", key=f"nav_{_item.replace(' ','_')}",
+                         use_container_width=True,
+                         type="primary" if _sel else "secondary"):
+                st.session_state.menu_option = _modulo_real
+                st.rerun()
+
+    # Rankings como item avulso (sem categoria nova)
+    if "Rankings" in _todos_reais:
+        st.sidebar.markdown(
+            """<div style="font-size:0.60rem;font-weight:700;color:#8A96A8;
+            letter-spacing:0.09em;text-transform:uppercase;
+            margin:10px 0 3px 4px;">📊 OUTROS</div>""",
+            unsafe_allow_html=True
+        )
+        if st.button("▲  Rankings", key="nav_Rankings",
+                     use_container_width=True,
+                     type="primary" if st.session_state.menu_option == "Rankings" else "secondary"):
+            st.session_state.menu_option = "Rankings"
+            st.rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("""<div style="font-size:0.62rem;font-weight:700;color:#ADB5BD;
@@ -2344,17 +2384,19 @@ if st.session_state.menu_option == '__home__':
         _info_rank = "Top vendedores e clientes"
 
     cards_data = [
-        {'nome':'Dashboard',          'info':f'R$ {vendas_mes:,.0f} no mês atual'},
-        {'nome':'Positivação',         'info':_info_posit},
-        {'nome':'Inadimplência',       'info':_info_inad},
-        {'nome':'Clientes sem Compra', 'info':_info_churn},
-        {'nome':'Histórico',           'info':'Por cliente ou vendedor'},
-        {'nome':'Preço Médio',         'info':'Análise por produto'},
-        {'nome':'Pedidos Pendentes',   'info':_info_pend},
-        {'nome':'Rankings',            'info':_info_rank},
-        {'nome':'Performance de Vendedores', 'info':'Análise completa por vendedor'},
+        # 💰 GESTÃO COMERCIAL
+        {'nome':'Dashboard',                'info':f'R$ {vendas_mes:,.0f} no mês atual',        'cat':'💰 Gestão Comercial'},
+        {'nome':'Performance de Vendedores','info':'Análise completa por vendedor',              'cat':'💰 Gestão Comercial'},
+        {'nome':'Positivação',              'info':_info_posit,                                  'cat':'💰 Gestão Comercial'},
+        {'nome':'Clientes sem Compra',      'info':_info_churn,                                  'cat':'💰 Gestão Comercial'},
+        # 📋 RELATÓRIOS E ATENÇÃO
+        {'nome':'Pedidos Pendentes',        'info':_info_pend,                                   'cat':'📋 Relatórios'},
+        {'nome':'Inadimplência',            'info':_info_inad,                                   'cat':'📋 Relatórios'},
+        # 🔍 CONSULTAS RÁPIDAS
+        {'nome':'Consulta Clientes',        'info':'Busca de produtos e preços por estado',      'cat':'🔍 Consultas'},
+        {'nome':'Histórico',                'info':'Por cliente, vendedor ou produto',            'cat':'🔍 Consultas'},
     ]
-    cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis]
+    cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis or c['nome'] in ('Consulta Clientes',)]
 
     st.markdown(f"""
     <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
@@ -2455,7 +2497,7 @@ if st.session_state.menu_option == '__home__':
                                     border-top:1px solid #F0F2F5;padding-top:7px;">{info}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                    if st.button(f"Abrir {nome}", key=f"hc_{nome}",
+                    if st.button(f"Abrir", key=f"hc_{nome}",
                                  use_container_width=True):
                         st.session_state.menu_option = nome
                         st.rerun()
@@ -2466,16 +2508,27 @@ if st.session_state.menu_option == '__home__':
 # ── Módulo ativo ──────────────────────────────────────────────────────────
 menu = st.session_state.menu_option
 
+# Resolver alias para nome de exibição no breadcrumb
+_ALIAS_DISPLAY = {
+    "__novo_pedido__":       "Novo Pedido",
+    "__historico_cliente__": "Histórico do Cliente",
+    "Consulta Clientes":     "Tabela de Preços",
+}
+_menu_display = _ALIAS_DISPLAY.get(menu, menu)
+
+# Módulos especiais que não precisam de verificação de permissão
+_MENU_ESPECIAIS = {"__novo_pedido__", "__historico_cliente__", "Consulta Clientes", "Rankings"}
+
 st.markdown(f"""
 <div style="font-size:0.74rem;color:#ADB5BD;margin-bottom:14px;
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
     <span style="color:#6C757D;">Início</span>
     <span style="margin:0 6px;color:#D0D5DE;">›</span>
-    <span style="color:#4A7BC8;font-weight:600;">{menu}</span>
+    <span style="color:#4A7BC8;font-weight:600;">{_menu_display}</span>
 </div>
 """, unsafe_allow_html=True)
 
-if menu not in modulos_permitidos:
+if menu not in modulos_permitidos and menu not in _MENU_ESPECIAIS:
     st.markdown("""
     <div style="background:#FFF3F3;border:1px solid #F5C6CB;border-radius:10px;
                 padding:16px 20px;color:#721C24;font-size:0.9rem;">
@@ -3938,6 +3991,119 @@ elif menu == "Histórico":
                 key="dl_hist_produto"
             )
 
+
+# ====================== NOVO PEDIDO (alias de Histórico > tab Pedidos) ======================
+elif menu == "__novo_pedido__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">📝 Novo Pedido & Simulador</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Criação de pedidos e simulador de comissão</p>', unsafe_allow_html=True)
+
+    if 'itens_pedido' not in st.session_state:
+        st.session_state.itens_pedido = []
+
+    df_produtos_pedido = None
+    if planilhas_disponiveis.get('produtos_agrupados'):
+        with st.spinner("📥 Carregando catálogo de produtos..."):
+            df_produtos_pedido = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+            if df_produtos_pedido is not None:
+                df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
+
+    # Renderizar via Histórico tab3 — abrimos o mesmo bloco encapsulado em uma função inline
+    # Reutilizamos o mesmo código do Histórico mas sem os outros tabs
+    st.markdown("### 👤 Informações do Cliente")
+    col_cli1, col_cli2 = st.columns(2)
+    with col_cli1:
+        clientes_lista = sorted(df['RazaoSocial'].dropna().unique().tolist())
+        cliente_selecionado = st.selectbox("Selecione o Cliente", [''] + clientes_lista, key="cliente_pedido_np")
+    dados_cliente = {}
+    if cliente_selecionado:
+        df_cliente = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
+        dados_cliente = {
+            'razao_social': df_cliente.get('RazaoSocial', ''),
+            'cpf_cnpj': df_cliente.get('CPF_CNPJ', ''),
+            'cidade': df_cliente.get('Cidade', ''),
+            'estado': df_cliente.get('Estado', ''),
+            'vendedor': df_cliente.get('Vendedor', '')
+        }
+    with col_cli2:
+        representante = st.text_input("Representante", value=dados_cliente.get('vendedor', ''), key="representante_pedido_np")
+    col_cli3, col_cli4, col_cli5 = st.columns(3)
+    with col_cli3:
+        nome_fantasia = st.text_input("Nome Fantasia", value=dados_cliente.get('razao_social', ''), key="fantasia_pedido_np")
+    with col_cli4:
+        cnpj_pedido = st.text_input("CNPJ", value=dados_cliente.get('cpf_cnpj', ''), key="cnpj_pedido_np")
+    with col_cli5:
+        insc_estadual = st.text_input("Inscrição Estadual", key="ie_pedido_np")
+    col_cli6, col_cli7 = st.columns(2)
+    with col_cli6:
+        telefone_pedido = st.text_input("Telefone", key="tel_pedido_np")
+    with col_cli7:
+        email_pedido = st.text_input("Email NF-e", key="email_pedido_np")
+    endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade','')}/{dados_cliente.get('estado','')}" if dados_cliente else "", key="end_pedido_np")
+    obs_cliente = st.text_area("Observação (Cliente)", key="obs_cli_pedido_np", height=80)
+    st.markdown("---")
+    # Aviso para usar o módulo completo para geração de PDF
+    st.info("💡 Para gerar PDF e acessar todas as funcionalidades do pedido, utilize o módulo **Histórico** › aba **Pedidos**.")
+
+# ====================== HISTÓRICO DO CLIENTE (alias de Histórico > tab Por Cliente) ======================
+elif menu == "__historico_cliente__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">🔍 Histórico do Cliente</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Consulta passiva de compras anteriores por CNPJ ou Nome</p>', unsafe_allow_html=True)
+
+    col_busca1, col_busca2 = st.columns(2)
+    with col_busca1:
+        busca_tipo = st.radio("Buscar por:", ["Nome", "CPF/CNPJ"], horizontal=True, key="busca_tipo_hc")
+    with col_busca2:
+        if busca_tipo == "Nome":
+            termo_busca = st.text_input("Digite o nome do cliente (mín. 3 caracteres)", key="busca_nome_hc", placeholder="Ex: Farmácia...")
+        else:
+            termo_busca = st.text_input("Digite o CPF/CNPJ", key="busca_cnpj_hc", placeholder="Ex: 12.345.678/0001-90")
+
+    if termo_busca and len(termo_busca) >= 3:
+        if busca_tipo == "Nome":
+            clientes_encontrados = df[df['RazaoSocial'].str.contains(termo_busca, case=False, na=False)]['RazaoSocial'].unique()
+        else:
+            clientes_encontrados = df[df['CPF_CNPJ'].str.contains(termo_busca, na=False)]['RazaoSocial'].unique()
+
+        if len(clientes_encontrados) > 0:
+            cliente_sel = st.selectbox("Selecione o cliente:", sorted(clientes_encontrados), key="cli_sel_hc")
+            historico_cli = df[df['RazaoSocial'] == cliente_sel].copy()
+            cliente_info = historico_cli.iloc[0].to_dict() if len(historico_cli) > 0 else {}
+
+            _hc1, _hc2, _hc3, _hc4 = st.columns(4)
+            with _hc1:
+                st.metric("CNPJ", cliente_info.get('CPF_CNPJ', ''))
+            with _hc2:
+                st.metric("Cidade/UF", f"{cliente_info.get('Cidade','')} / {cliente_info.get('Estado','')}")
+            with _hc3:
+                st.metric("Vendedor", cliente_info.get('Vendedor', ''))
+            with _hc4:
+                st.metric("Total Comprado", f"R$ {historico_cli[historico_cli['TipoMov']=='NF Venda']['TotalProduto'].sum():,.2f}")
+
+            st.markdown("---")
+            vendas_cli = historico_cli[historico_cli['TipoMov'] == 'NF Venda']
+            devolucoes_cli = historico_cli[historico_cli['TipoMov'] == 'NF Dev.Venda']
+            colunas_display_hc = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
+            _colunas_disp = [c for c in colunas_display_hc if c in historico_cli.columns]
+
+            _ht1, _ht2 = st.tabs(["🛒 Vendas", "↩️ Devoluções"])
+            with _ht1:
+                if len(vendas_cli) > 0:
+                    _vd = vendas_cli[_colunas_disp].copy()
+                    _vd['DataEmissao'] = _vd['DataEmissao'].dt.strftime('%d/%m/%Y')
+                    st.dataframe(_vd.sort_values('DataEmissao', ascending=False), use_container_width=True, height=350)
+                else:
+                    st.info("Sem vendas registradas")
+            with _ht2:
+                if len(devolucoes_cli) > 0:
+                    _dd = devolucoes_cli[_colunas_disp].copy()
+                    _dd['DataEmissao'] = _dd['DataEmissao'].dt.strftime('%d/%m/%Y')
+                    st.dataframe(_dd.sort_values('DataEmissao', ascending=False), use_container_width=True, height=350)
+                else:
+                    st.info("Sem devoluções registradas")
+        else:
+            st.warning("Nenhum cliente encontrado com esse critério.")
+    else:
+        st.info("👆 Digite pelo menos 3 caracteres para buscar um cliente")
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
