@@ -3201,26 +3201,62 @@ elif menu == "Clientes sem Compra":
 
     st.info(f"📅 Período de positivação: **{_label_periodo}** — clientes que NÃO compraram neste período · Faixa: **{_label_faixa}**")
 
-    # ── Lógica corrigida: base apenas de clientes com NF Venda histórica ──
+    # ── Lógica corrigida: base de clientes por vendedor usando histórico completo ──
+    # clientes_com_venda = quem positivou (NF Venda) no período selecionado
     clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
 
-    # Base cadastral restrita a CPF/CNPJs com ao menos uma NF Venda no histórico completo
-    _cpfs_com_venda_historico = set(df[df['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-    _df_clientes_base = df[df['CPF_CNPJ'].isin(_cpfs_com_venda_historico)]
-    todos_clientes = _df_clientes_base.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+    # Base: apenas NF Venda do histórico completo
+    _df_nf = df[df['TipoMov'] == 'NF Venda'].copy()
+    _df_nf['DataEmissao'] = pd.to_datetime(_df_nf['DataEmissao'], errors='coerce')
+
+    # Dados cadastrais: RazaoSocial, Cidade, Estado do último registro de cada CPF
+    _cadastro = (
+        _df_nf.sort_values('DataEmissao')
+        .groupby('CPF_CNPJ')
+        .last()
+        .reset_index()[['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']]
+    )
+
+    # Vendedor principal de cada CPF: vendedor com MAIS NF Vendas no histórico
+    # (evita que um registro avulso troque o vendedor do cliente)
+    _vendedor_principal = (
+        _df_nf.groupby(['CPF_CNPJ', 'Vendedor'])
+        .size()
+        .reset_index(name='_cnt')
+        .sort_values('_cnt', ascending=False)
+        .groupby('CPF_CNPJ')
+        .first()
+        .reset_index()[['CPF_CNPJ', 'Vendedor']]
+    )
+
+    # Última compra de cada CPF (usado no filtro de faixa de meses e exibição)
+    _ultima_compra = (
+        _df_nf.groupby('CPF_CNPJ')['DataEmissao']
+        .max()
+        .reset_index()
+        .rename(columns={'DataEmissao': 'DataEmissao'})
+    )
 
     # ValorHistorico = soma total de NF Venda no histórico completo
-    valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
+    valor_historico = (
+        _df_nf.groupby('CPF_CNPJ')['TotalProduto']
+        .sum()
+        .reset_index()
+    )
     valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
 
-    todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
+    # Montar todos_clientes: cadastro + vendedor principal + última compra + valor
+    todos_clientes = (
+        _cadastro
+        .merge(_vendedor_principal, on='CPF_CNPJ', how='left')
+        .merge(_ultima_compra,      on='CPF_CNPJ', how='left')
+        .merge(valor_historico,     on='CPF_CNPJ', how='left')
+    )
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
+    todos_clientes['DataEmissao']    = pd.to_datetime(todos_clientes['DataEmissao'], errors='coerce')
 
     # Clientes sem compra = base histórica MENOS quem comprou no período selecionado
     clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)].copy()
-
-    # Garantir DataEmissao como datetime para filtros de data
-    clientes_sem_compra['DataEmissao'] = pd.to_datetime(clientes_sem_compra['DataEmissao'], errors='coerce')
 
     # ── Aplicar filtro exclusivo de faixa de meses sem compra ─────────────
     if _data_corte_ini is not None and _data_corte_fim is not None:
@@ -3237,7 +3273,9 @@ elif menu == "Clientes sem Compra":
     clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'DataEmissao']]
 
     if vendedor_churn_filtro != 'Todos':
-        clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
+        # Mesmo critério da positivação: todos os CPFs vinculados ao vendedor em qualquer NF Venda
+        _cpfs_do_vendedor = set(_df_nf[_df_nf['Vendedor'] == vendedor_churn_filtro]['CPF_CNPJ'].unique())
+        clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['CPF_CNPJ'].isin(_cpfs_do_vendedor)]
     if estado_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
 
