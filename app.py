@@ -3115,6 +3115,40 @@ elif menu == "Inadimplência":
 elif menu == "Clientes sem Compra":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Clientes sem Compra no Período</h2>', unsafe_allow_html=True)
 
+    # ── Filtro exclusivo de meses sem compra ──────────────────────────────
+    st.markdown("#### 🗓️ Filtro por Tempo sem Compra")
+    _opcoes_faixa = (
+        ["Selecione..."]
+        + [f"{m} mês" if m == 1 else f"{m} meses" for m in range(1, 13)]
+        + ["12 a 24 meses"]
+    )
+    _col_faixa1, _col_faixa2 = st.columns([2, 5])
+    with _col_faixa1:
+        _faixa_selecionada = st.selectbox(
+            "Clientes sem compra há:",
+            _opcoes_faixa,
+            key="faixa_churn_meses"
+        )
+
+    # Calcular datas de corte com base na faixa selecionada
+    _hoje_churn = pd.Timestamp.now().normalize()
+    if _faixa_selecionada == "Selecione...":
+        _data_corte_ini = None
+        _data_corte_fim = None
+        _label_faixa = "todos os períodos"
+    elif _faixa_selecionada == "12 a 24 meses":
+        _data_corte_ini = _hoje_churn - pd.DateOffset(months=24)
+        _data_corte_fim = _hoje_churn - pd.DateOffset(months=12)
+        _label_faixa = "entre 12 e 24 meses sem compra"
+    else:
+        _n_meses = int(_faixa_selecionada.split()[0])
+        # Sem compra há exatamente N meses = última compra entre (hoje - N meses - 30 dias) e (hoje - N meses)
+        _data_corte_ini = _hoje_churn - pd.DateOffset(months=_n_meses + 1)
+        _data_corte_fim = _hoje_churn - pd.DateOffset(months=_n_meses)
+        _label_faixa = f"há {_faixa_selecionada} sem compra"
+
+    st.markdown("---")
+
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         vendedor_churn_filtro = st.selectbox(
@@ -3141,7 +3175,9 @@ elif menu == "Clientes sem Compra":
             key="busca_churn"
         )
 
-    # ── Lógica de período ─────────────────────────────────────────────────
+    # ── Lógica de período (filtro global da barra lateral) ────────────────
+    # O período da barra lateral define QUAIS clientes positivaram (compraram).
+    # Clientes que compraram nesse período são EXCLUÍDOS do relatório.
     if data_inicial and data_final:
         _label_periodo = f"{data_inicial.strftime('%d/%m/%Y')} a {data_final.strftime('%d/%m/%Y')}"
         _df_periodo = df[
@@ -3163,34 +3199,53 @@ elif menu == "Clientes sem Compra":
             (df['DataEmissao'].dt.year == _ano_now)
         ]
 
-    st.info(f"📅 Período analisado: **{_label_periodo}** — clientes da base que não realizaram compras neste período")
+    st.info(f"📅 Período de positivação: **{_label_periodo}** — clientes que NÃO compraram neste período · Faixa: **{_label_faixa}**")
 
+    # ── Lógica corrigida: base apenas de clientes com NF Venda histórica ──
     clientes_com_venda = set(_df_periodo[_df_periodo['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
-    
-    # Pegamos a última compra de cada cliente (DataEmissao)
-    todos_clientes = df.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
-    
+
+    # Base cadastral restrita a CPF/CNPJs com ao menos uma NF Venda no histórico completo
+    _cpfs_com_venda_historico = set(df[df['TipoMov'] == 'NF Venda']['CPF_CNPJ'].unique())
+    _df_clientes_base = df[df['CPF_CNPJ'].isin(_cpfs_com_venda_historico)]
+    todos_clientes = _df_clientes_base.sort_values('DataEmissao').groupby('CPF_CNPJ').last().reset_index()
+
+    # ValorHistorico = soma total de NF Venda no histórico completo
     valor_historico = df[df['TipoMov'] == 'NF Venda'].groupby('CPF_CNPJ')['TotalProduto'].sum().reset_index()
     valor_historico.columns = ['CPF_CNPJ', 'ValorHistorico']
-    
+
     todos_clientes = pd.merge(todos_clientes, valor_historico, on='CPF_CNPJ', how='left')
     todos_clientes['ValorHistorico'] = todos_clientes['ValorHistorico'].fillna(0)
-    
-    clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)]
-    
-    # ADICIONADO: DataEmissao incluída na seleção de colunas
+
+    # Clientes sem compra = base histórica MENOS quem comprou no período selecionado
+    clientes_sem_compra = todos_clientes[~todos_clientes['CPF_CNPJ'].isin(clientes_com_venda)].copy()
+
+    # Garantir DataEmissao como datetime para filtros de data
+    clientes_sem_compra['DataEmissao'] = pd.to_datetime(clientes_sem_compra['DataEmissao'], errors='coerce')
+
+    # ── Aplicar filtro exclusivo de faixa de meses sem compra ─────────────
+    if _data_corte_ini is not None and _data_corte_fim is not None:
+        clientes_sem_compra = clientes_sem_compra[
+            (clientes_sem_compra['DataEmissao'] >= _data_corte_ini) &
+            (clientes_sem_compra['DataEmissao'] <= _data_corte_fim)
+        ]
+    elif _data_corte_fim is not None:
+        clientes_sem_compra = clientes_sem_compra[
+            clientes_sem_compra['DataEmissao'] <= _data_corte_fim
+        ]
+
+    # Selecionar colunas relevantes
     clientes_sem_compra = clientes_sem_compra[['RazaoSocial', 'CPF_CNPJ', 'Vendedor', 'Cidade', 'Estado', 'ValorHistorico', 'DataEmissao']]
-    
+
     if vendedor_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Vendedor'] == vendedor_churn_filtro]
     if estado_churn_filtro != 'Todos':
         clientes_sem_compra = clientes_sem_compra[clientes_sem_compra['Estado'] == estado_churn_filtro]
-    
+
     if busca_cliente_churn and len(busca_cliente_churn) >= 2:
         clientes_sem_compra = clientes_sem_compra[
             clientes_sem_compra['RazaoSocial'].str.contains(busca_cliente_churn, case=False, na=False)
         ]
-    
+
     # Lógica de Ordenação
     if ordem == "Valor Histórico (Maior)":
         clientes_sem_compra = clientes_sem_compra.sort_values('ValorHistorico', ascending=False)
@@ -3200,7 +3255,7 @@ elif menu == "Clientes sem Compra":
         clientes_sem_compra = clientes_sem_compra.sort_values('RazaoSocial')
     elif ordem == "Última Compra (Mais Recente)":
         clientes_sem_compra = clientes_sem_compra.sort_values('DataEmissao', ascending=False)
-    
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total de Clientes sem Compra", len(clientes_sem_compra))
@@ -3209,7 +3264,7 @@ elif menu == "Clientes sem Compra":
     with col3:
         ticket_medio_churn = clientes_sem_compra['ValorHistorico'].mean() if len(clientes_sem_compra) > 0 else 0
         st.metric("Ticket Médio Histórico", f"R$ {ticket_medio_churn:,.2f}")
-    
+
     if len(clientes_sem_compra) > 0:
         top_churn = clientes_sem_compra.head(15)
         fig_churn = px.bar(
@@ -3224,14 +3279,12 @@ elif menu == "Clientes sem Compra":
         )
         fig_churn = aplicar_layout_grafico(fig_churn)
         st.plotly_chart(fig_churn, use_container_width=True)
-    
+
     # Preparar visualização
     clientes_sem_compra_display = formatar_dataframe_moeda(clientes_sem_compra, ['ValorHistorico'])
-    
-    # ADICIONADO: Formatação da data para o padrão brasileiro
+
     clientes_sem_compra_display['DataEmissao'] = pd.to_datetime(clientes_sem_compra_display['DataEmissao']).dt.strftime('%d/%m/%Y')
-    
-    # Renomear colunas para exibição
+
     clientes_sem_compra_display = clientes_sem_compra_display.rename(columns={
         'RazaoSocial': 'Razão Social',
         'CPF_CNPJ': 'CPF/CNPJ',
@@ -3239,11 +3292,11 @@ elif menu == "Clientes sem Compra":
         'Cidade': 'Cidade',
         'Estado': 'Estado',
         'ValorHistorico': 'Valor Histórico',
-        'DataEmissao': 'Última Compra'  # Coluna renomeada para a tabela
+        'DataEmissao': 'Última Compra'
     })
-    
+
     st.dataframe(clientes_sem_compra_display, use_container_width=True, height=400)
-    
+
     st.download_button(
         "📥 Exportar Clientes sem Compra",
         to_excel(clientes_sem_compra),
