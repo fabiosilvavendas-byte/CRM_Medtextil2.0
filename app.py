@@ -4116,9 +4116,11 @@ elif menu == "__novo_pedido__":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">📝 Novo Pedido & Simulador</h2>', unsafe_allow_html=True)
     st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Criação de pedidos e simulador de comissão</p>', unsafe_allow_html=True)
 
+    # Inicializar session_state para os itens do pedido
     if 'itens_pedido' not in st.session_state:
         st.session_state.itens_pedido = []
 
+    # Carregar dados de produtos se disponível
     df_produtos_pedido = None
     if planilhas_disponiveis.get('produtos_agrupados'):
         with st.spinner("📥 Carregando catálogo de produtos..."):
@@ -4126,13 +4128,15 @@ elif menu == "__novo_pedido__":
             if df_produtos_pedido is not None:
                 df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
 
-    # Renderizar via Histórico tab3 — abrimos o mesmo bloco encapsulado em uma função inline
-    # Reutilizamos o mesmo código do Histórico mas sem os outros tabs
+    # SEÇÃO 1: DADOS DO CLIENTE
     st.markdown("### 👤 Informações do Cliente")
+
     col_cli1, col_cli2 = st.columns(2)
+
     with col_cli1:
         clientes_lista = sorted(df['RazaoSocial'].dropna().unique().tolist())
         cliente_selecionado = st.selectbox("Selecione o Cliente", [''] + clientes_lista, key="cliente_pedido_np")
+
     dados_cliente = {}
     if cliente_selecionado:
         df_cliente = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
@@ -4143,25 +4147,256 @@ elif menu == "__novo_pedido__":
             'estado': df_cliente.get('Estado', ''),
             'vendedor': df_cliente.get('Vendedor', '')
         }
+
     with col_cli2:
         representante = st.text_input("Representante", value=dados_cliente.get('vendedor', ''), key="representante_pedido_np")
+
     col_cli3, col_cli4, col_cli5 = st.columns(3)
+
     with col_cli3:
         nome_fantasia = st.text_input("Nome Fantasia", value=dados_cliente.get('razao_social', ''), key="fantasia_pedido_np")
+
     with col_cli4:
         cnpj_pedido = st.text_input("CNPJ", value=dados_cliente.get('cpf_cnpj', ''), key="cnpj_pedido_np")
+
     with col_cli5:
         insc_estadual = st.text_input("Inscrição Estadual", key="ie_pedido_np")
+
     col_cli6, col_cli7 = st.columns(2)
+
     with col_cli6:
         telefone_pedido = st.text_input("Telefone", key="tel_pedido_np")
+
     with col_cli7:
         email_pedido = st.text_input("Email NF-e", key="email_pedido_np")
-    endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade','')}/{dados_cliente.get('estado','')}" if dados_cliente else "", key="end_pedido_np")
+
+    endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade', '')}/{dados_cliente.get('estado', '')}" if dados_cliente else "", key="end_pedido_np")
+
     obs_cliente = st.text_area("Observação (Cliente)", key="obs_cli_pedido_np", height=80)
+
     st.markdown("---")
-    # Aviso para usar o módulo completo para geração de PDF
-    st.info("💡 Para gerar PDF e acessar todas as funcionalidades do pedido, utilize o módulo **Histórico** › aba **Pedidos**.")
+
+    # SEÇÃO 2: DADOS DO PEDIDO
+    st.markdown("### 📋 Informações do Pedido")
+
+    col_ped1, col_ped2, col_ped3, col_ped4 = st.columns(4)
+
+    with col_ped1:
+        num_pedido = st.text_input("Nº do Pedido", key="num_pedido_np")
+
+    with col_ped2:
+        tabela_preco = st.text_input("Tabela de Preço", key="tab_preco_np")
+
+    with col_ped3:
+        tipo_frete = st.selectbox("Tipo de Frete", ["CIF", "FOB"], key="tipo_frete_np")
+
+    with col_ped4:
+        data_venda = st.date_input("Data da Venda", value=pd.Timestamp.now(), key="data_venda_np")
+
+    condicoes_pagto = st.text_input("Condições de Pagamento", key="cond_pagto_np")
+
+    st.markdown("---")
+
+    # SEÇÃO 3: ADICIONAR PRODUTOS
+    st.markdown("### 🛒 Adicionar Produtos ao Pedido")
+
+    col_prod1, col_prod2, col_prod3, col_prod4 = st.columns([2, 1, 1, 1])
+
+    with col_prod1:
+        tipo_busca_prod = st.radio("Buscar por:", ["Código", "Descrição"], horizontal=True, key="tipo_busca_prod_np")
+
+        if tipo_busca_prod == "Código":
+            if df_produtos_pedido is not None:
+                codigos = [''] + sorted(df_produtos_pedido['ID_COD'].dropna().astype(str).unique().tolist())
+                codigo_selecionado = st.selectbox("Código do Produto", codigos, key="cod_prod_pedido_np")
+            else:
+                codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_np")
+        else:
+            busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido_np")
+            codigo_selecionado = None
+
+    # Buscar informações do produto
+    produto_info = {}
+    if df_produtos_pedido is not None and codigo_selecionado:
+        prod = df_produtos_pedido[df_produtos_pedido['ID_COD'].astype(str) == str(codigo_selecionado)]
+        if len(prod) > 0:
+            prod = prod.iloc[0]
+            descricao_completa = f"{prod.get('GRUPO', '')} {prod.get('DESCRIÇÃO', '') or prod.get('DESCRICAO', '')} {prod.get('LINHA', '') or prod.get('LINHAS', '')}".strip()
+
+            produto_info = {
+                'codigo': str(prod.get('ID_COD', '')),
+                'descricao': descricao_completa,
+                'peso': prod.get('GRAMATURA', ''),
+                'cx_embarque': prod.get('CX_EMB', ''),
+                'preco_ref': prod.get('PRECO', 0)
+            }
+
+            # Buscar último preço que o cliente comprou
+            if cliente_selecionado:
+                hist_cliente = df[(df['RazaoSocial'] == cliente_selecionado) &
+                                 (df['CodigoProduto'].astype(str) == str(codigo_selecionado))]
+                if len(hist_cliente) > 0:
+                    hist_cliente = hist_cliente.sort_values('DataEmissao', ascending=False)
+                    produto_info['preco_sugerido'] = hist_cliente.iloc[0]['PrecoUnit']
+                    produto_info['preco_historico'] = hist_cliente.iloc[0]['PrecoUnit']
+                else:
+                    produto_info['preco_sugerido'] = prod.get('PRECO', 0)
+                    produto_info['preco_historico'] = prod.get('PRECO', 0)
+            else:
+                produto_info['preco_sugerido'] = prod.get('PRECO', 0)
+                produto_info['preco_historico'] = prod.get('PRECO', 0)
+
+    with col_prod2:
+        qtde_item = st.number_input("Quantidade", min_value=0, value=0, key="qtde_item_pedido_np")
+
+    with col_prod3:
+        valor_item = st.number_input("Valor Unit.", min_value=0.0, value=float(produto_info.get('preco_sugerido', 0)), format="%.2f", key="valor_item_pedido_np")
+
+    with col_prod4:
+        st.write("")
+        st.write("")
+        if st.button("➕ Adicionar Item", use_container_width=True, key="add_item_pedido_np"):
+            if produto_info and qtde_item > 0:
+                comissao = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
+
+                item = {
+                    'codigo': produto_info['codigo'],
+                    'descricao': produto_info['descricao'],
+                    'peso': produto_info.get('peso', ''),
+                    'cx_embarque': produto_info.get('cx_embarque', ''),
+                    'quantidade': qtde_item,
+                    'valor_unit': valor_item,
+                    'preco_historico': produto_info.get('preco_historico', 0),
+                    'total': qtde_item * valor_item,
+                    'comissao': comissao
+                }
+                st.session_state.itens_pedido.append(item)
+                st.success(f"✅ Item adicionado: {produto_info['descricao']}")
+                st.rerun()
+
+    # PREVIEW EM TEMPO REAL
+    if produto_info and qtde_item > 0 and valor_item > 0:
+        st.markdown("---")
+        st.markdown("### 👁️ Preview do Item")
+
+        total_preview = qtde_item * valor_item
+        comissao_preview = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
+        preco_hist_preview = produto_info.get('preco_historico', 0)
+
+        preview_data = {
+            'Código': [produto_info['codigo']],
+            'Produto': [produto_info['descricao'][:50]],
+            'Peso': [produto_info.get('peso', '')],
+            'Cx Embarque': [produto_info.get('cx_embarque', '')],
+            'Qtde': [f"{qtde_item:,.0f}"],
+            'Preço Histórico': [f"R$ {preco_hist_preview:,.2f}"],
+            'Valor Unit.': [f"R$ {valor_item:,.2f}"],
+            'Total': [f"R$ {total_preview:,.2f}"],
+            'Comissão%': [comissao_preview]
+        }
+
+        df_preview = pd.DataFrame(preview_data)
+        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+
+        if preco_hist_preview > 0:
+            variacao = ((valor_item - preco_hist_preview) / preco_hist_preview) * 100
+            if variacao > 0:
+                st.info(f"📈 Valor {variacao:.1f}% **acima** do histórico (R$ {preco_hist_preview:,.2f})")
+            elif variacao < 0:
+                st.warning(f"📉 Valor {abs(variacao):.1f}% **abaixo** do histórico (R$ {preco_hist_preview:,.2f})")
+            else:
+                st.success(f"✅ Valor **igual** ao histórico (R$ {preco_hist_preview:,.2f})")
+
+        st.markdown("---")
+
+    # ITENS DO PEDIDO
+    if st.session_state.itens_pedido:
+        st.markdown("---")
+        st.markdown("### 📦 Itens do Pedido")
+
+        df_itens = pd.DataFrame(st.session_state.itens_pedido)
+
+        df_itens_display = df_itens.copy()
+        df_itens_display['preco_historico'] = df_itens_display['preco_historico'].apply(lambda x: f"R$ {x:,.2f}")
+        df_itens_display['valor_unit'] = df_itens_display['valor_unit'].apply(lambda x: f"R$ {x:,.2f}")
+        df_itens_display['total'] = df_itens_display['total'].apply(lambda x: f"R$ {x:,.2f}")
+
+        df_itens_display = df_itens_display.rename(columns={
+            'codigo': 'COD.',
+            'descricao': 'PRODUTO',
+            'peso': 'PESO',
+            'cx_embarque': 'CAIXA EMBARQUE',
+            'quantidade': 'QTDE',
+            'preco_historico': 'PREÇO HISTÓRICO',
+            'valor_unit': 'VALOR',
+            'total': 'TOTAL',
+            'comissao': 'COMISSÃO%'
+        })
+
+        st.dataframe(df_itens_display, use_container_width=True, height=300)
+
+        col_met1, col_met2, col_met3 = st.columns(3)
+
+        with col_met1:
+            total_itens = df_itens['quantidade'].sum()
+            st.metric("Qtde Total de Itens", f"{total_itens:,.0f}")
+
+        with col_met2:
+            st.metric("Frete", tipo_frete)
+
+        with col_met3:
+            total_pedido = df_itens['total'].sum()
+            st.metric("Total Final", f"R$ {total_pedido:,.2f}")
+
+        obs_pedido = st.text_area("Observação (Pedido)", key="obs_pedido_np", height=100)
+
+        col_btn1, col_btn2 = st.columns(2)
+
+        with col_btn1:
+            if st.button("🗑️ Limpar Pedido", use_container_width=True, key="limpar_pedido_np"):
+                st.session_state.itens_pedido = []
+                st.rerun()
+
+        with col_btn2:
+            if st.button("📄 Gerar PDF do Pedido", use_container_width=True, key="gerar_pdf_pedido_np", type="primary"):
+                try:
+                    dados_cliente_pdf = {
+                        'representante': representante,
+                        'razao_social': cliente_selecionado,
+                        'nome_fantasia': nome_fantasia,
+                        'cnpj': cnpj_pedido,
+                        'ie': insc_estadual,
+                        'telefone': telefone_pedido,
+                        'email': email_pedido,
+                        'endereco': endereco_pedido,
+                        'obs_cliente': obs_cliente
+                    }
+
+                    dados_pedido_pdf = {
+                        'numero': num_pedido,
+                        'tabela_preco': tabela_preco,
+                        'tipo_frete': tipo_frete,
+                        'data_venda': data_venda.strftime('%d/%m/%Y'),
+                        'condicoes_pagto': condicoes_pagto
+                    }
+
+                    pdf_bytes = gerar_pdf_pedido(dados_cliente_pdf, dados_pedido_pdf, st.session_state.itens_pedido, obs_pedido)
+
+                    st.download_button(
+                        label="📥 Baixar PDF do Pedido",
+                        data=pdf_bytes,
+                        file_name=f"Pedido_{num_pedido or 'SN'}_{cliente_selecionado.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        key="download_pdf_pedido_np"
+                    )
+
+                    st.success("✅ PDF gerado com sucesso!")
+
+                except Exception as e:
+                    st.error(f"❌ Erro ao gerar PDF: {str(e)}")
+                    st.info("💡 Certifique-se de que a biblioteca ReportLab está instalada")
+    else:
+        st.info("ℹ️ Nenhum item adicionado ao pedido ainda. Use o formulário acima para adicionar produtos.")
 
 # ====================== HISTÓRICO DO CLIENTE (alias de Histórico > tab Por Cliente) ======================
 elif menu == "__historico_cliente__":
@@ -6768,4 +7003,3 @@ st.markdown("""
     &nbsp;·&nbsp; <span style="color:#4A7BC8;font-weight:600;">Medtextil Produtos Textil Hospitalares</span>
 </div>
 """, unsafe_allow_html=True)
-
