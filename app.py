@@ -4465,159 +4465,123 @@ elif menu == "__historico_cliente__":
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
-    
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Conciliação de Preço Médio por Produto</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Conciliação da planilha de vendas com o catálogo de produtos</p>', unsafe_allow_html=True)
+
     # Verificar se as planilhas necessárias existem
     if not planilhas_disponiveis['vendas_produto']:
         st.error("❌ Planilha 'Vendas por produto - GERAL.xlsx' não encontrada")
         st.info("💡 Adicione no GitHub um arquivo com 'VENDAS POR PRODUTO' e 'GERAL' no nome")
         st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
-        st.info("📋 Colunas necessárias: CODPRODUTO, TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO")
         st.stop()
-    
+
     if not planilhas_disponiveis['produtos_agrupados']:
         st.error("❌ Planilha 'Produtos_Agrupados_Completos_conciliados.xlsx' não encontrada")
         st.info("💡 Adicione no GitHub um arquivo com 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' no nome")
         st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
-        st.info("📋 Colunas necessárias: ID_COD, Grupo, Descrição, Linha, Gramatura")
         st.stop()
-    
-    # Carregar planilhas
-    with st.spinner("📥 Carregando dados de vendas por produto..."):
+
+    # ── Carregar planilhas ────────────────────────────────────────────────
+    with st.spinner("📥 Carregando planilha de vendas por produto..."):
         df_vendas_produto = carregar_planilha_github(planilhas_disponiveis['vendas_produto']['url'])
-    
-    with st.spinner("📥 Carregando dados de produtos..."):
+
+    with st.spinner("📥 Carregando catálogo de produtos..."):
         df_produtos = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-    
+
     if df_vendas_produto is None or df_produtos is None:
         st.error("❌ Erro ao carregar uma ou mais planilhas")
         st.stop()
-    
-    # Padronizar nomes das colunas (case-insensitive)
+
+    # ── Padronizar colunas ────────────────────────────────────────────────
     df_vendas_produto.columns = df_vendas_produto.columns.str.upper()
     df_produtos.columns = df_produtos.columns.str.upper()
-    
-    # IMPORTANTE: Se a planilha de vendas já tiver NOMEPRODUTO, remover para usar apenas o da planilha de produtos
-    if 'NOMEPRODUTO' in df_vendas_produto.columns:
-        df_vendas_produto = df_vendas_produto.drop(columns=['NOMEPRODUTO'])
-    
-    # Verificar se as colunas necessárias existem
-    colunas_vendas_necessarias = ['CODPRODUTO', 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO']
-    colunas_produtos_necessarias = ['ID_COD', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA']
-    
-    # Verificar colunas alternativas
+
+    # Colunas alternativas no catálogo
     if 'DESCRIÇÃO' not in df_produtos.columns and 'DESCRICAO' in df_produtos.columns:
         df_produtos = df_produtos.rename(columns={'DESCRICAO': 'DESCRIÇÃO'})
-    
     if 'LINHA' not in df_produtos.columns and 'LINHAS' in df_produtos.columns:
         df_produtos = df_produtos.rename(columns={'LINHAS': 'LINHA'})
-    
     if 'GRUPO' not in df_produtos.columns and 'GRUPOS' in df_produtos.columns:
         df_produtos = df_produtos.rename(columns={'GRUPOS': 'GRUPO'})
-    
-    faltando_vendas = [col for col in colunas_vendas_necessarias if col not in df_vendas_produto.columns]
-    faltando_produtos = [col for col in colunas_produtos_necessarias if col not in df_produtos.columns]
-    
+
+    # Validar colunas obrigatórias
+    faltando_vendas = [c for c in ['CODPRODUTO'] if c not in df_vendas_produto.columns]
+    faltando_produtos = [c for c in ['ID_COD', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA'] if c not in df_produtos.columns]
+
     if faltando_vendas:
         st.error(f"❌ Colunas faltando na planilha de vendas: {', '.join(faltando_vendas)}")
         st.info(f"📋 Colunas encontradas: {', '.join(df_vendas_produto.columns.tolist())}")
         st.stop()
-    
+
     if faltando_produtos:
-        st.error(f"❌ Colunas faltando na planilha de produtos: {', '.join(faltando_produtos)}")
+        st.error(f"❌ Colunas faltando no catálogo de produtos: {', '.join(faltando_produtos)}")
         st.info(f"📋 Colunas encontradas: {', '.join(df_produtos.columns.tolist())}")
         st.stop()
-    
-    # Criar a descrição concatenada na planilha de produtos
-    # Limpar espaços e garantir que não fique vazio
-    df_produtos['GRUPO_LIMPO'] = df_produtos['GRUPO'].fillna('').astype(str).str.strip()
-    df_produtos['DESCRIÇÃO_LIMPO'] = df_produtos['DESCRIÇÃO'].fillna('').astype(str).str.strip()
-    df_produtos['LINHA_LIMPO'] = df_produtos['LINHA'].fillna('').astype(str).str.strip()
-    
+
+    # ── Construir NOMEPRODUTO no catálogo (Grupo + Descrição + Linha) ─────
     df_produtos['NOMEPRODUTO'] = (
-        df_produtos['GRUPO_LIMPO'] + ' ' +
-        df_produtos['DESCRIÇÃO_LIMPO'] + ' ' +
-        df_produtos['LINHA_LIMPO']
+        df_produtos['GRUPO'].fillna('').astype(str).str.strip() + ' ' +
+        df_produtos['DESCRIÇÃO'].fillna('').astype(str).str.strip() + ' ' +
+        df_produtos['LINHA'].fillna('').astype(str).str.strip()
     ).str.strip()
-    
-    # Se NOMEPRODUTO ficar vazio, usar o ID_COD como descrição
-    df_produtos.loc[df_produtos['NOMEPRODUTO'] == '', 'NOMEPRODUTO'] = 'Produto ' + df_produtos['ID_COD'].astype(str)
-    
-    # Remover colunas temporárias
-    df_produtos = df_produtos.drop(columns=['GRUPO_LIMPO', 'DESCRIÇÃO_LIMPO', 'LINHA_LIMPO'])
-    
-    # Renomear ID_COD para CODPRODUTO para facilitar o merge
+    df_produtos.loc[df_produtos['NOMEPRODUTO'] == '', 'NOMEPRODUTO'] = (
+        'Produto ' + df_produtos['ID_COD'].astype(str)
+    )
+
+    # Renomear ID_COD → CODPRODUTO para o merge
     df_produtos = df_produtos.rename(columns={'ID_COD': 'CODPRODUTO'})
-    
-    # Adicionar coluna DATA com o mês/ano atual (já que não existe na planilha)
-    data_atual = pd.Timestamp.now()
-    df_vendas_produto['DATA'] = data_atual
-    df_vendas_produto['Mes'] = data_atual.month
-    df_vendas_produto['Ano'] = data_atual.year
-    df_vendas_produto['MesAno'] = data_atual.strftime('%Y-%m')
-    
-    # Fazer o merge (PROCV) entre as planilhas
-    # Garantir que as colunas necessárias existam antes do merge
-    colunas_merge = ['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA']
-    for col in colunas_merge:
+
+    # Remover NOMEPRODUTO da planilha de vendas caso exista
+    # (a descrição correta virá sempre do catálogo)
+    if 'NOMEPRODUTO' in df_vendas_produto.columns:
+        df_vendas_produto = df_vendas_produto.drop(columns=['NOMEPRODUTO'])
+
+    # ── Merge de conciliação ──────────────────────────────────────────────
+    _cols_catalogo = ['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA']
+    for col in _cols_catalogo:
         if col not in df_produtos.columns:
-            if col == 'NOMEPRODUTO':
-                df_produtos['NOMEPRODUTO'] = 'Produto não catalogado'
-            elif col == 'GRAMATURA':
-                df_produtos['GRAMATURA'] = 0
-    
-    df_preco_medio = pd.merge(
+            df_produtos[col] = '' if col == 'NOMEPRODUTO' else 0
+
+    df_conciliado = pd.merge(
         df_vendas_produto,
-        df_produtos[colunas_merge],
+        df_produtos[_cols_catalogo],
         on='CODPRODUTO',
         how='left'
     )
-    
-    # Preencher valores nulos após o merge
-    produtos_nao_catalogados = 0
-    if 'NOMEPRODUTO' in df_preco_medio.columns:
-        produtos_nao_catalogados = df_preco_medio['NOMEPRODUTO'].isna().sum()
-        df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna('Produto não catalogado - Código: ' + df_preco_medio['CODPRODUTO'].astype(str))
-    else:
-        df_preco_medio['NOMEPRODUTO'] = 'Produto não catalogado - Código: ' + df_preco_medio['CODPRODUTO'].astype(str)
-        produtos_nao_catalogados = len(df_preco_medio)
-    
-    if 'GRAMATURA' in df_preco_medio.columns:
-        df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna(0)
-    else:
-        df_preco_medio['GRAMATURA'] = 0
-    
-    
-    
+
+    # Preencher produtos sem correspondência no catálogo
+    _nao_catalogados = df_conciliado['NOMEPRODUTO'].isna().sum()
+    df_conciliado['NOMEPRODUTO'] = df_conciliado['NOMEPRODUTO'].fillna(
+        'Não catalogado — Cód: ' + df_conciliado['CODPRODUTO'].astype(str)
+    )
+    df_conciliado['GRAMATURA'] = df_conciliado['GRAMATURA'].fillna(0)
+
+    if _nao_catalogados > 0:
+        st.warning(f"⚠️ {_nao_catalogados} produto(s) sem correspondência no catálogo")
+
     st.markdown("---")
-    
-    # ========== FILTROS ==========
+
+    # ── Métricas de conciliação ───────────────────────────────────────────
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1:
+        st.metric("Total de Produtos", df_conciliado['CODPRODUTO'].nunique())
+    with col_m2:
+        st.metric("Conciliados", df_conciliado['CODPRODUTO'].nunique() - _nao_catalogados)
+    with col_m3:
+        st.metric("Não Catalogados", _nao_catalogados)
+
+    st.markdown("---")
+
+    # ── Filtros ───────────────────────────────────────────────────────────
     st.subheader("🔍 Filtros")
-    
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-    
+    col_f1, col_f2 = st.columns(2)
     with col_f1:
-        anos_preco = ['Todos'] + sorted(df_preco_medio['Ano'].dropna().unique().tolist(), reverse=True)
-        ano_preco_filtro = st.selectbox("Ano", anos_preco, key="ano_preco")
-    
+        busca_cod = st.text_input("🔍 Buscar por Código", placeholder="Digite o código...", key="busca_cod_preco")
     with col_f2:
-        meses_preco = ['Todos'] + list(range(1, 13))
-        mes_preco_filtro = st.selectbox("Mês", meses_preco, key="mes_preco")
-    
-    with col_f3:
-        busca_cod = st.text_input("🔍 Buscar Código", placeholder="Digite o código...", key="busca_cod_preco")
-    
-    with col_f4:
-        busca_nome = st.text_input("🔍 Buscar Produto", placeholder="Digite o nome...", key="busca_nome_preco")
-    
-    # Aplicar filtros
-    df_preco_filtrado = df_preco_medio.copy()
-    
-    if ano_preco_filtro != 'Todos':
-        df_preco_filtrado = df_preco_filtrado[df_preco_filtrado['Ano'] == ano_preco_filtro]
-    if mes_preco_filtro != 'Todos':
-        df_preco_filtrado = df_preco_filtrado[df_preco_filtrado['Mes'] == mes_preco_filtro]
-    if busca_cod and len(busca_cod) >= 2:
+        busca_nome = st.text_input("🔍 Buscar por Produto", placeholder="Digite o nome...", key="busca_nome_preco")
+
+    df_preco_filtrado = df_conciliado.copy()
+    if busca_cod and len(busca_cod) >= 1:
         df_preco_filtrado = df_preco_filtrado[
             df_preco_filtrado['CODPRODUTO'].astype(str).str.contains(busca_cod, case=False, na=False)
         ]
@@ -4625,157 +4589,35 @@ elif menu == "Preço Médio":
         df_preco_filtrado = df_preco_filtrado[
             df_preco_filtrado['NOMEPRODUTO'].str.contains(busca_nome, case=False, na=False)
         ]
-    
+
     st.markdown("---")
-    
-    # ========== MÉTRICAS GERAIS ==========
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_vendido = df_preco_filtrado['TOTLIQUIDO'].sum()
-        st.metric("Total Vendido", f"R$ {total_vendido:,.2f}")
-    
-    with col2:
-        qtd_total = df_preco_filtrado['TOTQTD'].sum()
-        st.metric("Qtd. Total Vendida", f"{qtd_total:,.0f}")
-    
-    with col3:
-        # CORREÇÃO: Média ponderada = Total Vendido / Quantidade Total
-        if df_preco_filtrado['TOTQTD'].sum() > 0:
-            preco_medio_geral = df_preco_filtrado['TOTLIQUIDO'].sum() / df_preco_filtrado['TOTQTD'].sum()
-        else:
-            preco_medio_geral = 0
-        st.metric("Preço Médio Geral", f"R$ {preco_medio_geral:,.2f}")
-    
-    with col4:
-        produtos_unicos = df_preco_filtrado['CODPRODUTO'].nunique()
-        st.metric("Produtos Únicos", f"{produtos_unicos:,}")
-    
-    st.markdown("---")
-    
-    # ========== GRÁFICOS ==========
-    col5, col6 = st.columns(2)
-    
-    with col5:
-        st.subheader("📊 Top 10 Produtos por Faturamento")
-        
-        top_faturamento = df_preco_filtrado.groupby('NOMEPRODUTO')['TOTLIQUIDO'].sum().reset_index()
-        top_faturamento = top_faturamento.sort_values('TOTLIQUIDO', ascending=False).head(10)
-        
-        fig_fat = px.bar(
-            top_faturamento,
-            x='TOTLIQUIDO',
-            y='NOMEPRODUTO',
-            orientation='h',
-            labels={'NOMEPRODUTO': 'Produto', 'TOTLIQUIDO': 'Faturamento (R$)'},
-            color='TOTLIQUIDO',
-            color_discrete_sequence=['#1F4788']
-        )
-        fig_fat = aplicar_layout_grafico(fig_fat)
-        st.plotly_chart(fig_fat, use_container_width=True)
-    
-    with col6:
-        st.subheader("📈 Top 10 Produtos por Quantidade")
-        
-        top_quantidade = df_preco_filtrado.groupby('NOMEPRODUTO')['TOTQTD'].sum().reset_index()
-        top_quantidade = top_quantidade.sort_values('TOTQTD', ascending=False).head(10)
-        
-        fig_qtd = px.bar(
-            top_quantidade,
-            x='TOTQTD',
-            y='NOMEPRODUTO',
-            orientation='h',
-            labels={'NOMEPRODUTO': 'Produto', 'TOTQTD': 'Quantidade Vendida'},
-            color='TOTQTD',
-            color_discrete_sequence=['#2E86AB']
-        )
-        fig_qtd = aplicar_layout_grafico(fig_qtd)
-        st.plotly_chart(fig_qtd, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # ========== ANÁLISE DE PREÇO MÉDIO POR PERÍODO ==========
-    st.subheader("📅 Evolução de Preço Médio")
-    
-    # Permitir seleção de produto específico
-    produtos_lista = ['Todos'] + sorted(df_preco_filtrado['NOMEPRODUTO'].unique().tolist())
-    produto_selecionado = st.selectbox(
-        "Selecione um produto para ver evolução de preço:",
-        produtos_lista,
-        key="produto_evolucao"
-    )
-    
-    if produto_selecionado != 'Todos':
-        df_evolucao = df_preco_filtrado[df_preco_filtrado['NOMEPRODUTO'] == produto_selecionado]
-    else:
-        df_evolucao = df_preco_filtrado.copy()
-    
-    if len(df_evolucao) > 0:
-        evolucao_preco = df_evolucao.groupby('MesAno').agg({
-            'PRECOUNITMEDIO': 'mean',
-            'TOTQTD': 'sum',
-            'TOTLIQUIDO': 'sum'
-        }).reset_index()
-        evolucao_preco = evolucao_preco.sort_values('MesAno')
-        
-        fig_evolucao = px.line(
-            evolucao_preco,
-            x='MesAno',
-            y='PRECOUNITMEDIO',
-            labels={'MesAno': 'Período', 'PRECOUNITMEDIO': 'Preço Médio (R$)'},
-            title=f'Evolução do Preço Médio - {produto_selecionado}'
-        )
-        fig_evolucao.update_traces(line_color='#FF6B6B', line_width=3)
-        fig_evolucao = aplicar_layout_grafico(fig_evolucao)
-        st.plotly_chart(fig_evolucao, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # ========== TABELA DETALHADA ==========
-    st.subheader("📋 Detalhamento de Preços")
-    
-    # Preparar dados para exibição
-    df_detalhado = df_preco_filtrado[[
-        'CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA', 'TOTQTD', 
-        'PRECOUNITMEDIO', 'TOTLIQUIDO', 'DATA'
-    ]].copy()
-    
-    # Ordenar por data (mais recente primeiro)
-    df_detalhado = df_detalhado.sort_values('DATA', ascending=False)
-    
-    # Formatar para exibição
-    df_detalhado_display = df_detalhado.copy()
-    
-    # Formatar data no padrão brasileiro com mês atual
-    mes_atual = data_atual.month
-    ano_atual = data_atual.year
-    df_detalhado_display['DATA'] = f"{mes_atual:02d}/{ano_atual}"
-    
-    df_detalhado_display['PRECOUNITMEDIO'] = df_detalhado_display['PRECOUNITMEDIO'].apply(
-        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
-    )
-    df_detalhado_display['TOTLIQUIDO'] = df_detalhado_display['TOTLIQUIDO'].apply(
-        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
-    )
-    
-    # Renomear colunas
-    df_detalhado_display = df_detalhado_display.rename(columns={
-        'CODPRODUTO': 'Código',
-        'NOMEPRODUTO': 'Nome do Produto',
-        'GRAMATURA': 'Gramatura',
-        'TOTQTD': 'Qtd Vendida',
-        'PRECOUNITMEDIO': 'Preço Médio Unit.',
-        'TOTLIQUIDO': 'Total Líquido',
-        'DATA': 'Período (Mês/Ano)'
+
+    # ── Tabela completa conciliada ────────────────────────────────────────
+    st.subheader("📋 Dados Conciliados")
+
+    # Montar colunas de exibição: todas as colunas originais da planilha de vendas
+    # + NOMEPRODUTO e GRAMATURA vindas do catálogo
+    _colunas_exib = ['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA'] + [
+        c for c in df_preco_filtrado.columns
+        if c not in ('CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA')
+    ]
+    _colunas_exib = [c for c in _colunas_exib if c in df_preco_filtrado.columns]
+
+    df_exib = df_preco_filtrado[_colunas_exib].copy()
+
+    # Renomear apenas as colunas fixas; o restante permanece com o nome original da planilha
+    df_exib = df_exib.rename(columns={
+        'CODPRODUTO':   'Código',
+        'NOMEPRODUTO':  'Nome do Produto',
+        'GRAMATURA':    'Gramatura',
     })
-    
-    st.dataframe(df_detalhado_display, use_container_width=True, height=400)
-    
-    # Botão de download
+
+    st.dataframe(df_exib, use_container_width=True, height=500)
+
     st.download_button(
-        "📥 Exportar Relatório de Preços",
-        to_excel(df_detalhado),
-        "relatorio_preco_medio.xlsx",
+        "📥 Exportar Conciliação",
+        to_excel(df_preco_filtrado[_colunas_exib]),
+        "conciliacao_preco_medio.xlsx",
         "application/vnd.ms-excel",
         key="download_preco_medio"
     )
