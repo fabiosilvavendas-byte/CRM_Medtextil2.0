@@ -5347,13 +5347,39 @@ elif menu == "Pedidos Pendentes":
                         except:
                             pass
 
-                COLUNAS = [
+                # Lista base com todas as colunas (índices fixos usados no cálculo de totais)
+                COLUNAS_BASE = [
                     'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
                     'Contratado', 'Entregue', 'Pendente',
                     'Valor Unitário', 'Valor Pendente',
                     'Data Emissão', 'Dias Pendentes', 'Vendedor',
                     '% Entregue', 'Previsão', 'Categoria', 'Observações'
                 ]
+
+                # Abas sem coluna Gramatura
+                ABAS_SEM_GRAMATURA = {'Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Esteril'}
+
+                # Abas com agrupamento por fios
+                ABAS_COM_FIOS = {'Esteril', 'Tipo Queijo', 'Pacote'}
+
+                IDX_GRAM  = COLUNAS_BASE.index('Gramatura')
+                IDX_DESC  = COLUNAS_BASE.index('Descrição')
+                IDX_CONT  = COLUNAS_BASE.index('Contratado')
+                IDX_ENT   = COLUNAS_BASE.index('Entregue')
+                IDX_PEND  = COLUNAS_BASE.index('Pendente')
+                IDX_VPEND = COLUNAS_BASE.index('Valor Pendente')
+
+                import re as _re
+                def extrair_fios(descricao):
+                    d = str(descricao).upper()
+                    for fio in ['13', '11', '09', '9']:
+                        # padrão: número seguido de F ou FIO(S)
+                        if _re.search(r'\b' + fio + r'\s*F', d):
+                            return '09' if fio == '9' else fio
+                        # padrão: número isolado no final ou separado por espaço/hífen
+                        if _re.search(r'(^|[\s\-_])' + fio + r'(\s|$)', d):
+                            return '09' if fio == '9' else fio
+                    return 'Outros'
 
                 # Agrupar linhas por aba
                 abas_data = {}
@@ -5437,58 +5463,133 @@ elif menu == "Pedidos Pendentes":
                 ALT_FILL  = PatternFill("solid", fgColor="EEF3FC")
 
                 ORDEM_ABAS = ['Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
+                ORDEM_FIOS  = ['09', '11', '13', 'Outros']
+                SEP_FILL    = PatternFill("solid", fgColor="1F4788")
+                SEP_FONT    = Font(bold=True, color="FFFFFF", size=10)
 
                 for nome_aba in ORDEM_ABAS:
-                    linhas = abas_data.get(nome_aba, [])
+                    linhas_base = abas_data.get(nome_aba, [])
                     ws = wb.create_sheet(title=nome_aba)
+
+                    # Colunas da aba: remover Gramatura se necessário
+                    sem_gram = nome_aba in ABAS_SEM_GRAMATURA
+                    COLUNAS = [c for c in COLUNAS_BASE if not (sem_gram and c == 'Gramatura')]
+                    # Mapeamento de índice COLUNAS_BASE → índice COLUNAS (para saber onde escrever)
+                    col_map = {i_base: i_aba for i_aba, i_base in
+                               enumerate([j for j, c in enumerate(COLUNAS_BASE)
+                                          if not (sem_gram and c == 'Gramatura')], 1)}
+
+                    def linha_para_aba(linha_base):
+                        return [v for i, v in enumerate(linha_base)
+                                if not (sem_gram and i == IDX_GRAM)]
 
                     # Cabeçalho
                     ws.append(COLUNAS)
-                    for col_idx, _ in enumerate(COLUNAS, 1):
+                    for col_idx in range(1, len(COLUNAS) + 1):
                         cell = ws.cell(row=1, column=col_idx)
-                        cell.fill   = HDR_FILL
-                        cell.font   = HDR_FONT
+                        cell.fill      = HDR_FILL
+                        cell.font      = HDR_FONT
                         cell.alignment = HDR_ALIGN
-                        cell.border = BORDER
-
+                        cell.border    = BORDER
                     ws.row_dimensions[1].height = 30
 
-                    # Dados
-                    for r_idx, linha in enumerate(linhas, 2):
-                        ws.append(linha)
-                        fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
-                        for col_idx in range(1, len(COLUNAS) + 1):
-                            cell = ws.cell(row=r_idx, column=col_idx)
-                            cell.border = BORDER
+                    # Índices na lista COLUNAS (1-based) para formatos
+                    idx_cont_c  = col_map.get(IDX_CONT,  0)
+                    idx_ent_c   = col_map.get(IDX_ENT,   0)
+                    idx_pend_c  = col_map.get(IDX_PEND,  0)
+                    idx_vpend_c = col_map.get(IDX_VPEND, 0)
+                    idx_vunit_c = col_map.get(COLUNAS_BASE.index('Valor Unitário'), 0)
+
+                    def _estilizar_linha(r_idx, n_cols, fill):
+                        for ci in range(1, n_cols + 1):
+                            cell = ws.cell(row=r_idx, column=ci)
+                            cell.border    = BORDER
                             cell.alignment = Alignment(vertical="center")
-                            if fill.fill_type:
+                            if fill and fill.fill_type:
                                 cell.fill = fill
-                            # Formatar moeda
-                            if col_idx in (10, 11):
+                            if ci in (idx_vunit_c, idx_vpend_c):
                                 cell.number_format = 'R$ #,##0.00'
-                            # Formatar números inteiros
-                            if col_idx in (7, 8, 9):
+                            if ci in (idx_cont_c, idx_ent_c, idx_pend_c):
                                 cell.number_format = '#,##0'
 
-                    # Larguras de coluna
-                    larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
-                    for i, larg in enumerate(larguras, 1):
-                        ws.column_dimensions[get_column_letter(i)].width = larg
+                    r_idx = 2  # linha atual de escrita (controlado manualmente)
 
-                    # Rodapé com totais (última linha)
-                    if linhas:
-                        ultima = len(linhas) + 2
-                        ws.cell(ultima, 1, 'TOTAL').font = Font(bold=True)
-                        # Somar Contratado, Entregue, Pendente, ValorPendente
-                        for col_idx, nome_col in enumerate(COLUNAS, 1):
-                            if nome_col in ('Contratado', 'Entregue', 'Pendente', 'Valor Pendente'):
-                                total = sum(
-                                    float(linha[col_idx - 1]) if isinstance(linha[col_idx - 1], (int, float)) else 0
-                                    for linha in linhas
-                                )
-                                c = ws.cell(ultima, col_idx, total)
-                                c.font = Font(bold=True)
-                                c.number_format = '#,##0.00' if nome_col == 'Valor Pendente' else '#,##0'
+                    if nome_aba in ABAS_COM_FIOS:
+                        # Agrupar por fios usando descrição (índice IDX_DESC na linha_base)
+                        grupos_fios = {f: [] for f in ORDEM_FIOS}
+                        for lb in linhas_base:
+                            desc_val = str(lb[IDX_DESC]) if IDX_DESC < len(lb) else ''
+                            grupos_fios[extrair_fios(desc_val)].append(lb)
+
+                        linhas_dados = []  # todas as linhas de dados escritas (para total)
+                        for fio in ORDEM_FIOS:
+                            grupo = grupos_fios[fio]
+                            if not grupo:
+                                continue
+                            # Linha separadora
+                            label = f"{fio} Fios" if fio != 'Outros' else "Outros"
+                            ws.cell(r_idx, 1, label)
+                            ws.merge_cells(start_row=r_idx, start_column=1,
+                                           end_row=r_idx, end_column=len(COLUNAS))
+                            for ci in range(1, len(COLUNAS) + 1):
+                                c = ws.cell(r_idx, ci)
+                                c.fill      = SEP_FILL
+                                c.font      = SEP_FONT
+                                c.alignment = Alignment(horizontal="center", vertical="center")
+                                c.border    = BORDER
+                            ws.row_dimensions[r_idx].height = 18
+                            r_idx += 1
+
+                            for lb in grupo:
+                                la = linha_para_aba(lb)
+                                ws.append(la)
+                                fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
+                                _estilizar_linha(r_idx, len(COLUNAS), fill)
+                                linhas_dados.append(lb)
+                                r_idx += 1
+
+                        # Linha de total — r_idx já aponta para a linha APÓS os dados
+                        if linhas_dados:
+                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
+                            for i_base, ci in col_map.items():
+                                if i_base in (IDX_CONT, IDX_ENT, IDX_PEND, IDX_VPEND):
+                                    total = sum(
+                                        float(lb[i_base]) if isinstance(lb[i_base], (int, float)) else 0
+                                        for lb in linhas_dados
+                                    )
+                                    c = ws.cell(r_idx, ci, total)
+                                    c.font = Font(bold=True)
+                                    c.number_format = 'R$ #,##0.00' if i_base == IDX_VPEND else '#,##0'
+
+                    else:
+                        # Abas sem agrupamento por fios
+                        for lb in linhas_base:
+                            la = linha_para_aba(lb)
+                            ws.append(la)
+                            fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
+                            _estilizar_linha(r_idx, len(COLUNAS), fill)
+                            r_idx += 1
+
+                        # Linha de total — r_idx já aponta para a linha APÓS os dados
+                        if linhas_base:
+                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
+                            for i_base, ci in col_map.items():
+                                if i_base in (IDX_CONT, IDX_ENT, IDX_PEND, IDX_VPEND):
+                                    total = sum(
+                                        float(lb[i_base]) if isinstance(lb[i_base], (int, float)) else 0
+                                        for lb in linhas_base
+                                    )
+                                    c = ws.cell(r_idx, ci, total)
+                                    c.font = Font(bold=True)
+                                    c.number_format = 'R$ #,##0.00' if i_base == IDX_VPEND else '#,##0'
+
+                    # Larguras de coluna (sem Gramatura = uma coluna a menos)
+                    if sem_gram:
+                        larguras = [14, 30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    else:
+                        larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    for i, larg in enumerate(larguras[:len(COLUNAS)], 1):
+                        ws.column_dimensions[get_column_letter(i)].width = larg
 
                 output = BytesIO()
                 wb.save(output)
