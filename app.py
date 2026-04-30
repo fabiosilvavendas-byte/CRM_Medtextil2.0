@@ -5741,8 +5741,119 @@ elif menu == "Pedidos Pendentes":
                             if _gv and _gv.lower() not in ('nan','0','0.0',''):
                                 _gram_map[_gk] = _gv
 
-            # ── PASSO 3: copiar arquivo ATUAL aba a aba injetando os valores ──
-            _wb_at  = openpyxl.load_workbook(_BIO(_bytes_atual))
+            # ── PASSO 3: reconstruir arquivo com formatação padrão + valores conciliados ──
+            # Lê o arquivo atual linha a linha, injeta Previsão/Obs do anterior,
+            # depois passa tudo pelo mesmo _gerar_relatorio_previsao para garantir
+            # as mesmas regras: sem gramatura nas abas corretas, fios, totais, etc.
+
+            _wb_at = openpyxl.load_workbook(_BIO(_bytes_atual))
+            _total_aplicados = 0
+
+            # Colunas base na ordem original (igual à função de geração)
+            _COLS_BASE = [
+                'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
+                'Contratado', 'Entregue', 'Pendente',
+                'Valor Unitário', 'Valor Pendente',
+                'Data Emissão', 'Dias Pendentes', 'Vendedor',
+                '% Entregue', 'Previsão', 'Categoria', 'Observações'
+            ]
+            _ABAS_SEM_GRAM = {'Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Esteril'}
+            _ABAS_COM_FIOS = {'Esteril', 'Tipo Queijo', 'Pacote'}
+            _ORDEM_FIOS    = ['09', '11', '13', 'Outros']
+
+            import re as _re2, unicodedata as _ud2
+
+            def _norm2(s):
+                return _ud2.normalize('NFKD', str(s)).encode('ascii','ignore').decode('ascii').upper()
+
+            def _extrair_fios2(desc):
+                d = str(desc).upper()
+                for fio in ['13', '11', '09', '9']:
+                    if _re2.search(r'\b' + fio + r'\s*F', d):
+                        return '09' if fio == '9' else fio
+                    if _re2.search(r'(^|[\s\-_])' + fio + r'(\s|$)', d):
+                        return '09' if fio == '9' else fio
+                return 'Outros'
+
+            # Reconstruir abas_data a partir do arquivo atual, injetando Previsão/Obs
+            _abas_conc = {}  # {nome_aba: [linha_base, ...]}
+
+            for _ws_src in _wb_at.worksheets:
+                _nome_aba = _ws_src.title
+                _src_rows = list(_ws_src.iter_rows(values_only=True))
+                if len(_src_rows) < 2:
+                    continue
+
+                _hdr = [str(c).strip() if c is not None else '' for c in _src_rows[0]]
+
+                # Mapear colunas do arquivo atual → índice em _COLS_BASE
+                # Fazemos pelo nome (case-insensitive)
+                def _find_col(keywords, hdr):
+                    for i, h in enumerate(hdr):
+                        hu = h.upper()
+                        if all(k.upper() in hu for k in (keywords if isinstance(keywords, list) else [keywords])):
+                            return i
+                    return None
+
+                _mi = {}  # nome_col_base → índice no arquivo atual
+                for _cb in _COLS_BASE:
+                    _cbu = _cb.upper()
+                    for _i, _h in enumerate(_hdr):
+                        _hu = _h.upper()
+                        # match por substring significativa
+                        if _cbu in _hu or _hu in _cbu:
+                            if _cb not in _mi:
+                                _mi[_cb] = _i
+                            break
+
+                # Índices para chave de conciliação
+                _i_num = _mi.get('N° Pedido')
+                _i_cod = _mi.get('Código')
+                _i_cli = next((i for i,h in enumerate(_hdr) if 'CLIENTE' in h.upper()), None)
+
+                _abas_conc.setdefault(_nome_aba, [])
+
+                for _row in _src_rows[1:]:
+                    # Pular linha de TOTAL e separadores de fios
+                    _first = str(_row[0]).strip().upper() if _row[0] is not None else ''
+                    if _first in ('TOTAL', '') or any(f in _first for f in ['FIOS', 'OUTROS']):
+                        continue
+
+                    # Montar linha_base com 18 valores na ordem de _COLS_BASE
+                    _lb = []
+                    for _cb in _COLS_BASE:
+                        _src_i = _mi.get(_cb)
+                        _lb.append(_row[_src_i] if _src_i is not None and _src_i < len(_row) else '')
+
+                    # Injetar gramatura do lookup (pode ter sido omitida na aba)
+                    _i_base_cod  = _COLS_BASE.index('Código')
+                    _i_base_gram = _COLS_BASE.index('Gramatura')
+                    _ck = ''
+                    if _lb[_i_base_cod] not in (None, ''):
+                        try:    _ck = str(int(float(str(_lb[_i_base_cod]))))
+                        except: _ck = str(_lb[_i_base_cod]).strip()
+                    if _ck and not _lb[_i_base_gram]:
+                        _lb[_i_base_gram] = _gram_map.get(_ck, '')
+
+                    # Buscar Previsão/Obs do mapa do arquivo anterior
+                    _num_v = str(_lb[_COLS_BASE.index('N° Pedido')]).strip() if _lb[_COLS_BASE.index('N° Pedido')] not in (None, '', 'None') else ''
+                    _lookup_key = _num_v if _num_v and _num_v.upper() != 'TOTAL' else ''
+                    if not _lookup_key and _ck:
+                        _cli_v2 = str(_lb[_COLS_BASE.index('Cliente')]).strip() if _lb[_COLS_BASE.index('Cliente')] not in (None,'','None') else ''
+                        _lookup_key = f"{_ck}|{_cli_v2}"
+
+                    if _lookup_key:
+                        _entry = _obs_map.get(_lookup_key, {})
+                        _pv = _entry.get('previsao', '')
+                        _ov = _entry.get('obs', '')
+                        if _pv or _ov:
+                            _total_aplicados += 1
+                        _lb[_COLS_BASE.index('Previsão')]   = _pv or _lb[_COLS_BASE.index('Previsão')]
+                        _lb[_COLS_BASE.index('Observações')] = _ov or _lb[_COLS_BASE.index('Observações')]
+
+                    _abas_conc[_nome_aba].append(_lb)
+
+            # ── Agora gerar o Excel com as mesmas regras de formatação ──────
             _wb_out = openpyxl.Workbook()
             _wb_out.remove(_wb_out.active)
 
@@ -5752,181 +5863,119 @@ elif menu == "Pedidos Pendentes":
             _S_BRD  = Border(left=Side(style='thin'), right=Side(style='thin'),
                              top=Side(style='thin'),  bottom=Side(style='thin'))
             _S_ALT  = PatternFill("solid", fgColor="EEF3FC")
+            _SEP_FILL = PatternFill("solid", fgColor="1F4788")
+            _SEP_FONT = Font(bold=True, color="FFFFFF", size=10)
 
-            _total_aplicados = 0
+            _IDX_GRAM  = _COLS_BASE.index('Gramatura')
+            _IDX_DESC  = _COLS_BASE.index('Descrição')
+            _IDX_CONT  = _COLS_BASE.index('Contratado')
+            _IDX_ENT   = _COLS_BASE.index('Entregue')
+            _IDX_PEND  = _COLS_BASE.index('Pendente')
+            _IDX_VPEND = _COLS_BASE.index('Valor Pendente')
+            _IDX_VUNIT = _COLS_BASE.index('Valor Unitário')
 
-            for _ws_src in _wb_at.worksheets:
-                _src_rows = list(_ws_src.iter_rows(values_only=True))
-                if len(_src_rows) < 2:
-                    continue
+            _ORDEM_ABAS = ['Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
 
-                _hdr_src = [str(c).strip() if c is not None else '' for c in _src_rows[0]]
+            for _nome_aba in _ORDEM_ABAS:
+                _linhas_base = _abas_conc.get(_nome_aba, [])
+                _ws_out = _wb_out.create_sheet(title=_nome_aba)
 
-                # índices das colunas-chave no arquivo atual
-                _si_num = _si_cod = _si_prev = _si_obs = _si_gram = None
-                for _i, _h in enumerate(_hdr_src):
-                    _hu = _h.upper()
-                    if _si_num  is None and any(x in _hu for x in ['N° PEDIDO','N PEDIDO','NUMERO','NUM']):
-                        _si_num = _i
-                    if _si_cod  is None and any(x in _hu for x in ['CÓDIGO','CODIGO']) and 'N°' not in _hu:
-                        _si_cod = _i
-                    if _si_prev is None and 'PREV' in _hu:
-                        _si_prev = _i
-                    if _si_obs  is None and ('OBSERV' in _hu or _hu == 'OBS'):
-                        _si_obs = _i
-                    if _si_gram is None and 'GRAMATUR' in _hu:
-                        _si_gram = _i
+                _sem_gram = _nome_aba in _ABAS_SEM_GRAM
+                _COLUNAS  = [c for c in _COLS_BASE if not (_sem_gram and c == 'Gramatura')]
+                _col_map  = {i_b: i_a for i_a, i_b in
+                             enumerate([j for j, c in enumerate(_COLS_BASE)
+                                        if not (_sem_gram and c == 'Gramatura')], 1)}
 
-                # cabeçalho de saída = mesmo do atual (já tem N° Pedido e Gramatura
-                # desde a correção anterior; se por acaso faltar, adiciona)
-                _hdr_out = list(_hdr_src)
-                if _si_num is None:
-                    _hdr_out = ['N° Pedido'] + _hdr_out
-                    _si_num = 0  # agora está na pos 0
+                def _linha_aba(lb):
+                    return [v for i, v in enumerate(lb) if not (_sem_gram and i == _IDX_GRAM)]
 
-                # garantir Gramatura depois de Código
-                if _si_gram is None:
-                    _pos_cod = next((i for i,h in enumerate(_hdr_out) if any(x in h.upper() for x in ['CÓDIGO','CODIGO']) and 'N°' not in h.upper()), None)
-                    if _pos_cod is not None:
-                        _hdr_out.insert(_pos_cod + 1, 'Gramatura')
-                        _si_gram = _pos_cod + 1
-                        # reajustar índices que deslocaram
-                        if _si_prev is not None and _si_prev > _pos_cod: _si_prev += 1
-                        if _si_obs  is not None and _si_obs  > _pos_cod: _si_obs  += 1
-                    else:
-                        _hdr_out.append('Gramatura')
-                        _si_gram = len(_hdr_out) - 1
-
-                # garantir Previsão
-                if _si_prev is None:
-                    # inserir antes de Observações se existir, senão no fim
-                    _pos_obs = next((i for i,h in enumerate(_hdr_out) if 'OBSERV' in h.upper() or h.upper()=='OBS'), None)
-                    if _pos_obs is not None:
-                        _hdr_out.insert(_pos_obs, 'Previsão')
-                        _si_prev = _pos_obs
-                        _si_obs  = _pos_obs + 1
-                    else:
-                        _hdr_out.append('Previsão')
-                        _si_prev = len(_hdr_out) - 1
-
-                # garantir Observações
-                if _si_obs is None:
-                    _hdr_out.append('Observações')
-                    _si_obs = len(_hdr_out) - 1
-
-                # criar aba de saída
-                _ws_out = _wb_out.create_sheet(title=_ws_src.title)
-
-                # cabeçalho estilizado
-                _ws_out.append(_hdr_out)
-                for _ci in range(1, len(_hdr_out) + 1):
+                # Cabeçalho
+                _ws_out.append(_COLUNAS)
+                for _ci in range(1, len(_COLUNAS) + 1):
                     _c = _ws_out.cell(1, _ci)
                     _c.fill = _S_HDR; _c.font = _S_FONT
                     _c.alignment = _S_ALGN; _c.border = _S_BRD
                 _ws_out.row_dimensions[1].height = 30
 
-                # dados: linha a linha
-                _ri = 2
-                for _row_src in _src_rows[1:]:
-                    _rv = list(_row_src)
+                _ci_cont  = _col_map.get(_IDX_CONT,  0)
+                _ci_ent   = _col_map.get(_IDX_ENT,   0)
+                _ci_pend  = _col_map.get(_IDX_PEND,  0)
+                _ci_vpend = _col_map.get(_IDX_VPEND, 0)
+                _ci_vunit = _col_map.get(_IDX_VUNIT, 0)
 
-                    # extrair N° Pedido desta linha
-                    _num = ''
-                    if _si_num is not None and _si_num < len(_rv) and _rv[_si_num] not in (None, '', 'None'):
-                        _num = str(_rv[_si_num]).strip()
-
-                    # extrair código para gramatura
-                    _gram_val = ''
-                    _ck = ''
-                    if _si_cod is not None and _si_cod < len(_rv) and _rv[_si_cod] not in (None, ''):
-                        try:    _ck = str(int(float(str(_rv[_si_cod]))))
-                        except: _ck = str(_rv[_si_cod]).strip()
-                        _gram_val = _gram_map.get(_ck, '')
-
-                    # buscar previsão/obs: chave primária = N° Pedido
-                    # fallback = Código|Cliente (para arquivos gerados antes da correção)
-                    _prev_val = _obs_val = ''
-                    _lookup_key = _num if _num and _num.upper() != 'TOTAL' else ''
-                    if not _lookup_key and _ck:
-                        _cli_v = ''
-                        _si_cli = next((i for i,h in enumerate(_hdr_out) if 'CLIENTE' in h.upper()), None)
-                        if _si_cli is not None and _si_cli < len(_rv):
-                            _cli_v = str(_rv[_si_cli]).strip() if _rv[_si_cli] not in (None,'','None') else ''
-                        _lookup_key = f"{_ck}|{_cli_v}"
-
-                    if _lookup_key:
-                        _entry = _obs_map.get(_lookup_key, {})
-                        _prev_val = _entry.get('previsao', '')
-                        _obs_val  = _entry.get('obs', '')
-                        if _prev_val or _obs_val:
-                            _total_aplicados += 1
-
-                    # montar linha de saída na ordem do _hdr_out
-                    _row_out = []
-                    for _oi, _col_name in enumerate(_hdr_out):
-                        if _oi == _si_prev:
-                            _row_out.append(_prev_val)
-                        elif _oi == _si_obs:
-                            _row_out.append(_obs_val)
-                        elif _oi == _si_gram:
-                            _row_out.append(_gram_val)
-                        else:
-                            # encontrar índice correspondente no src pelo nome
-                            _src_i = next(
-                                (i for i, h in enumerate(_hdr_src)
-                                 if str(h).strip().upper() == _col_name.upper()),
-                                None
-                            )
-                            _row_out.append(_rv[_src_i] if _src_i is not None and _src_i < len(_rv) else '')
-
-                    _ws_out.append(_row_out)
-
-                    # estilos da linha
-                    _fill = _S_ALT if _ri % 2 == 0 else PatternFill()
-                    for _ci in range(1, len(_hdr_out) + 1):
-                        _c = _ws_out.cell(_ri, _ci)
-                        _c.border = _S_BRD
+                def _estilizar(_ri, fill):
+                    for _ci2 in range(1, len(_COLUNAS) + 1):
+                        _c = _ws_out.cell(_ri, _ci2)
+                        _c.border    = _S_BRD
                         _c.alignment = Alignment(vertical="center")
-                        if _fill.fill_type:
-                            _c.fill = _fill
-                        _hu = _hdr_out[_ci - 1].upper()
-                        if any(x in _hu for x in ['VALOR UNIT', 'VALOR PEND']):
+                        if fill and fill.fill_type:
+                            _c.fill = fill
+                        if _ci2 in (_ci_vunit, _ci_vpend):
                             _c.number_format = 'R$ #,##0.00'
-                        elif any(x in _hu for x in ['CONTRAT','ENTREGUE','PENDENTE','VOLUMES']):
-                            try:
-                                if _c.value not in (None, ''):
-                                    _c.value = float(_c.value)
-                                    _c.number_format = '#,##0'
-                            except:
-                                pass
-                    _ri += 1
+                        if _ci2 in (_ci_cont, _ci_ent, _ci_pend):
+                            _c.number_format = '#,##0'
 
-                # larguras
-                _LARG = {
-                    'N° PEDIDO': 14, 'CLIENTE': 30, 'CÓDIGO': 10, 'GRAMATURA': 12,
-                    'VOLUMES': 10, 'DESCRI': 35, 'CONTRAT': 12, 'ENTREGUE': 12,
-                    'PENDENTE': 12, 'VALOR UNIT': 14, 'VALOR PEND': 14,
-                    'DATA': 14, 'DIAS': 12, 'VENDEDOR': 20, '%': 10,
-                    'PREV': 18, 'CATEG': 12, 'OBSERV': 28, 'OBS': 28,
-                }
-                for _ci, _col_name in enumerate(_hdr_out, 1):
-                    _hu = _col_name.upper()
-                    _w = next((_v for _k, _v in _LARG.items() if _k in _hu), 12)
-                    _ws_out.column_dimensions[get_column_letter(_ci)].width = _w
+                _ri = 2
 
-                # rodapé totais
-                _ultima = _ri
-                _ws_out.cell(_ultima, 1, 'TOTAL').font = Font(bold=True)
-                for _ci, _col_name in enumerate(_hdr_out, 1):
-                    _hu = _col_name.upper()
-                    if any(x in _hu for x in ['CONTRAT','ENTREGUE','PENDENTE','VALOR PEND']):
-                        _tot = 0
-                        for _rr in range(2, _ultima):
-                            try: _tot += float(_ws_out.cell(_rr, _ci).value or 0)
-                            except: pass
-                        _c = _ws_out.cell(_ultima, _ci, _tot)
-                        _c.font = Font(bold=True)
-                        _c.number_format = 'R$ #,##0.00' if 'VALOR' in _hu else '#,##0'
+                if _nome_aba in _ABAS_COM_FIOS:
+                    _grupos = {f: [] for f in _ORDEM_FIOS}
+                    for _lb in _linhas_base:
+                        _desc_v = str(_lb[_IDX_DESC]) if _IDX_DESC < len(_lb) else ''
+                        _grupos[_extrair_fios2(_desc_v)].append(_lb)
+
+                    _dados_escritos = []
+                    for _fio in _ORDEM_FIOS:
+                        _grp = _grupos[_fio]
+                        if not _grp:
+                            continue
+                        _label = f"{_fio} Fios" if _fio != 'Outros' else "Outros"
+                        _ws_out.cell(_ri, 1, _label)
+                        _ws_out.merge_cells(start_row=_ri, start_column=1,
+                                            end_row=_ri, end_column=len(_COLUNAS))
+                        for _ci2 in range(1, len(_COLUNAS) + 1):
+                            _c = _ws_out.cell(_ri, _ci2)
+                            _c.fill = _SEP_FILL; _c.font = _SEP_FONT
+                            _c.alignment = Alignment(horizontal="center", vertical="center")
+                            _c.border = _S_BRD
+                        _ws_out.row_dimensions[_ri].height = 18
+                        _ri += 1
+
+                        for _lb in _grp:
+                            _ws_out.append(_linha_aba(_lb))
+                            _estilizar(_ri, _S_ALT if _ri % 2 == 0 else PatternFill())
+                            _dados_escritos.append(_lb)
+                            _ri += 1
+
+                    if _dados_escritos:
+                        _ws_out.cell(_ri, 1, 'TOTAL').font = Font(bold=True)
+                        for _ib, _ci2 in _col_map.items():
+                            if _ib in (_IDX_CONT, _IDX_ENT, _IDX_PEND, _IDX_VPEND):
+                                _tot = sum(float(_lb[_ib]) if isinstance(_lb[_ib], (int,float)) else 0 for _lb in _dados_escritos)
+                                _c = _ws_out.cell(_ri, _ci2, _tot)
+                                _c.font = Font(bold=True)
+                                _c.number_format = 'R$ #,##0.00' if _ib == _IDX_VPEND else '#,##0'
+                else:
+                    for _lb in _linhas_base:
+                        _ws_out.append(_linha_aba(_lb))
+                        _estilizar(_ri, _S_ALT if _ri % 2 == 0 else PatternFill())
+                        _ri += 1
+
+                    if _linhas_base:
+                        _ws_out.cell(_ri, 1, 'TOTAL').font = Font(bold=True)
+                        for _ib, _ci2 in _col_map.items():
+                            if _ib in (_IDX_CONT, _IDX_ENT, _IDX_PEND, _IDX_VPEND):
+                                _tot = sum(float(_lb[_ib]) if isinstance(_lb[_ib], (int,float)) else 0 for _lb in _linhas_base)
+                                _c = _ws_out.cell(_ri, _ci2, _tot)
+                                _c.font = Font(bold=True)
+                                _c.number_format = 'R$ #,##0.00' if _ib == _IDX_VPEND else '#,##0'
+
+                # Larguras
+                if _sem_gram:
+                    _largs = [14, 30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                else:
+                    _largs = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                for _ci2, _larg in enumerate(_largs[:len(_COLUNAS)], 1):
+                    _ws_out.column_dimensions[get_column_letter(_ci2)].width = _larg
 
             # ── PASSO 4: gerar download ────────────────────────────────────
             _buf = _BIO()
