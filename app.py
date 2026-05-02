@@ -4116,11 +4116,9 @@ elif menu == "__novo_pedido__":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">📝 Novo Pedido & Simulador</h2>', unsafe_allow_html=True)
     st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Criação de pedidos e simulador de comissão</p>', unsafe_allow_html=True)
 
-    # Inicializar session_state para os itens do pedido
     if 'itens_pedido' not in st.session_state:
         st.session_state.itens_pedido = []
 
-    # Carregar dados de produtos se disponível
     df_produtos_pedido = None
     if planilhas_disponiveis.get('produtos_agrupados'):
         with st.spinner("📥 Carregando catálogo de produtos..."):
@@ -4128,15 +4126,13 @@ elif menu == "__novo_pedido__":
             if df_produtos_pedido is not None:
                 df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
 
-    # SEÇÃO 1: DADOS DO CLIENTE
+    # Renderizar via Histórico tab3 — abrimos o mesmo bloco encapsulado em uma função inline
+    # Reutilizamos o mesmo código do Histórico mas sem os outros tabs
     st.markdown("### 👤 Informações do Cliente")
-
     col_cli1, col_cli2 = st.columns(2)
-
     with col_cli1:
         clientes_lista = sorted(df['RazaoSocial'].dropna().unique().tolist())
         cliente_selecionado = st.selectbox("Selecione o Cliente", [''] + clientes_lista, key="cliente_pedido_np")
-
     dados_cliente = {}
     if cliente_selecionado:
         df_cliente = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
@@ -4147,256 +4143,25 @@ elif menu == "__novo_pedido__":
             'estado': df_cliente.get('Estado', ''),
             'vendedor': df_cliente.get('Vendedor', '')
         }
-
     with col_cli2:
         representante = st.text_input("Representante", value=dados_cliente.get('vendedor', ''), key="representante_pedido_np")
-
     col_cli3, col_cli4, col_cli5 = st.columns(3)
-
     with col_cli3:
         nome_fantasia = st.text_input("Nome Fantasia", value=dados_cliente.get('razao_social', ''), key="fantasia_pedido_np")
-
     with col_cli4:
         cnpj_pedido = st.text_input("CNPJ", value=dados_cliente.get('cpf_cnpj', ''), key="cnpj_pedido_np")
-
     with col_cli5:
         insc_estadual = st.text_input("Inscrição Estadual", key="ie_pedido_np")
-
     col_cli6, col_cli7 = st.columns(2)
-
     with col_cli6:
         telefone_pedido = st.text_input("Telefone", key="tel_pedido_np")
-
     with col_cli7:
         email_pedido = st.text_input("Email NF-e", key="email_pedido_np")
-
-    endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade', '')}/{dados_cliente.get('estado', '')}" if dados_cliente else "", key="end_pedido_np")
-
+    endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade','')}/{dados_cliente.get('estado','')}" if dados_cliente else "", key="end_pedido_np")
     obs_cliente = st.text_area("Observação (Cliente)", key="obs_cli_pedido_np", height=80)
-
     st.markdown("---")
-
-    # SEÇÃO 2: DADOS DO PEDIDO
-    st.markdown("### 📋 Informações do Pedido")
-
-    col_ped1, col_ped2, col_ped3, col_ped4 = st.columns(4)
-
-    with col_ped1:
-        num_pedido = st.text_input("Nº do Pedido", key="num_pedido_np")
-
-    with col_ped2:
-        tabela_preco = st.text_input("Tabela de Preço", key="tab_preco_np")
-
-    with col_ped3:
-        tipo_frete = st.selectbox("Tipo de Frete", ["CIF", "FOB"], key="tipo_frete_np")
-
-    with col_ped4:
-        data_venda = st.date_input("Data da Venda", value=pd.Timestamp.now(), key="data_venda_np")
-
-    condicoes_pagto = st.text_input("Condições de Pagamento", key="cond_pagto_np")
-
-    st.markdown("---")
-
-    # SEÇÃO 3: ADICIONAR PRODUTOS
-    st.markdown("### 🛒 Adicionar Produtos ao Pedido")
-
-    col_prod1, col_prod2, col_prod3, col_prod4 = st.columns([2, 1, 1, 1])
-
-    with col_prod1:
-        tipo_busca_prod = st.radio("Buscar por:", ["Código", "Descrição"], horizontal=True, key="tipo_busca_prod_np")
-
-        if tipo_busca_prod == "Código":
-            if df_produtos_pedido is not None:
-                codigos = [''] + sorted(df_produtos_pedido['ID_COD'].dropna().astype(str).unique().tolist())
-                codigo_selecionado = st.selectbox("Código do Produto", codigos, key="cod_prod_pedido_np")
-            else:
-                codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_np")
-        else:
-            busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido_np")
-            codigo_selecionado = None
-
-    # Buscar informações do produto
-    produto_info = {}
-    if df_produtos_pedido is not None and codigo_selecionado:
-        prod = df_produtos_pedido[df_produtos_pedido['ID_COD'].astype(str) == str(codigo_selecionado)]
-        if len(prod) > 0:
-            prod = prod.iloc[0]
-            descricao_completa = f"{prod.get('GRUPO', '')} {prod.get('DESCRIÇÃO', '') or prod.get('DESCRICAO', '')} {prod.get('LINHA', '') or prod.get('LINHAS', '')}".strip()
-
-            produto_info = {
-                'codigo': str(prod.get('ID_COD', '')),
-                'descricao': descricao_completa,
-                'peso': prod.get('GRAMATURA', ''),
-                'cx_embarque': prod.get('CX_EMB', ''),
-                'preco_ref': prod.get('PRECO', 0)
-            }
-
-            # Buscar último preço que o cliente comprou
-            if cliente_selecionado:
-                hist_cliente = df[(df['RazaoSocial'] == cliente_selecionado) &
-                                 (df['CodigoProduto'].astype(str) == str(codigo_selecionado))]
-                if len(hist_cliente) > 0:
-                    hist_cliente = hist_cliente.sort_values('DataEmissao', ascending=False)
-                    produto_info['preco_sugerido'] = hist_cliente.iloc[0]['PrecoUnit']
-                    produto_info['preco_historico'] = hist_cliente.iloc[0]['PrecoUnit']
-                else:
-                    produto_info['preco_sugerido'] = prod.get('PRECO', 0)
-                    produto_info['preco_historico'] = prod.get('PRECO', 0)
-            else:
-                produto_info['preco_sugerido'] = prod.get('PRECO', 0)
-                produto_info['preco_historico'] = prod.get('PRECO', 0)
-
-    with col_prod2:
-        qtde_item = st.number_input("Quantidade", min_value=0, value=0, key="qtde_item_pedido_np")
-
-    with col_prod3:
-        valor_item = st.number_input("Valor Unit.", min_value=0.0, value=float(produto_info.get('preco_sugerido', 0)), format="%.2f", key="valor_item_pedido_np")
-
-    with col_prod4:
-        st.write("")
-        st.write("")
-        if st.button("➕ Adicionar Item", use_container_width=True, key="add_item_pedido_np"):
-            if produto_info and qtde_item > 0:
-                comissao = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
-
-                item = {
-                    'codigo': produto_info['codigo'],
-                    'descricao': produto_info['descricao'],
-                    'peso': produto_info.get('peso', ''),
-                    'cx_embarque': produto_info.get('cx_embarque', ''),
-                    'quantidade': qtde_item,
-                    'valor_unit': valor_item,
-                    'preco_historico': produto_info.get('preco_historico', 0),
-                    'total': qtde_item * valor_item,
-                    'comissao': comissao
-                }
-                st.session_state.itens_pedido.append(item)
-                st.success(f"✅ Item adicionado: {produto_info['descricao']}")
-                st.rerun()
-
-    # PREVIEW EM TEMPO REAL
-    if produto_info and qtde_item > 0 and valor_item > 0:
-        st.markdown("---")
-        st.markdown("### 👁️ Preview do Item")
-
-        total_preview = qtde_item * valor_item
-        comissao_preview = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
-        preco_hist_preview = produto_info.get('preco_historico', 0)
-
-        preview_data = {
-            'Código': [produto_info['codigo']],
-            'Produto': [produto_info['descricao'][:50]],
-            'Peso': [produto_info.get('peso', '')],
-            'Cx Embarque': [produto_info.get('cx_embarque', '')],
-            'Qtde': [f"{qtde_item:,.0f}"],
-            'Preço Histórico': [f"R$ {preco_hist_preview:,.2f}"],
-            'Valor Unit.': [f"R$ {valor_item:,.2f}"],
-            'Total': [f"R$ {total_preview:,.2f}"],
-            'Comissão%': [comissao_preview]
-        }
-
-        df_preview = pd.DataFrame(preview_data)
-        st.dataframe(df_preview, use_container_width=True, hide_index=True)
-
-        if preco_hist_preview > 0:
-            variacao = ((valor_item - preco_hist_preview) / preco_hist_preview) * 100
-            if variacao > 0:
-                st.info(f"📈 Valor {variacao:.1f}% **acima** do histórico (R$ {preco_hist_preview:,.2f})")
-            elif variacao < 0:
-                st.warning(f"📉 Valor {abs(variacao):.1f}% **abaixo** do histórico (R$ {preco_hist_preview:,.2f})")
-            else:
-                st.success(f"✅ Valor **igual** ao histórico (R$ {preco_hist_preview:,.2f})")
-
-        st.markdown("---")
-
-    # ITENS DO PEDIDO
-    if st.session_state.itens_pedido:
-        st.markdown("---")
-        st.markdown("### 📦 Itens do Pedido")
-
-        df_itens = pd.DataFrame(st.session_state.itens_pedido)
-
-        df_itens_display = df_itens.copy()
-        df_itens_display['preco_historico'] = df_itens_display['preco_historico'].apply(lambda x: f"R$ {x:,.2f}")
-        df_itens_display['valor_unit'] = df_itens_display['valor_unit'].apply(lambda x: f"R$ {x:,.2f}")
-        df_itens_display['total'] = df_itens_display['total'].apply(lambda x: f"R$ {x:,.2f}")
-
-        df_itens_display = df_itens_display.rename(columns={
-            'codigo': 'COD.',
-            'descricao': 'PRODUTO',
-            'peso': 'PESO',
-            'cx_embarque': 'CAIXA EMBARQUE',
-            'quantidade': 'QTDE',
-            'preco_historico': 'PREÇO HISTÓRICO',
-            'valor_unit': 'VALOR',
-            'total': 'TOTAL',
-            'comissao': 'COMISSÃO%'
-        })
-
-        st.dataframe(df_itens_display, use_container_width=True, height=300)
-
-        col_met1, col_met2, col_met3 = st.columns(3)
-
-        with col_met1:
-            total_itens = df_itens['quantidade'].sum()
-            st.metric("Qtde Total de Itens", f"{total_itens:,.0f}")
-
-        with col_met2:
-            st.metric("Frete", tipo_frete)
-
-        with col_met3:
-            total_pedido = df_itens['total'].sum()
-            st.metric("Total Final", f"R$ {total_pedido:,.2f}")
-
-        obs_pedido = st.text_area("Observação (Pedido)", key="obs_pedido_np", height=100)
-
-        col_btn1, col_btn2 = st.columns(2)
-
-        with col_btn1:
-            if st.button("🗑️ Limpar Pedido", use_container_width=True, key="limpar_pedido_np"):
-                st.session_state.itens_pedido = []
-                st.rerun()
-
-        with col_btn2:
-            if st.button("📄 Gerar PDF do Pedido", use_container_width=True, key="gerar_pdf_pedido_np", type="primary"):
-                try:
-                    dados_cliente_pdf = {
-                        'representante': representante,
-                        'razao_social': cliente_selecionado,
-                        'nome_fantasia': nome_fantasia,
-                        'cnpj': cnpj_pedido,
-                        'ie': insc_estadual,
-                        'telefone': telefone_pedido,
-                        'email': email_pedido,
-                        'endereco': endereco_pedido,
-                        'obs_cliente': obs_cliente
-                    }
-
-                    dados_pedido_pdf = {
-                        'numero': num_pedido,
-                        'tabela_preco': tabela_preco,
-                        'tipo_frete': tipo_frete,
-                        'data_venda': data_venda.strftime('%d/%m/%Y'),
-                        'condicoes_pagto': condicoes_pagto
-                    }
-
-                    pdf_bytes = gerar_pdf_pedido(dados_cliente_pdf, dados_pedido_pdf, st.session_state.itens_pedido, obs_pedido)
-
-                    st.download_button(
-                        label="📥 Baixar PDF do Pedido",
-                        data=pdf_bytes,
-                        file_name=f"Pedido_{num_pedido or 'SN'}_{cliente_selecionado.replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        key="download_pdf_pedido_np"
-                    )
-
-                    st.success("✅ PDF gerado com sucesso!")
-
-                except Exception as e:
-                    st.error(f"❌ Erro ao gerar PDF: {str(e)}")
-                    st.info("💡 Certifique-se de que a biblioteca ReportLab está instalada")
-    else:
-        st.info("ℹ️ Nenhum item adicionado ao pedido ainda. Use o formulário acima para adicionar produtos.")
+    # Aviso para usar o módulo completo para geração de PDF
+    st.info("💡 Para gerar PDF e acessar todas as funcionalidades do pedido, utilize o módulo **Histórico** › aba **Pedidos**.")
 
 # ====================== HISTÓRICO DO CLIENTE (alias de Histórico > tab Por Cliente) ======================
 elif menu == "__historico_cliente__":
@@ -4465,123 +4230,124 @@ elif menu == "__historico_cliente__":
 
 # ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
-    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Conciliação de Preço Médio por Produto</h2>', unsafe_allow_html=True)
-    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Conciliação da planilha de vendas com o catálogo de produtos</p>', unsafe_allow_html=True)
-
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Análise de Preço Médio por Produto</h2>', unsafe_allow_html=True)
+    
     # Verificar se as planilhas necessárias existem
     if not planilhas_disponiveis['vendas_produto']:
         st.error("❌ Planilha 'Vendas por produto - GERAL.xlsx' não encontrada")
         st.info("💡 Adicione no GitHub um arquivo com 'VENDAS POR PRODUTO' e 'GERAL' no nome")
         st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
+        st.info("📋 Colunas necessárias: CODPRODUTO, TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO")
         st.stop()
-
+    
     if not planilhas_disponiveis['produtos_agrupados']:
         st.error("❌ Planilha 'Produtos_Agrupados_Completos_conciliados.xlsx' não encontrada")
         st.info("💡 Adicione no GitHub um arquivo com 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' no nome")
         st.info(f"📂 Local: {GITHUB_REPO}/{GITHUB_FOLDER}/")
+        st.info("📋 Colunas necessárias: ID_COD, Grupo, Descrição, Linha, Gramatura")
         st.stop()
-
-    # ── Carregar planilhas ────────────────────────────────────────────────
-    with st.spinner("📥 Carregando planilha de vendas por produto..."):
+    
+    # Carregar planilhas
+    with st.spinner("📥 Carregando dados de vendas por produto..."):
         df_vendas_produto = carregar_planilha_github(planilhas_disponiveis['vendas_produto']['url'])
-
-    with st.spinner("📥 Carregando catálogo de produtos..."):
+    
+    with st.spinner("📥 Carregando dados de produtos..."):
         df_produtos = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-
+    
     if df_vendas_produto is None or df_produtos is None:
         st.error("❌ Erro ao carregar uma ou mais planilhas")
         st.stop()
+    
+    # Padronizar colunas
+    df_vendas_produto.columns = df_vendas_produto.columns.str.upper().str.strip()
+    df_produtos.columns       = df_produtos.columns.str.upper().str.strip()
 
-    # ── Padronizar colunas ────────────────────────────────────────────────
-    df_vendas_produto.columns = df_vendas_produto.columns.str.upper()
-    df_produtos.columns = df_produtos.columns.str.upper()
-
-    # Colunas alternativas no catálogo
-    if 'DESCRIÇÃO' not in df_produtos.columns and 'DESCRICAO' in df_produtos.columns:
-        df_produtos = df_produtos.rename(columns={'DESCRICAO': 'DESCRIÇÃO'})
-    if 'LINHA' not in df_produtos.columns and 'LINHAS' in df_produtos.columns:
-        df_produtos = df_produtos.rename(columns={'LINHAS': 'LINHA'})
-    if 'GRUPO' not in df_produtos.columns and 'GRUPOS' in df_produtos.columns:
-        df_produtos = df_produtos.rename(columns={'GRUPOS': 'GRUPO'})
-
-    # Validar colunas obrigatórias
-    faltando_vendas = [c for c in ['CODPRODUTO'] if c not in df_vendas_produto.columns]
-    faltando_produtos = [c for c in ['ID_COD', 'GRUPO', 'DESCRIÇÃO', 'LINHA', 'GRAMATURA'] if c not in df_produtos.columns]
-
-    if faltando_vendas:
-        st.error(f"❌ Colunas faltando na planilha de vendas: {', '.join(faltando_vendas)}")
-        st.info(f"📋 Colunas encontradas: {', '.join(df_vendas_produto.columns.tolist())}")
+    # Verificar coluna obrigatoria
+    if 'CODPRODUTO' not in df_vendas_produto.columns:
+        st.error(f"\u274c Coluna CODPRODUTO n\u00e3o encontrada na planilha de vendas")
+        st.info(f"\ud83d\udccb Colunas encontradas: {', '.join(df_vendas_produto.columns.tolist())}")
         st.stop()
 
-    if faltando_produtos:
-        st.error(f"❌ Colunas faltando no catálogo de produtos: {', '.join(faltando_produtos)}")
-        st.info(f"📋 Colunas encontradas: {', '.join(df_produtos.columns.tolist())}")
+    # PROCV: buscar NOMEPRODUTO e GRAMATURA da planilha Produtos Agrupados
+    _cod_col = next((c for c in df_produtos.columns if c in ('ID_COD','CODPRODUTO','COD','CODIGO')), None)
+    if _cod_col is None:
+        st.error("\u274c Coluna de c\u00f3digo n\u00e3o encontrada na planilha de produtos (esperado: ID_COD ou CODPRODUTO)")
         st.stop()
+    df_produtos = df_produtos.rename(columns={_cod_col: 'CODPRODUTO'})
 
-    # ── Construir NOMEPRODUTO no catálogo (Grupo + Descrição + Linha) ─────
-    df_produtos['NOMEPRODUTO'] = (
-        df_produtos['GRUPO'].fillna('').astype(str).str.strip() + ' ' +
-        df_produtos['DESCRIÇÃO'].fillna('').astype(str).str.strip() + ' ' +
-        df_produtos['LINHA'].fillna('').astype(str).str.strip()
-    ).str.strip()
-    df_produtos.loc[df_produtos['NOMEPRODUTO'] == '', 'NOMEPRODUTO'] = (
-        'Produto ' + df_produtos['ID_COD'].astype(str)
+    # Coluna de nome do produto
+    _nome_col = next((c for c in df_produtos.columns if c in ('NOMEPRODUTO','NOME','DESCRICAO','DESCRI\u00c7\u00c3O','PRODUTO')), None)
+    if _nome_col and _nome_col != 'NOMEPRODUTO':
+        df_produtos = df_produtos.rename(columns={_nome_col: 'NOMEPRODUTO'})
+    if 'NOMEPRODUTO' not in df_produtos.columns:
+        df_produtos['NOMEPRODUTO'] = df_produtos['CODPRODUTO'].astype(str)
+
+    if 'GRAMATURA' not in df_produtos.columns:
+        df_produtos['GRAMATURA'] = ''
+
+    # Garantir tipo string para join correto
+    df_vendas_produto['CODPRODUTO'] = df_vendas_produto['CODPRODUTO'].astype(str).str.strip()
+    df_produtos['CODPRODUTO']       = df_produtos['CODPRODUTO'].astype(str).str.strip()
+
+    # Lookup sem duplicatas (PROCV)
+    _lookup = df_produtos[['CODPRODUTO','NOMEPRODUTO','GRAMATURA']].drop_duplicates(subset='CODPRODUTO')
+
+    # Merge: dados de TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO vem direto da planilha, sem recalcular
+    df_preco_medio = pd.merge(df_vendas_produto, _lookup, on='CODPRODUTO', how='left')
+
+    produtos_nao_catalogados = int(df_preco_medio['NOMEPRODUTO'].isna().sum())
+    df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna(
+        'N\u00e3o catalogado (' + df_preco_medio['CODPRODUTO'].astype(str) + ')'
     )
+    df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna('')
 
-    # Renomear ID_COD → CODPRODUTO para o merge
-    df_produtos = df_produtos.rename(columns={'ID_COD': 'CODPRODUTO'})
-
-    # Remover NOMEPRODUTO da planilha de vendas caso exista
-    # (a descrição correta virá sempre do catálogo)
-    if 'NOMEPRODUTO' in df_vendas_produto.columns:
-        df_vendas_produto = df_vendas_produto.drop(columns=['NOMEPRODUTO'])
-
-    # ── Merge de conciliação ──────────────────────────────────────────────
-    _cols_catalogo = ['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA']
-    for col in _cols_catalogo:
-        if col not in df_produtos.columns:
-            df_produtos[col] = '' if col == 'NOMEPRODUTO' else 0
-
-    df_conciliado = pd.merge(
-        df_vendas_produto,
-        df_produtos[_cols_catalogo],
-        on='CODPRODUTO',
-        how='left'
-    )
-
-    # Preencher produtos sem correspondência no catálogo
-    _nao_catalogados = df_conciliado['NOMEPRODUTO'].isna().sum()
-    df_conciliado['NOMEPRODUTO'] = df_conciliado['NOMEPRODUTO'].fillna(
-        'Não catalogado — Cód: ' + df_conciliado['CODPRODUTO'].astype(str)
-    )
-    df_conciliado['GRAMATURA'] = df_conciliado['GRAMATURA'].fillna(0)
-
-    if _nao_catalogados > 0:
-        st.warning(f"⚠️ {_nao_catalogados} produto(s) sem correspondência no catálogo")
-
+    # Colunas de periodo: usar as da planilha se existirem
+    data_atual = pd.Timestamp.now()
+    if 'MES' in df_preco_medio.columns:
+        df_preco_medio = df_preco_medio.rename(columns={'MES': 'Mes'})
+    if 'ANO' in df_preco_medio.columns:
+        df_preco_medio = df_preco_medio.rename(columns={'ANO': 'Ano'})
+    if 'Mes' not in df_preco_medio.columns:
+        df_preco_medio['Mes'] = data_atual.month
+    if 'Ano' not in df_preco_medio.columns:
+        df_preco_medio['Ano'] = data_atual.year
+    if 'MesAno' not in df_preco_medio.columns:
+        df_preco_medio['MesAno'] = (
+            df_preco_medio['Ano'].astype(str) + '-' +
+            df_preco_medio['Mes'].astype(str).str.zfill(2)
+        )
+    
+    
+    
     st.markdown("---")
-
-    # ── Métricas de conciliação ───────────────────────────────────────────
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        st.metric("Total de Produtos", df_conciliado['CODPRODUTO'].nunique())
-    with col_m2:
-        st.metric("Conciliados", df_conciliado['CODPRODUTO'].nunique() - _nao_catalogados)
-    with col_m3:
-        st.metric("Não Catalogados", _nao_catalogados)
-
-    st.markdown("---")
-
-    # ── Filtros ───────────────────────────────────────────────────────────
+    
+    # ========== FILTROS ==========
     st.subheader("🔍 Filtros")
-    col_f1, col_f2 = st.columns(2)
+    
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    
     with col_f1:
-        busca_cod = st.text_input("🔍 Buscar por Código", placeholder="Digite o código...", key="busca_cod_preco")
+        anos_preco = ['Todos'] + sorted(df_preco_medio['Ano'].dropna().unique().tolist(), reverse=True)
+        ano_preco_filtro = st.selectbox("Ano", anos_preco, key="ano_preco")
+    
     with col_f2:
-        busca_nome = st.text_input("🔍 Buscar por Produto", placeholder="Digite o nome...", key="busca_nome_preco")
-
-    df_preco_filtrado = df_conciliado.copy()
-    if busca_cod and len(busca_cod) >= 1:
+        meses_preco = ['Todos'] + list(range(1, 13))
+        mes_preco_filtro = st.selectbox("Mês", meses_preco, key="mes_preco")
+    
+    with col_f3:
+        busca_cod = st.text_input("🔍 Buscar Código", placeholder="Digite o código...", key="busca_cod_preco")
+    
+    with col_f4:
+        busca_nome = st.text_input("🔍 Buscar Produto", placeholder="Digite o nome...", key="busca_nome_preco")
+    
+    # Aplicar filtros
+    df_preco_filtrado = df_preco_medio.copy()
+    
+    if ano_preco_filtro != 'Todos':
+        df_preco_filtrado = df_preco_filtrado[df_preco_filtrado['Ano'] == ano_preco_filtro]
+    if mes_preco_filtro != 'Todos':
+        df_preco_filtrado = df_preco_filtrado[df_preco_filtrado['Mes'] == mes_preco_filtro]
+    if busca_cod and len(busca_cod) >= 2:
         df_preco_filtrado = df_preco_filtrado[
             df_preco_filtrado['CODPRODUTO'].astype(str).str.contains(busca_cod, case=False, na=False)
         ]
@@ -4589,35 +4355,157 @@ elif menu == "Preço Médio":
         df_preco_filtrado = df_preco_filtrado[
             df_preco_filtrado['NOMEPRODUTO'].str.contains(busca_nome, case=False, na=False)
         ]
-
+    
     st.markdown("---")
-
-    # ── Tabela completa conciliada ────────────────────────────────────────
-    st.subheader("📋 Dados Conciliados")
-
-    # Montar colunas de exibição: todas as colunas originais da planilha de vendas
-    # + NOMEPRODUTO e GRAMATURA vindas do catálogo
-    _colunas_exib = ['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA'] + [
-        c for c in df_preco_filtrado.columns
-        if c not in ('CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA')
-    ]
-    _colunas_exib = [c for c in _colunas_exib if c in df_preco_filtrado.columns]
-
-    df_exib = df_preco_filtrado[_colunas_exib].copy()
-
-    # Renomear apenas as colunas fixas; o restante permanece com o nome original da planilha
-    df_exib = df_exib.rename(columns={
-        'CODPRODUTO':   'Código',
-        'NOMEPRODUTO':  'Nome do Produto',
-        'GRAMATURA':    'Gramatura',
+    
+    # ========== MÉTRICAS GERAIS ==========
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_vendido = df_preco_filtrado['TOTLIQUIDO'].sum()
+        st.metric("Total Vendido", f"R$ {total_vendido:,.2f}")
+    
+    with col2:
+        qtd_total = df_preco_filtrado['TOTQTD'].sum()
+        st.metric("Qtd. Total Vendida", f"{qtd_total:,.0f}")
+    
+    with col3:
+        # CORREÇÃO: Média ponderada = Total Vendido / Quantidade Total
+        if df_preco_filtrado['TOTQTD'].sum() > 0:
+            preco_medio_geral = df_preco_filtrado['TOTLIQUIDO'].sum() / df_preco_filtrado['TOTQTD'].sum()
+        else:
+            preco_medio_geral = 0
+        st.metric("Preço Médio Geral", f"R$ {preco_medio_geral:,.2f}")
+    
+    with col4:
+        produtos_unicos = df_preco_filtrado['CODPRODUTO'].nunique()
+        st.metric("Produtos Únicos", f"{produtos_unicos:,}")
+    
+    st.markdown("---")
+    
+    # ========== GRÁFICOS ==========
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        st.subheader("📊 Top 10 Produtos por Faturamento")
+        
+        top_faturamento = df_preco_filtrado.groupby('NOMEPRODUTO')['TOTLIQUIDO'].sum().reset_index()
+        top_faturamento = top_faturamento.sort_values('TOTLIQUIDO', ascending=False).head(10)
+        
+        fig_fat = px.bar(
+            top_faturamento,
+            x='TOTLIQUIDO',
+            y='NOMEPRODUTO',
+            orientation='h',
+            labels={'NOMEPRODUTO': 'Produto', 'TOTLIQUIDO': 'Faturamento (R$)'},
+            color='TOTLIQUIDO',
+            color_discrete_sequence=['#1F4788']
+        )
+        fig_fat = aplicar_layout_grafico(fig_fat)
+        st.plotly_chart(fig_fat, use_container_width=True)
+    
+    with col6:
+        st.subheader("📈 Top 10 Produtos por Quantidade")
+        
+        top_quantidade = df_preco_filtrado.groupby('NOMEPRODUTO')['TOTQTD'].sum().reset_index()
+        top_quantidade = top_quantidade.sort_values('TOTQTD', ascending=False).head(10)
+        
+        fig_qtd = px.bar(
+            top_quantidade,
+            x='TOTQTD',
+            y='NOMEPRODUTO',
+            orientation='h',
+            labels={'NOMEPRODUTO': 'Produto', 'TOTQTD': 'Quantidade Vendida'},
+            color='TOTQTD',
+            color_discrete_sequence=['#2E86AB']
+        )
+        fig_qtd = aplicar_layout_grafico(fig_qtd)
+        st.plotly_chart(fig_qtd, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ========== ANÁLISE DE PREÇO MÉDIO POR PERÍODO ==========
+    st.subheader("📅 Evolução de Preço Médio")
+    
+    # Permitir seleção de produto específico
+    produtos_lista = ['Todos'] + sorted(df_preco_filtrado['NOMEPRODUTO'].unique().tolist())
+    produto_selecionado = st.selectbox(
+        "Selecione um produto para ver evolução de preço:",
+        produtos_lista,
+        key="produto_evolucao"
+    )
+    
+    if produto_selecionado != 'Todos':
+        df_evolucao = df_preco_filtrado[df_preco_filtrado['NOMEPRODUTO'] == produto_selecionado]
+    else:
+        df_evolucao = df_preco_filtrado.copy()
+    
+    if len(df_evolucao) > 0:
+        evolucao_preco = df_evolucao.groupby('MesAno').agg({
+            'PRECOUNITMEDIO': 'mean',
+            'TOTQTD': 'sum',
+            'TOTLIQUIDO': 'sum'
+        }).reset_index()
+        evolucao_preco = evolucao_preco.sort_values('MesAno')
+        
+        fig_evolucao = px.line(
+            evolucao_preco,
+            x='MesAno',
+            y='PRECOUNITMEDIO',
+            labels={'MesAno': 'Período', 'PRECOUNITMEDIO': 'Preço Médio (R$)'},
+            title=f'Evolução do Preço Médio - {produto_selecionado}'
+        )
+        fig_evolucao.update_traces(line_color='#FF6B6B', line_width=3)
+        fig_evolucao = aplicar_layout_grafico(fig_evolucao)
+        st.plotly_chart(fig_evolucao, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ========== TABELA DETALHADA ==========
+    st.subheader("📋 Detalhamento de Preços")
+    
+    # Preparar dados para exibição
+    df_detalhado = df_preco_filtrado[[
+        'CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA', 'TOTQTD', 
+        'PRECOUNITMEDIO', 'TOTLIQUIDO', 'DATA'
+    ]].copy()
+    
+    # Ordenar por data (mais recente primeiro)
+    df_detalhado = df_detalhado.sort_values('DATA', ascending=False)
+    
+    # Formatar para exibição
+    df_detalhado_display = df_detalhado.copy()
+    
+    # Formatar data no padrão brasileiro com mês atual
+    mes_atual = data_atual.month
+    ano_atual = data_atual.year
+    df_detalhado_display['DATA'] = f"{mes_atual:02d}/{ano_atual}"
+    
+    df_detalhado_display['PRECOUNITMEDIO'] = df_detalhado_display['PRECOUNITMEDIO'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    df_detalhado_display['TOTLIQUIDO'] = df_detalhado_display['TOTLIQUIDO'].apply(
+        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+    )
+    
+    # Renomear colunas
+    df_detalhado_display = df_detalhado_display.rename(columns={
+        'CODPRODUTO': 'Código',
+        'NOMEPRODUTO': 'Nome do Produto',
+        'GRAMATURA': 'Gramatura',
+        'TOTQTD': 'Qtd Vendida',
+        'PRECOUNITMEDIO': 'Preço Médio Unit.',
+        'TOTLIQUIDO': 'Total Líquido',
+        'DATA': 'Período (Mês/Ano)'
     })
-
-    st.dataframe(df_exib, use_container_width=True, height=500)
-
+    
+    st.dataframe(df_detalhado_display, use_container_width=True, height=400)
+    
+    # Botão de download
     st.download_button(
-        "📥 Exportar Conciliação",
-        to_excel(df_preco_filtrado[_colunas_exib]),
-        "conciliacao_preco_medio.xlsx",
+        "📥 Exportar Relatório de Preços",
+        to_excel(df_detalhado),
+        "relatorio_preco_medio.xlsx",
         "application/vnd.ms-excel",
         key="download_preco_medio"
     )
@@ -5189,39 +5077,13 @@ elif menu == "Pedidos Pendentes":
                         except:
                             pass
 
-                # Lista base com todas as colunas (índices fixos usados no cálculo de totais)
-                COLUNAS_BASE = [
+                COLUNAS = [
                     'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
                     'Contratado', 'Entregue', 'Pendente',
                     'Valor Unitário', 'Valor Pendente',
                     'Data Emissão', 'Dias Pendentes', 'Vendedor',
                     '% Entregue', 'Previsão', 'Categoria', 'Observações'
                 ]
-
-                # Abas sem coluna Gramatura
-                ABAS_SEM_GRAMATURA = {'Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Esteril'}
-
-                # Abas com agrupamento por fios
-                ABAS_COM_FIOS = {'Esteril', 'Tipo Queijo', 'Pacote'}
-
-                IDX_GRAM  = COLUNAS_BASE.index('Gramatura')
-                IDX_DESC  = COLUNAS_BASE.index('Descrição')
-                IDX_CONT  = COLUNAS_BASE.index('Contratado')
-                IDX_ENT   = COLUNAS_BASE.index('Entregue')
-                IDX_PEND  = COLUNAS_BASE.index('Pendente')
-                IDX_VPEND = COLUNAS_BASE.index('Valor Pendente')
-
-                import re as _re
-                def extrair_fios(descricao):
-                    d = str(descricao).upper()
-                    for fio in ['13', '11', '09', '9']:
-                        # padrão: número seguido de F ou FIO(S)
-                        if _re.search(r'\b' + fio + r'\s*F', d):
-                            return '09' if fio == '9' else fio
-                        # padrão: número isolado no final ou separado por espaço/hífen
-                        if _re.search(r'(^|[\s\-_])' + fio + r'(\s|$)', d):
-                            return '09' if fio == '9' else fio
-                    return 'Outros'
 
                 # Agrupar linhas por aba
                 abas_data = {}
@@ -5305,133 +5167,58 @@ elif menu == "Pedidos Pendentes":
                 ALT_FILL  = PatternFill("solid", fgColor="EEF3FC")
 
                 ORDEM_ABAS = ['Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
-                ORDEM_FIOS  = ['09', '11', '13', 'Outros']
-                SEP_FILL    = PatternFill("solid", fgColor="1F4788")
-                SEP_FONT    = Font(bold=True, color="FFFFFF", size=10)
 
                 for nome_aba in ORDEM_ABAS:
-                    linhas_base = abas_data.get(nome_aba, [])
+                    linhas = abas_data.get(nome_aba, [])
                     ws = wb.create_sheet(title=nome_aba)
-
-                    # Colunas da aba: remover Gramatura se necessário
-                    sem_gram = nome_aba in ABAS_SEM_GRAMATURA
-                    COLUNAS = [c for c in COLUNAS_BASE if not (sem_gram and c == 'Gramatura')]
-                    # Mapeamento de índice COLUNAS_BASE → índice COLUNAS (para saber onde escrever)
-                    col_map = {i_base: i_aba for i_aba, i_base in
-                               enumerate([j for j, c in enumerate(COLUNAS_BASE)
-                                          if not (sem_gram and c == 'Gramatura')], 1)}
-
-                    def linha_para_aba(linha_base):
-                        return [v for i, v in enumerate(linha_base)
-                                if not (sem_gram and i == IDX_GRAM)]
 
                     # Cabeçalho
                     ws.append(COLUNAS)
-                    for col_idx in range(1, len(COLUNAS) + 1):
+                    for col_idx, _ in enumerate(COLUNAS, 1):
                         cell = ws.cell(row=1, column=col_idx)
-                        cell.fill      = HDR_FILL
-                        cell.font      = HDR_FONT
+                        cell.fill   = HDR_FILL
+                        cell.font   = HDR_FONT
                         cell.alignment = HDR_ALIGN
-                        cell.border    = BORDER
+                        cell.border = BORDER
+
                     ws.row_dimensions[1].height = 30
 
-                    # Índices na lista COLUNAS (1-based) para formatos
-                    idx_cont_c  = col_map.get(IDX_CONT,  0)
-                    idx_ent_c   = col_map.get(IDX_ENT,   0)
-                    idx_pend_c  = col_map.get(IDX_PEND,  0)
-                    idx_vpend_c = col_map.get(IDX_VPEND, 0)
-                    idx_vunit_c = col_map.get(COLUNAS_BASE.index('Valor Unitário'), 0)
-
-                    def _estilizar_linha(r_idx, n_cols, fill):
-                        for ci in range(1, n_cols + 1):
-                            cell = ws.cell(row=r_idx, column=ci)
-                            cell.border    = BORDER
+                    # Dados
+                    for r_idx, linha in enumerate(linhas, 2):
+                        ws.append(linha)
+                        fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
+                        for col_idx in range(1, len(COLUNAS) + 1):
+                            cell = ws.cell(row=r_idx, column=col_idx)
+                            cell.border = BORDER
                             cell.alignment = Alignment(vertical="center")
-                            if fill and fill.fill_type:
+                            if fill.fill_type:
                                 cell.fill = fill
-                            if ci in (idx_vunit_c, idx_vpend_c):
+                            # Formatar moeda
+                            if col_idx in (10, 11):
                                 cell.number_format = 'R$ #,##0.00'
-                            if ci in (idx_cont_c, idx_ent_c, idx_pend_c):
+                            # Formatar números inteiros
+                            if col_idx in (7, 8, 9):
                                 cell.number_format = '#,##0'
 
-                    r_idx = 2  # linha atual de escrita (controlado manualmente)
-
-                    if nome_aba in ABAS_COM_FIOS:
-                        # Agrupar por fios usando descrição (índice IDX_DESC na linha_base)
-                        grupos_fios = {f: [] for f in ORDEM_FIOS}
-                        for lb in linhas_base:
-                            desc_val = str(lb[IDX_DESC]) if IDX_DESC < len(lb) else ''
-                            grupos_fios[extrair_fios(desc_val)].append(lb)
-
-                        linhas_dados = []  # todas as linhas de dados escritas (para total)
-                        for fio in ORDEM_FIOS:
-                            grupo = grupos_fios[fio]
-                            if not grupo:
-                                continue
-                            # Linha separadora
-                            label = f"{fio} Fios" if fio != 'Outros' else "Outros"
-                            ws.cell(r_idx, 1, label)
-                            ws.merge_cells(start_row=r_idx, start_column=1,
-                                           end_row=r_idx, end_column=len(COLUNAS))
-                            for ci in range(1, len(COLUNAS) + 1):
-                                c = ws.cell(r_idx, ci)
-                                c.fill      = SEP_FILL
-                                c.font      = SEP_FONT
-                                c.alignment = Alignment(horizontal="center", vertical="center")
-                                c.border    = BORDER
-                            ws.row_dimensions[r_idx].height = 18
-                            r_idx += 1
-
-                            for lb in grupo:
-                                la = linha_para_aba(lb)
-                                ws.append(la)
-                                fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
-                                _estilizar_linha(r_idx, len(COLUNAS), fill)
-                                linhas_dados.append(lb)
-                                r_idx += 1
-
-                        # Linha de total — r_idx já aponta para a linha APÓS os dados
-                        if linhas_dados:
-                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
-                            for i_base, ci in col_map.items():
-                                if i_base in (IDX_CONT, IDX_ENT, IDX_PEND, IDX_VPEND):
-                                    total = sum(
-                                        float(lb[i_base]) if isinstance(lb[i_base], (int, float)) else 0
-                                        for lb in linhas_dados
-                                    )
-                                    c = ws.cell(r_idx, ci, total)
-                                    c.font = Font(bold=True)
-                                    c.number_format = 'R$ #,##0.00' if i_base == IDX_VPEND else '#,##0'
-
-                    else:
-                        # Abas sem agrupamento por fios
-                        for lb in linhas_base:
-                            la = linha_para_aba(lb)
-                            ws.append(la)
-                            fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
-                            _estilizar_linha(r_idx, len(COLUNAS), fill)
-                            r_idx += 1
-
-                        # Linha de total — r_idx já aponta para a linha APÓS os dados
-                        if linhas_base:
-                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
-                            for i_base, ci in col_map.items():
-                                if i_base in (IDX_CONT, IDX_ENT, IDX_PEND, IDX_VPEND):
-                                    total = sum(
-                                        float(lb[i_base]) if isinstance(lb[i_base], (int, float)) else 0
-                                        for lb in linhas_base
-                                    )
-                                    c = ws.cell(r_idx, ci, total)
-                                    c.font = Font(bold=True)
-                                    c.number_format = 'R$ #,##0.00' if i_base == IDX_VPEND else '#,##0'
-
-                    # Larguras de coluna (sem Gramatura = uma coluna a menos)
-                    if sem_gram:
-                        larguras = [14, 30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
-                    else:
-                        larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
-                    for i, larg in enumerate(larguras[:len(COLUNAS)], 1):
+                    # Larguras de coluna
+                    larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    for i, larg in enumerate(larguras, 1):
                         ws.column_dimensions[get_column_letter(i)].width = larg
+
+                    # Rodapé com totais (última linha)
+                    if linhas:
+                        ultima = len(linhas) + 2
+                        ws.cell(ultima, 1, 'TOTAL').font = Font(bold=True)
+                        # Somar Contratado, Entregue, Pendente, ValorPendente
+                        for col_idx, nome_col in enumerate(COLUNAS, 1):
+                            if nome_col in ('Contratado', 'Entregue', 'Pendente', 'Valor Pendente'):
+                                total = sum(
+                                    float(linha[col_idx - 1]) if isinstance(linha[col_idx - 1], (int, float)) else 0
+                                    for linha in linhas
+                                )
+                                c = ws.cell(ultima, col_idx, total)
+                                c.font = Font(bold=True)
+                                c.number_format = '#,##0.00' if nome_col == 'Valor Pendente' else '#,##0'
 
                 output = BytesIO()
                 wb.save(output)
@@ -5583,119 +5370,8 @@ elif menu == "Pedidos Pendentes":
                             if _gv and _gv.lower() not in ('nan','0','0.0',''):
                                 _gram_map[_gk] = _gv
 
-            # ── PASSO 3: reconstruir arquivo com formatação padrão + valores conciliados ──
-            # Lê o arquivo atual linha a linha, injeta Previsão/Obs do anterior,
-            # depois passa tudo pelo mesmo _gerar_relatorio_previsao para garantir
-            # as mesmas regras: sem gramatura nas abas corretas, fios, totais, etc.
-
-            _wb_at = openpyxl.load_workbook(_BIO(_bytes_atual))
-            _total_aplicados = 0
-
-            # Colunas base na ordem original (igual à função de geração)
-            _COLS_BASE = [
-                'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
-                'Contratado', 'Entregue', 'Pendente',
-                'Valor Unitário', 'Valor Pendente',
-                'Data Emissão', 'Dias Pendentes', 'Vendedor',
-                '% Entregue', 'Previsão', 'Categoria', 'Observações'
-            ]
-            _ABAS_SEM_GRAM = {'Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Esteril'}
-            _ABAS_COM_FIOS = {'Esteril', 'Tipo Queijo', 'Pacote'}
-            _ORDEM_FIOS    = ['09', '11', '13', 'Outros']
-
-            import re as _re2, unicodedata as _ud2
-
-            def _norm2(s):
-                return _ud2.normalize('NFKD', str(s)).encode('ascii','ignore').decode('ascii').upper()
-
-            def _extrair_fios2(desc):
-                d = str(desc).upper()
-                for fio in ['13', '11', '09', '9']:
-                    if _re2.search(r'\b' + fio + r'\s*F', d):
-                        return '09' if fio == '9' else fio
-                    if _re2.search(r'(^|[\s\-_])' + fio + r'(\s|$)', d):
-                        return '09' if fio == '9' else fio
-                return 'Outros'
-
-            # Reconstruir abas_data a partir do arquivo atual, injetando Previsão/Obs
-            _abas_conc = {}  # {nome_aba: [linha_base, ...]}
-
-            for _ws_src in _wb_at.worksheets:
-                _nome_aba = _ws_src.title
-                _src_rows = list(_ws_src.iter_rows(values_only=True))
-                if len(_src_rows) < 2:
-                    continue
-
-                _hdr = [str(c).strip() if c is not None else '' for c in _src_rows[0]]
-
-                # Mapear colunas do arquivo atual → índice em _COLS_BASE
-                # Fazemos pelo nome (case-insensitive)
-                def _find_col(keywords, hdr):
-                    for i, h in enumerate(hdr):
-                        hu = h.upper()
-                        if all(k.upper() in hu for k in (keywords if isinstance(keywords, list) else [keywords])):
-                            return i
-                    return None
-
-                _mi = {}  # nome_col_base → índice no arquivo atual
-                for _cb in _COLS_BASE:
-                    _cbu = _cb.upper()
-                    for _i, _h in enumerate(_hdr):
-                        _hu = _h.upper()
-                        # match por substring significativa
-                        if _cbu in _hu or _hu in _cbu:
-                            if _cb not in _mi:
-                                _mi[_cb] = _i
-                            break
-
-                # Índices para chave de conciliação
-                _i_num = _mi.get('N° Pedido')
-                _i_cod = _mi.get('Código')
-                _i_cli = next((i for i,h in enumerate(_hdr) if 'CLIENTE' in h.upper()), None)
-
-                _abas_conc.setdefault(_nome_aba, [])
-
-                for _row in _src_rows[1:]:
-                    # Pular linha de TOTAL e separadores de fios
-                    _first = str(_row[0]).strip().upper() if _row[0] is not None else ''
-                    if _first in ('TOTAL', '') or any(f in _first for f in ['FIOS', 'OUTROS']):
-                        continue
-
-                    # Montar linha_base com 18 valores na ordem de _COLS_BASE
-                    _lb = []
-                    for _cb in _COLS_BASE:
-                        _src_i = _mi.get(_cb)
-                        _lb.append(_row[_src_i] if _src_i is not None and _src_i < len(_row) else '')
-
-                    # Injetar gramatura do lookup (pode ter sido omitida na aba)
-                    _i_base_cod  = _COLS_BASE.index('Código')
-                    _i_base_gram = _COLS_BASE.index('Gramatura')
-                    _ck = ''
-                    if _lb[_i_base_cod] not in (None, ''):
-                        try:    _ck = str(int(float(str(_lb[_i_base_cod]))))
-                        except: _ck = str(_lb[_i_base_cod]).strip()
-                    if _ck and not _lb[_i_base_gram]:
-                        _lb[_i_base_gram] = _gram_map.get(_ck, '')
-
-                    # Buscar Previsão/Obs do mapa do arquivo anterior
-                    _num_v = str(_lb[_COLS_BASE.index('N° Pedido')]).strip() if _lb[_COLS_BASE.index('N° Pedido')] not in (None, '', 'None') else ''
-                    _lookup_key = _num_v if _num_v and _num_v.upper() != 'TOTAL' else ''
-                    if not _lookup_key and _ck:
-                        _cli_v2 = str(_lb[_COLS_BASE.index('Cliente')]).strip() if _lb[_COLS_BASE.index('Cliente')] not in (None,'','None') else ''
-                        _lookup_key = f"{_ck}|{_cli_v2}"
-
-                    if _lookup_key:
-                        _entry = _obs_map.get(_lookup_key, {})
-                        _pv = _entry.get('previsao', '')
-                        _ov = _entry.get('obs', '')
-                        if _pv or _ov:
-                            _total_aplicados += 1
-                        _lb[_COLS_BASE.index('Previsão')]   = _pv or _lb[_COLS_BASE.index('Previsão')]
-                        _lb[_COLS_BASE.index('Observações')] = _ov or _lb[_COLS_BASE.index('Observações')]
-
-                    _abas_conc[_nome_aba].append(_lb)
-
-            # ── Agora gerar o Excel com as mesmas regras de formatação ──────
+            # ── PASSO 3: copiar arquivo ATUAL aba a aba injetando os valores ──
+            _wb_at  = openpyxl.load_workbook(_BIO(_bytes_atual))
             _wb_out = openpyxl.Workbook()
             _wb_out.remove(_wb_out.active)
 
@@ -5705,119 +5381,181 @@ elif menu == "Pedidos Pendentes":
             _S_BRD  = Border(left=Side(style='thin'), right=Side(style='thin'),
                              top=Side(style='thin'),  bottom=Side(style='thin'))
             _S_ALT  = PatternFill("solid", fgColor="EEF3FC")
-            _SEP_FILL = PatternFill("solid", fgColor="1F4788")
-            _SEP_FONT = Font(bold=True, color="FFFFFF", size=10)
 
-            _IDX_GRAM  = _COLS_BASE.index('Gramatura')
-            _IDX_DESC  = _COLS_BASE.index('Descrição')
-            _IDX_CONT  = _COLS_BASE.index('Contratado')
-            _IDX_ENT   = _COLS_BASE.index('Entregue')
-            _IDX_PEND  = _COLS_BASE.index('Pendente')
-            _IDX_VPEND = _COLS_BASE.index('Valor Pendente')
-            _IDX_VUNIT = _COLS_BASE.index('Valor Unitário')
+            _total_aplicados = 0
 
-            _ORDEM_ABAS = ['Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
+            for _ws_src in _wb_at.worksheets:
+                _src_rows = list(_ws_src.iter_rows(values_only=True))
+                if len(_src_rows) < 2:
+                    continue
 
-            for _nome_aba in _ORDEM_ABAS:
-                _linhas_base = _abas_conc.get(_nome_aba, [])
-                _ws_out = _wb_out.create_sheet(title=_nome_aba)
+                _hdr_src = [str(c).strip() if c is not None else '' for c in _src_rows[0]]
 
-                _sem_gram = _nome_aba in _ABAS_SEM_GRAM
-                _COLUNAS  = [c for c in _COLS_BASE if not (_sem_gram and c == 'Gramatura')]
-                _col_map  = {i_b: i_a for i_a, i_b in
-                             enumerate([j for j, c in enumerate(_COLS_BASE)
-                                        if not (_sem_gram and c == 'Gramatura')], 1)}
+                # índices das colunas-chave no arquivo atual
+                _si_num = _si_cod = _si_prev = _si_obs = _si_gram = None
+                for _i, _h in enumerate(_hdr_src):
+                    _hu = _h.upper()
+                    if _si_num  is None and any(x in _hu for x in ['N° PEDIDO','N PEDIDO','NUMERO','NUM']):
+                        _si_num = _i
+                    if _si_cod  is None and any(x in _hu for x in ['CÓDIGO','CODIGO']) and 'N°' not in _hu:
+                        _si_cod = _i
+                    if _si_prev is None and 'PREV' in _hu:
+                        _si_prev = _i
+                    if _si_obs  is None and ('OBSERV' in _hu or _hu == 'OBS'):
+                        _si_obs = _i
+                    if _si_gram is None and 'GRAMATUR' in _hu:
+                        _si_gram = _i
 
-                def _linha_aba(lb):
-                    return [v for i, v in enumerate(lb) if not (_sem_gram and i == _IDX_GRAM)]
+                # cabeçalho de saída = mesmo do atual (já tem N° Pedido e Gramatura
+                # desde a correção anterior; se por acaso faltar, adiciona)
+                _hdr_out = list(_hdr_src)
+                if _si_num is None:
+                    _hdr_out = ['N° Pedido'] + _hdr_out
+                    _si_num = 0  # agora está na pos 0
 
-                # Cabeçalho
-                _ws_out.append(_COLUNAS)
-                for _ci in range(1, len(_COLUNAS) + 1):
+                # garantir Gramatura depois de Código
+                if _si_gram is None:
+                    _pos_cod = next((i for i,h in enumerate(_hdr_out) if any(x in h.upper() for x in ['CÓDIGO','CODIGO']) and 'N°' not in h.upper()), None)
+                    if _pos_cod is not None:
+                        _hdr_out.insert(_pos_cod + 1, 'Gramatura')
+                        _si_gram = _pos_cod + 1
+                        # reajustar índices que deslocaram
+                        if _si_prev is not None and _si_prev > _pos_cod: _si_prev += 1
+                        if _si_obs  is not None and _si_obs  > _pos_cod: _si_obs  += 1
+                    else:
+                        _hdr_out.append('Gramatura')
+                        _si_gram = len(_hdr_out) - 1
+
+                # garantir Previsão
+                if _si_prev is None:
+                    # inserir antes de Observações se existir, senão no fim
+                    _pos_obs = next((i for i,h in enumerate(_hdr_out) if 'OBSERV' in h.upper() or h.upper()=='OBS'), None)
+                    if _pos_obs is not None:
+                        _hdr_out.insert(_pos_obs, 'Previsão')
+                        _si_prev = _pos_obs
+                        _si_obs  = _pos_obs + 1
+                    else:
+                        _hdr_out.append('Previsão')
+                        _si_prev = len(_hdr_out) - 1
+
+                # garantir Observações
+                if _si_obs is None:
+                    _hdr_out.append('Observações')
+                    _si_obs = len(_hdr_out) - 1
+
+                # criar aba de saída
+                _ws_out = _wb_out.create_sheet(title=_ws_src.title)
+
+                # cabeçalho estilizado
+                _ws_out.append(_hdr_out)
+                for _ci in range(1, len(_hdr_out) + 1):
                     _c = _ws_out.cell(1, _ci)
                     _c.fill = _S_HDR; _c.font = _S_FONT
                     _c.alignment = _S_ALGN; _c.border = _S_BRD
                 _ws_out.row_dimensions[1].height = 30
 
-                _ci_cont  = _col_map.get(_IDX_CONT,  0)
-                _ci_ent   = _col_map.get(_IDX_ENT,   0)
-                _ci_pend  = _col_map.get(_IDX_PEND,  0)
-                _ci_vpend = _col_map.get(_IDX_VPEND, 0)
-                _ci_vunit = _col_map.get(_IDX_VUNIT, 0)
-
-                def _estilizar(_ri, fill):
-                    for _ci2 in range(1, len(_COLUNAS) + 1):
-                        _c = _ws_out.cell(_ri, _ci2)
-                        _c.border    = _S_BRD
-                        _c.alignment = Alignment(vertical="center")
-                        if fill and fill.fill_type:
-                            _c.fill = fill
-                        if _ci2 in (_ci_vunit, _ci_vpend):
-                            _c.number_format = 'R$ #,##0.00'
-                        if _ci2 in (_ci_cont, _ci_ent, _ci_pend):
-                            _c.number_format = '#,##0'
-
+                # dados: linha a linha
                 _ri = 2
+                for _row_src in _src_rows[1:]:
+                    _rv = list(_row_src)
 
-                if _nome_aba in _ABAS_COM_FIOS:
-                    _grupos = {f: [] for f in _ORDEM_FIOS}
-                    for _lb in _linhas_base:
-                        _desc_v = str(_lb[_IDX_DESC]) if _IDX_DESC < len(_lb) else ''
-                        _grupos[_extrair_fios2(_desc_v)].append(_lb)
+                    # extrair N° Pedido desta linha
+                    _num = ''
+                    if _si_num is not None and _si_num < len(_rv) and _rv[_si_num] not in (None, '', 'None'):
+                        _num = str(_rv[_si_num]).strip()
 
-                    _dados_escritos = []
-                    for _fio in _ORDEM_FIOS:
-                        _grp = _grupos[_fio]
-                        if not _grp:
-                            continue
-                        _label = f"{_fio} Fios" if _fio != 'Outros' else "Outros"
-                        _ws_out.cell(_ri, 1, _label)
-                        _ws_out.merge_cells(start_row=_ri, start_column=1,
-                                            end_row=_ri, end_column=len(_COLUNAS))
-                        for _ci2 in range(1, len(_COLUNAS) + 1):
-                            _c = _ws_out.cell(_ri, _ci2)
-                            _c.fill = _SEP_FILL; _c.font = _SEP_FONT
-                            _c.alignment = Alignment(horizontal="center", vertical="center")
-                            _c.border = _S_BRD
-                        _ws_out.row_dimensions[_ri].height = 18
-                        _ri += 1
+                    # extrair código para gramatura
+                    _gram_val = ''
+                    _ck = ''
+                    if _si_cod is not None and _si_cod < len(_rv) and _rv[_si_cod] not in (None, ''):
+                        try:    _ck = str(int(float(str(_rv[_si_cod]))))
+                        except: _ck = str(_rv[_si_cod]).strip()
+                        _gram_val = _gram_map.get(_ck, '')
 
-                        for _lb in _grp:
-                            _ws_out.append(_linha_aba(_lb))
-                            _estilizar(_ri, _S_ALT if _ri % 2 == 0 else PatternFill())
-                            _dados_escritos.append(_lb)
-                            _ri += 1
+                    # buscar previsão/obs: chave primária = N° Pedido
+                    # fallback = Código|Cliente (para arquivos gerados antes da correção)
+                    _prev_val = _obs_val = ''
+                    _lookup_key = _num if _num and _num.upper() != 'TOTAL' else ''
+                    if not _lookup_key and _ck:
+                        _cli_v = ''
+                        _si_cli = next((i for i,h in enumerate(_hdr_out) if 'CLIENTE' in h.upper()), None)
+                        if _si_cli is not None and _si_cli < len(_rv):
+                            _cli_v = str(_rv[_si_cli]).strip() if _rv[_si_cli] not in (None,'','None') else ''
+                        _lookup_key = f"{_ck}|{_cli_v}"
 
-                    if _dados_escritos:
-                        _ws_out.cell(_ri, 1, 'TOTAL').font = Font(bold=True)
-                        for _ib, _ci2 in _col_map.items():
-                            if _ib in (_IDX_CONT, _IDX_ENT, _IDX_PEND, _IDX_VPEND):
-                                _tot = sum(float(_lb[_ib]) if isinstance(_lb[_ib], (int,float)) else 0 for _lb in _dados_escritos)
-                                _c = _ws_out.cell(_ri, _ci2, _tot)
-                                _c.font = Font(bold=True)
-                                _c.number_format = 'R$ #,##0.00' if _ib == _IDX_VPEND else '#,##0'
-                else:
-                    for _lb in _linhas_base:
-                        _ws_out.append(_linha_aba(_lb))
-                        _estilizar(_ri, _S_ALT if _ri % 2 == 0 else PatternFill())
-                        _ri += 1
+                    if _lookup_key:
+                        _entry = _obs_map.get(_lookup_key, {})
+                        _prev_val = _entry.get('previsao', '')
+                        _obs_val  = _entry.get('obs', '')
+                        if _prev_val or _obs_val:
+                            _total_aplicados += 1
 
-                    if _linhas_base:
-                        _ws_out.cell(_ri, 1, 'TOTAL').font = Font(bold=True)
-                        for _ib, _ci2 in _col_map.items():
-                            if _ib in (_IDX_CONT, _IDX_ENT, _IDX_PEND, _IDX_VPEND):
-                                _tot = sum(float(_lb[_ib]) if isinstance(_lb[_ib], (int,float)) else 0 for _lb in _linhas_base)
-                                _c = _ws_out.cell(_ri, _ci2, _tot)
-                                _c.font = Font(bold=True)
-                                _c.number_format = 'R$ #,##0.00' if _ib == _IDX_VPEND else '#,##0'
+                    # montar linha de saída na ordem do _hdr_out
+                    _row_out = []
+                    for _oi, _col_name in enumerate(_hdr_out):
+                        if _oi == _si_prev:
+                            _row_out.append(_prev_val)
+                        elif _oi == _si_obs:
+                            _row_out.append(_obs_val)
+                        elif _oi == _si_gram:
+                            _row_out.append(_gram_val)
+                        else:
+                            # encontrar índice correspondente no src pelo nome
+                            _src_i = next(
+                                (i for i, h in enumerate(_hdr_src)
+                                 if str(h).strip().upper() == _col_name.upper()),
+                                None
+                            )
+                            _row_out.append(_rv[_src_i] if _src_i is not None and _src_i < len(_rv) else '')
 
-                # Larguras
-                if _sem_gram:
-                    _largs = [14, 30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
-                else:
-                    _largs = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
-                for _ci2, _larg in enumerate(_largs[:len(_COLUNAS)], 1):
-                    _ws_out.column_dimensions[get_column_letter(_ci2)].width = _larg
+                    _ws_out.append(_row_out)
+
+                    # estilos da linha
+                    _fill = _S_ALT if _ri % 2 == 0 else PatternFill()
+                    for _ci in range(1, len(_hdr_out) + 1):
+                        _c = _ws_out.cell(_ri, _ci)
+                        _c.border = _S_BRD
+                        _c.alignment = Alignment(vertical="center")
+                        if _fill.fill_type:
+                            _c.fill = _fill
+                        _hu = _hdr_out[_ci - 1].upper()
+                        if any(x in _hu for x in ['VALOR UNIT', 'VALOR PEND']):
+                            _c.number_format = 'R$ #,##0.00'
+                        elif any(x in _hu for x in ['CONTRAT','ENTREGUE','PENDENTE','VOLUMES']):
+                            try:
+                                if _c.value not in (None, ''):
+                                    _c.value = float(_c.value)
+                                    _c.number_format = '#,##0'
+                            except:
+                                pass
+                    _ri += 1
+
+                # larguras
+                _LARG = {
+                    'N° PEDIDO': 14, 'CLIENTE': 30, 'CÓDIGO': 10, 'GRAMATURA': 12,
+                    'VOLUMES': 10, 'DESCRI': 35, 'CONTRAT': 12, 'ENTREGUE': 12,
+                    'PENDENTE': 12, 'VALOR UNIT': 14, 'VALOR PEND': 14,
+                    'DATA': 14, 'DIAS': 12, 'VENDEDOR': 20, '%': 10,
+                    'PREV': 18, 'CATEG': 12, 'OBSERV': 28, 'OBS': 28,
+                }
+                for _ci, _col_name in enumerate(_hdr_out, 1):
+                    _hu = _col_name.upper()
+                    _w = next((_v for _k, _v in _LARG.items() if _k in _hu), 12)
+                    _ws_out.column_dimensions[get_column_letter(_ci)].width = _w
+
+                # rodapé totais
+                _ultima = _ri
+                _ws_out.cell(_ultima, 1, 'TOTAL').font = Font(bold=True)
+                for _ci, _col_name in enumerate(_hdr_out, 1):
+                    _hu = _col_name.upper()
+                    if any(x in _hu for x in ['CONTRAT','ENTREGUE','PENDENTE','VALOR PEND']):
+                        _tot = 0
+                        for _rr in range(2, _ultima):
+                            try: _tot += float(_ws_out.cell(_rr, _ci).value or 0)
+                            except: pass
+                        _c = _ws_out.cell(_ultima, _ci, _tot)
+                        _c.font = Font(bold=True)
+                        _c.number_format = 'R$ #,##0.00' if 'VALOR' in _hu else '#,##0'
 
             # ── PASSO 4: gerar download ────────────────────────────────────
             _buf = _BIO()
@@ -6657,6 +6395,262 @@ elif menu == "Performance de Vendedores":
         except Exception as _e_pdf:
             st.error(f"❌ Erro ao gerar PDF: {_e_pdf}")
             st.info("💡 Verifique se a biblioteca fpdf2 está instalada: pip install fpdf2")
+
+
+    # ── Cards de Resultado por Vendedor ──────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🏅 Resultado por Vendedor")
+
+    _pv_mes_ref  = _pv_now.month
+    _pv_ano_ref  = _pv_now.year
+    _pv_ano_ant  = _pv_ano_ref - 1
+
+    _df_nf_all = df[df['TipoMov'] == 'NF Venda'].copy()
+    _df_nf_all['DataEmissao'] = pd.to_datetime(_df_nf_all['DataEmissao'], errors='coerce')
+
+    _vends_exibir = (
+        [_pv_vendedor] if _pv_vendedor != 'Todos'
+        else sorted(_df_nf_all['Vendedor'].dropna().unique().tolist())
+    )
+
+    _fat_mes_vend = (
+        _pv_notas_v.groupby('Vendedor')['TotalProduto'].sum()
+        if len(_pv_notas_v) > 0 else pd.Series(dtype=float)
+    )
+
+    _df_nf_periodo = _pv_df[_pv_df['TipoMov'] == 'NF Venda']
+    _posit_periodo = (
+        _df_nf_periodo.groupby('Vendedor')['CPF_CNPJ'].nunique()
+        if len(_df_nf_periodo) > 0 else pd.Series(dtype=int)
+    )
+    _base_total_vend = _df_nf_all.groupby('Vendedor')['CPF_CNPJ'].nunique()
+
+    def _calcular_meta(vendedor):
+        _hist_ant = _df_nf_all[
+            (_df_nf_all['Vendedor'] == vendedor) &
+            (_df_nf_all['DataEmissao'].dt.month == _pv_mes_ref) &
+            (_df_nf_all['DataEmissao'].dt.year == _pv_ano_ant)
+        ]['TotalProduto'].sum()
+        if _hist_ant > 0:
+            return _hist_ant * 1.15, f"Ref. {_pv_mes_ref:02d}/{_pv_ano_ant} +15%"
+        _hist_meses = (
+            _df_nf_all[_df_nf_all['Vendedor'] == vendedor]
+            .groupby([_df_nf_all['DataEmissao'].dt.year, _df_nf_all['DataEmissao'].dt.month])['TotalProduto'].sum()
+        )
+        if len(_hist_meses) > 0:
+            return _hist_meses.mean() * 1.15, "Media historica +15%"
+        return 0, "Sem historico"
+
+    _n_cols = min(3, len(_vends_exibir)) if _vends_exibir else 1
+    _card_rows = [_vends_exibir[i:i+_n_cols] for i in range(0, len(_vends_exibir), _n_cols)]
+
+    for _row_vends in _card_rows:
+        _cols = st.columns(len(_row_vends))
+        for _ci, _vend in zip(_cols, _row_vends):
+            _fat_real  = float(_fat_mes_vend.get(_vend, 0))
+            _meta, _meta_label = _calcular_meta(_vend)
+            _perc_meta = (_fat_real / _meta * 100) if _meta > 0 else 0
+            _posit     = int(_posit_periodo.get(_vend, 0))
+            _base_tot  = int(_base_total_vend.get(_vend, 0))
+            _cor_meta  = "#28A745" if _perc_meta >= 100 else ("#F4A261" if _perc_meta >= 70 else "#EF4444")
+            _barra_w   = min(int(_perc_meta), 100)
+            _posit_pct = f"{(_posit/_base_tot*100):.0f}%" if _base_tot > 0 else "0%"
+
+            _card_html = f"""
+<div style="background:#fff;border:1.5px solid #E2E8F0;border-radius:14px;
+            padding:18px 16px 14px;box-shadow:0 2px 8px rgba(31,71,136,0.08);margin-bottom:12px;">
+  <div style="font-size:1rem;font-weight:700;color:#1F4788;margin-bottom:10px;
+              border-bottom:2px solid #EEF3FC;padding-bottom:6px;">{_vend}</div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+    <span style="color:#6C757D;font-size:0.8rem;">Faturamento</span>
+    <span style="font-weight:700;color:#163561;">R$ {_fat_real:,.0f}</span>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+    <span style="color:#6C757D;font-size:0.8rem;">Meta ({_meta_label})</span>
+    <span style="font-weight:600;color:#4A7BC8;font-size:0.88rem;">R$ {_meta:,.0f}</span>
+  </div>
+  <div style="background:#F1F5F9;border-radius:6px;height:8px;margin:6px 0 4px;">
+    <div style="background:{_cor_meta};width:{_barra_w}%;height:8px;border-radius:6px;"></div>
+  </div>
+  <div style="text-align:right;font-size:0.82rem;font-weight:700;color:{_cor_meta};margin-bottom:10px;">
+    {_perc_meta:.1f}% da meta
+  </div>
+  <div style="display:flex;justify-content:space-between;border-top:1px solid #EEF3FC;padding-top:8px;">
+    <div style="text-align:center;flex:1;">
+      <div style="font-size:1.2rem;font-weight:700;color:#28A745;">{_posit}</div>
+      <div style="font-size:0.72rem;color:#6C757D;">Positivados</div>
+    </div>
+    <div style="width:1px;background:#EEF3FC;"></div>
+    <div style="text-align:center;flex:1;">
+      <div style="font-size:1.2rem;font-weight:700;color:#1F4788;">{_base_tot}</div>
+      <div style="font-size:0.72rem;color:#6C757D;">Base ativa</div>
+    </div>
+    <div style="width:1px;background:#EEF3FC;"></div>
+    <div style="text-align:center;flex:1;">
+      <div style="font-size:1.2rem;font-weight:700;color:#F4A261;">{_posit_pct}</div>
+      <div style="font-size:0.72rem;color:#6C757D;">% posit.</div>
+    </div>
+  </div>
+</div>"""
+            with _ci:
+                st.markdown(_card_html, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Download relatorio detalhado por vendedor ─────────────────────────────
+    st.markdown("### 📥 Relatório Detalhado por Vendedor")
+    _mes_nome_det = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",
+                     7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
+
+    if st.button("📊 Gerar Relatório Detalhado (Excel)", key="btn_rel_det_vend", type="primary"):
+        try:
+            import openpyxl
+            from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+            import io as _io_det
+
+            _wb_det = openpyxl.Workbook()
+            _wb_det.remove(_wb_det.active)
+            _H_FILL = PatternFill("solid", fgColor="1F4788")
+            _H_FONT = Font(bold=True, color="FFFFFF", size=10)
+            _H_ALN  = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            _BRD    = Border(left=Side(style='thin'), right=Side(style='thin'),
+                             top=Side(style='thin'), bottom=Side(style='thin'))
+            _ALT    = PatternFill("solid", fgColor="EEF3FC")
+
+            for _vend in _vends_exibir:
+                _fat_real  = float(_fat_mes_vend.get(_vend, 0))
+                _meta, _meta_label = _calcular_meta(_vend)
+                _perc_meta = (_fat_real / _meta * 100) if _meta > 0 else 0
+                _posit     = int(_posit_periodo.get(_vend, 0))
+                _base_tot  = int(_base_total_vend.get(_vend, 0))
+
+                _mes_ant     = _pv_mes_ref - 1 if _pv_mes_ref > 1 else 12
+                _ano_mes_ant = _pv_ano_ref if _pv_mes_ref > 1 else _pv_ano_ref - 1
+                _fat_mes_ant = float(_df_nf_all[
+                    (_df_nf_all['Vendedor'] == _vend) &
+                    (_df_nf_all['DataEmissao'].dt.month == _mes_ant) &
+                    (_df_nf_all['DataEmissao'].dt.year == _ano_mes_ant)
+                ]['TotalProduto'].sum())
+                _cresc_mes = ((_fat_real - _fat_mes_ant) / _fat_mes_ant * 100) if _fat_mes_ant > 0 else 0
+
+                _fat_ano_ant = float(_df_nf_all[
+                    (_df_nf_all['Vendedor'] == _vend) &
+                    (_df_nf_all['DataEmissao'].dt.month == _pv_mes_ref) &
+                    (_df_nf_all['DataEmissao'].dt.year == _pv_ano_ant)
+                ]['TotalProduto'].sum())
+                _cresc_ano = ((_fat_real - _fat_ano_ant) / _fat_ano_ant * 100) if _fat_ano_ant > 0 else 0
+
+                _cpfs_mes_ant = set(_df_nf_all[
+                    (_df_nf_all['Vendedor'] == _vend) &
+                    (_df_nf_all['DataEmissao'].dt.month == _mes_ant) &
+                    (_df_nf_all['DataEmissao'].dt.year == _ano_mes_ant)
+                ]['CPF_CNPJ'].unique())
+                _cpfs_periodo = set(_df_nf_periodo[_df_nf_periodo['Vendedor'] == _vend]['CPF_CNPJ'].unique())
+                _reativados = len(_cpfs_periodo - _cpfs_mes_ant)
+
+                _corte_60 = _pv_now - pd.Timedelta(days=60)
+                _ultima_compra_cli = (
+                    _df_nf_all[_df_nf_all['Vendedor'] == _vend]
+                    .groupby('CPF_CNPJ')['DataEmissao'].max()
+                )
+                _sem_compra_60 = int((_ultima_compra_cli < _corte_60).sum())
+
+                _top_prod = (
+                    _pv_df[(_pv_df['Vendedor'] == _vend) & (_pv_df['TipoMov'] == 'NF Venda')]
+                    .groupby('NomeProduto')['TotalProduto'].sum()
+                    .sort_values(ascending=False).head(3)
+                )
+                _top_prod_str = " | ".join(_top_prod.index.tolist()) if len(_top_prod) > 0 else "Sem dados"
+
+                _mes_str2 = f"{_mes_nome_det.get(_pv_mes_ref, str(_pv_mes_ref)).upper()}/{_pv_ano_ref}"
+                _aba_nome = _vend[:28]
+                _ws = _wb_det.create_sheet(title=_aba_nome)
+
+                _resumo = [
+                    [f"RESUMO MENSAL - {_mes_str2}", ""],
+                    ["Vendedor", _vend],
+                    ["", ""],
+                    ["Faturamento", f"R$ {_fat_real:,.2f}"],
+                    ["Meta", f"R$ {_meta:,.2f} ({_meta_label})"],
+                    ["Meta atingida (%)", f"{_perc_meta:.1f}%"],
+                    [f"Crescimento vs {_mes_nome_det.get(_mes_ant,str(_mes_ant))[:3]}/{_ano_mes_ant}",
+                     f"{_cresc_mes:+.1f}%"],
+                    [f"Crescimento vs {_mes_nome_det.get(_pv_mes_ref,str(_pv_mes_ref))[:3]}/{_pv_ano_ant}",
+                     f"{_cresc_ano:+.1f}%"],
+                    ["", ""],
+                    ["Clientes ativos na base", str(_base_tot)],
+                    ["Positivados no periodo", str(_posit)],
+                    ["% Positivacao", f"{(_posit/_base_tot*100):.1f}%" if _base_tot > 0 else "0%"],
+                    ["Clientes reativados", str(_reativados)],
+                    ["Sem compra ha 60 dias", str(_sem_compra_60)],
+                    ["", ""],
+                    ["Produtos destaque", _top_prod_str],
+                ]
+
+                for _ri, (_k, _v2) in enumerate(_resumo, 1):
+                    _ws.cell(_ri, 1, _k)
+                    _ws.cell(_ri, 2, _v2)
+                    if _ri == 1:
+                        for _ci2 in (1, 2):
+                            _c = _ws.cell(_ri, _ci2)
+                            _c.fill = _H_FILL; _c.font = _H_FONT; _c.alignment = _H_ALN
+                    elif _k:
+                        _ws.cell(_ri, 1).font = Font(bold=True, color="1F4788")
+                        if _ri % 2 == 0:
+                            for _ci2 in (1, 2):
+                                _ws.cell(_ri, _ci2).fill = _ALT
+                    for _ci2 in (1, 2):
+                        _ws.cell(_ri, _ci2).border = _BRD
+
+                _ws.column_dimensions['A'].width = 40
+                _ws.column_dimensions['B'].width = 32
+                _ws.row_dimensions[1].height = 22
+
+                _linha_tab = len(_resumo) + 2
+                _ws.cell(_linha_tab, 1, "Vendas Detalhadas no Periodo").font = Font(bold=True, size=11, color="1F4788")
+                _linha_tab += 1
+
+                _df_det = _pv_df[
+                    (_pv_df['Vendedor'] == _vend) & (_pv_df['TipoMov'] == 'NF Venda')
+                ][['DataEmissao','RazaoSocial','NomeProduto','Quantidade','TotalProduto']].copy()
+                _df_det['DataEmissao'] = pd.to_datetime(_df_det['DataEmissao']).dt.strftime('%d/%m/%Y')
+                _hdr_det = ['Data','Cliente','Produto','Qtd','Valor (R$)']
+
+                for _ci2, _col in enumerate(_hdr_det, 1):
+                    _c = _ws.cell(_linha_tab, _ci2, _col)
+                    _c.fill = _H_FILL; _c.font = _H_FONT; _c.alignment = _H_ALN; _c.border = _BRD
+
+                for _ri2, _row2 in enumerate(_df_det.values.tolist(), _linha_tab + 1):
+                    for _ci2, _val2 in enumerate(_row2, 1):
+                        _c = _ws.cell(_ri2, _ci2, _val2)
+                        _c.border = _BRD
+                        if _ri2 % 2 == 0:
+                            _c.fill = _ALT
+                        if _ci2 == 5:
+                            try:
+                                _ws.cell(_ri2, _ci2, float(_val2))
+                                _ws.cell(_ri2, _ci2).number_format = 'R$ #,##0.00'
+                            except:
+                                pass
+
+                for _ci2, _larg in enumerate([12, 30, 35, 10, 14], 1):
+                    _ws.column_dimensions[get_column_letter(_ci2)].width = _larg
+
+            _buf_det = _io_det.BytesIO()
+            _wb_det.save(_buf_det)
+            _buf_det.seek(0)
+            st.download_button(
+                label="Baixar Relatório Detalhado (Excel)",
+                data=_buf_det.getvalue(),
+                file_name=f"performance_vendedores_{_pv_now.strftime('%Y%m')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_perf_det_xlsx"
+            )
+            st.success("Relatório gerado! Clique no botão acima para baixar.")
+        except Exception as _e_det:
+            st.error(f"Erro ao gerar relatório: {_e_det}")
+
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
