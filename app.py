@@ -6414,11 +6414,15 @@ elif menu == "Performance de Vendedores":
                  7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
     _label_mes_card = f"{_meses_pt[_mes_card]}/{_ano_card}"
 
-    # Base completa de NF Venda (histórico todo)
-    _df_nf_hist = df[df["TipoMov"] == "NF Venda"].copy()
-    _df_nf_hist["DataEmissao"] = pd.to_datetime(_df_nf_hist["DataEmissao"], errors="coerce")
+    # Base completa de NF Venda (histórico todo) — deduplicada por NF igual ao restante do sistema
+    _df_nf_hist_raw = df[df["TipoMov"] == "NF Venda"].copy()
+    _df_nf_hist_raw["DataEmissao"] = pd.to_datetime(_df_nf_hist_raw["DataEmissao"], errors="coerce")
 
-    # Vendas do mês de referência (mês anterior ao vigente)
+    # Deduplicar por Numero_NF: uma linha por nota, TotalProduto = total da NF
+    # Igual ao obter_notas_unicas usado no restante do sistema
+    _df_nf_hist = _df_nf_hist_raw.drop_duplicates(subset=["Numero_NF"], keep="first")
+
+    # Vendas do mês de referência (mês anterior ao vigente) — deduplicadas
     _df_mes_card = _df_nf_hist[
         (_df_nf_hist["DataEmissao"].dt.month == _mes_card) &
         (_df_nf_hist["DataEmissao"].dt.year  == _ano_card)
@@ -6434,17 +6438,20 @@ elif menu == "Performance de Vendedores":
     if not _vends_ativos:
         st.info(f"Nenhum vendedor com vendas em {_label_mes_card}.")
     else:
-        # Faturamento do mês de referência por vendedor
+        # Faturamento do mês de referência por vendedor (NFs deduplicadas)
         _fat_card = _df_mes_card.groupby("Vendedor")["TotalProduto"].sum()
 
-        # Positivação do mês de referência:
-        # clientes únicos positivados no mês / total de clientes históricos do vendedor
-        _posit_card = _df_mes_card.groupby("Vendedor")["CPF_CNPJ"].nunique()
-        _base_hist  = _df_nf_hist.groupby("Vendedor")["CPF_CNPJ"].nunique()
+        # Positivação: clientes únicos no mês / base histórica do vendedor
+        # Usar df_raw (todas as linhas) para CPF_CNPJ — nunique não é afetado por deduplicação de NF
+        _posit_card = _df_nf_hist_raw[
+            (_df_nf_hist_raw["DataEmissao"].dt.month == _mes_card) &
+            (_df_nf_hist_raw["DataEmissao"].dt.year  == _ano_card)
+        ].groupby("Vendedor")["CPF_CNPJ"].nunique()
 
-        # Cálculo de meta por vendedor
+        _base_hist = _df_nf_hist_raw.groupby("Vendedor")["CPF_CNPJ"].nunique()
+
+        # Cálculo de meta por vendedor — usa NFs deduplicadas para soma correta
         def _meta_card(vendedor):
-            # Verificar se há histórico do mesmo mês no ano anterior
             _fat_ano_ant = float(_df_nf_hist[
                 (_df_nf_hist["Vendedor"] == vendedor) &
                 (_df_nf_hist["DataEmissao"].dt.month == _mes_meta) &
@@ -6453,25 +6460,21 @@ elif menu == "Performance de Vendedores":
 
             if _fat_ano_ant > 0:
                 # COM histórico: meta = mesmo mês ano anterior + 15%
-                _meta_val = _fat_ano_ano_ant = _fat_ano_ant * 1.15
-                _label    = f"{_meses_pt[_mes_meta][:3]}/{_ano_meta} +15%"
-                return _fat_ano_ant * 1.15, _label, _fat_ano_ant
+                return _fat_ano_ant * 1.15, f"{_meses_pt[_mes_meta][:3]}/{_ano_meta} +15%", _fat_ano_ant
 
-            # SEM histórico: média dos últimos 3 meses com venda + 15%
-            # Últimos 3 meses antes do mês de referência
-            _ref_ts  = pd.Timestamp(year=_ano_card, month=_mes_card, day=1)
-            _3m_ini  = _ref_ts - pd.DateOffset(months=3)
-            _ultimos = _df_nf_hist[
+            # SEM histórico: média dos últimos 3 meses anteriores ao de referência + 15%
+            _ref_ts = pd.Timestamp(year=_ano_card, month=_mes_card, day=1)
+            _3m_ini = _ref_ts - pd.DateOffset(months=3)
+            _ult3 = _df_nf_hist[
                 (_df_nf_hist["Vendedor"] == vendedor) &
                 (_df_nf_hist["DataEmissao"] >= _3m_ini) &
                 (_df_nf_hist["DataEmissao"] <  _ref_ts)
             ]
-            if len(_ultimos) > 0:
-                _fat_3m = _ultimos.groupby(
-                    [_ultimos["DataEmissao"].dt.year, _ultimos["DataEmissao"].dt.month]
+            if len(_ult3) > 0:
+                _fat_3m = _ult3.groupby(
+                    [_ult3["DataEmissao"].dt.year, _ult3["DataEmissao"].dt.month]
                 )["TotalProduto"].sum()
-                _media  = _fat_3m.mean()
-                return _media * 1.15, "Média 3m +15%", 0
+                return _fat_3m.mean() * 1.15, "Média 3m +15%", 0
             return 0, "Sem histórico", 0
 
         # Renderizar cards — 3 por linha
