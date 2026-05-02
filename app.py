@@ -6397,103 +6397,148 @@ elif menu == "Performance de Vendedores":
             st.info("💡 Verifique se a biblioteca fpdf2 está instalada: pip install fpdf2")
 
 
+
     # ── Cards de Resultado por Vendedor ──────────────────────────────────────
     st.markdown("---")
     st.markdown("### 🏅 Resultado por Vendedor")
 
-    _pv_mes_ref  = _pv_now.month
-    _pv_ano_ref  = _pv_now.year
-    _pv_ano_ant  = _pv_ano_ref - 1
+    # Mês de referência = mês ANTERIOR ao vigente
+    _pv_now2     = pd.Timestamp.now()
+    _mes_card    = (_pv_now2.month - 1) if _pv_now2.month > 1 else 12
+    _ano_card    = _pv_now2.year if _pv_now2.month > 1 else _pv_now2.year - 1
+    # Mesmo mês, ano anterior (para cálculo de meta)
+    _mes_meta    = _mes_card
+    _ano_meta    = _ano_card - 1
 
-    _df_nf_all = df[df['TipoMov'] == 'NF Venda'].copy()
-    _df_nf_all['DataEmissao'] = pd.to_datetime(_df_nf_all['DataEmissao'], errors='coerce')
+    _meses_pt = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",
+                 7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
+    _label_mes_card = f"{_meses_pt[_mes_card]}/{_ano_card}"
 
-    _vends_exibir = (
-        [_pv_vendedor] if _pv_vendedor != 'Todos'
-        else sorted(_df_nf_all['Vendedor'].dropna().unique().tolist())
-    )
+    # Base completa de NF Venda (histórico todo)
+    _df_nf_hist = df[df["TipoMov"] == "NF Venda"].copy()
+    _df_nf_hist["DataEmissao"] = pd.to_datetime(_df_nf_hist["DataEmissao"], errors="coerce")
 
-    _fat_mes_vend = (
-        _pv_notas_v.groupby('Vendedor')['TotalProduto'].sum()
-        if len(_pv_notas_v) > 0 else pd.Series(dtype=float)
-    )
+    # Vendas do mês de referência (mês anterior ao vigente)
+    _df_mes_card = _df_nf_hist[
+        (_df_nf_hist["DataEmissao"].dt.month == _mes_card) &
+        (_df_nf_hist["DataEmissao"].dt.year  == _ano_card)
+    ]
 
-    _df_nf_periodo = _pv_df[_pv_df['TipoMov'] == 'NF Venda']
-    _posit_periodo = (
-        _df_nf_periodo.groupby('Vendedor')['CPF_CNPJ'].nunique()
-        if len(_df_nf_periodo) > 0 else pd.Series(dtype=int)
-    )
-    _base_total_vend = _df_nf_all.groupby('Vendedor')['CPF_CNPJ'].nunique()
+    # Vendedores ativos = apenas quem positivou no mês de referência
+    _vends_ativos = sorted(_df_mes_card["Vendedor"].dropna().unique().tolist())
 
-    def _calcular_meta(vendedor):
-        _hist_ant = _df_nf_all[
-            (_df_nf_all['Vendedor'] == vendedor) &
-            (_df_nf_all['DataEmissao'].dt.month == _pv_mes_ref) &
-            (_df_nf_all['DataEmissao'].dt.year == _pv_ano_ant)
-        ]['TotalProduto'].sum()
-        if _hist_ant > 0:
-            return _hist_ant * 1.15, f"Ref. {_pv_mes_ref:02d}/{_pv_ano_ant} +15%"
-        _hist_meses = (
-            _df_nf_all[_df_nf_all['Vendedor'] == vendedor]
-            .groupby([_df_nf_all['DataEmissao'].dt.year, _df_nf_all['DataEmissao'].dt.month])['TotalProduto'].sum()
-        )
-        if len(_hist_meses) > 0:
-            return _hist_meses.mean() * 1.15, "Media historica +15%"
-        return 0, "Sem historico"
+    # Se filtro de vendedor selecionado, restringir
+    if _pv_vendedor != "Todos":
+        _vends_ativos = [v for v in _vends_ativos if v == _pv_vendedor]
 
-    _n_cols = min(3, len(_vends_exibir)) if _vends_exibir else 1
-    _card_rows = [_vends_exibir[i:i+_n_cols] for i in range(0, len(_vends_exibir), _n_cols)]
+    if not _vends_ativos:
+        st.info(f"Nenhum vendedor com vendas em {_label_mes_card}.")
+    else:
+        # Faturamento do mês de referência por vendedor
+        _fat_card = _df_mes_card.groupby("Vendedor")["TotalProduto"].sum()
 
-    for _row_vends in _card_rows:
-        _cols = st.columns(len(_row_vends))
-        for _ci, _vend in zip(_cols, _row_vends):
-            _fat_real  = float(_fat_mes_vend.get(_vend, 0))
-            _meta, _meta_label = _calcular_meta(_vend)
-            _perc_meta = (_fat_real / _meta * 100) if _meta > 0 else 0
-            _posit     = int(_posit_periodo.get(_vend, 0))
-            _base_tot  = int(_base_total_vend.get(_vend, 0))
-            _cor_meta  = "#28A745" if _perc_meta >= 100 else ("#F4A261" if _perc_meta >= 70 else "#EF4444")
-            _barra_w   = min(int(_perc_meta), 100)
-            _posit_pct = f"{(_posit/_base_tot*100):.0f}%" if _base_tot > 0 else "0%"
+        # Positivação do mês de referência:
+        # clientes únicos positivados no mês / total de clientes históricos do vendedor
+        _posit_card = _df_mes_card.groupby("Vendedor")["CPF_CNPJ"].nunique()
+        _base_hist  = _df_nf_hist.groupby("Vendedor")["CPF_CNPJ"].nunique()
 
-            _card_html = f"""
-<div style="background:#fff;border:1.5px solid #E2E8F0;border-radius:14px;
-            padding:18px 16px 14px;box-shadow:0 2px 8px rgba(31,71,136,0.08);margin-bottom:12px;">
-  <div style="font-size:1rem;font-weight:700;color:#1F4788;margin-bottom:10px;
-              border-bottom:2px solid #EEF3FC;padding-bottom:6px;">{_vend}</div>
-  <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-    <span style="color:#6C757D;font-size:0.8rem;">Faturamento</span>
-    <span style="font-weight:700;color:#163561;">R$ {_fat_real:,.0f}</span>
+        # Cálculo de meta por vendedor
+        def _meta_card(vendedor):
+            # Verificar se há histórico do mesmo mês no ano anterior
+            _fat_ano_ant = float(_df_nf_hist[
+                (_df_nf_hist["Vendedor"] == vendedor) &
+                (_df_nf_hist["DataEmissao"].dt.month == _mes_meta) &
+                (_df_nf_hist["DataEmissao"].dt.year  == _ano_meta)
+            ]["TotalProduto"].sum())
+
+            if _fat_ano_ant > 0:
+                # COM histórico: meta = mesmo mês ano anterior + 15%
+                _meta_val = _fat_ano_ano_ant = _fat_ano_ant * 1.15
+                _label    = f"{_meses_pt[_mes_meta][:3]}/{_ano_meta} +15%"
+                return _fat_ano_ant * 1.15, _label, _fat_ano_ant
+
+            # SEM histórico: média dos últimos 3 meses com venda + 15%
+            # Últimos 3 meses antes do mês de referência
+            _ref_ts  = pd.Timestamp(year=_ano_card, month=_mes_card, day=1)
+            _3m_ini  = _ref_ts - pd.DateOffset(months=3)
+            _ultimos = _df_nf_hist[
+                (_df_nf_hist["Vendedor"] == vendedor) &
+                (_df_nf_hist["DataEmissao"] >= _3m_ini) &
+                (_df_nf_hist["DataEmissao"] <  _ref_ts)
+            ]
+            if len(_ultimos) > 0:
+                _fat_3m = _ultimos.groupby(
+                    [_ultimos["DataEmissao"].dt.year, _ultimos["DataEmissao"].dt.month]
+                )["TotalProduto"].sum()
+                _media  = _fat_3m.mean()
+                return _media * 1.15, "Média 3m +15%", 0
+            return 0, "Sem histórico", 0
+
+        # Renderizar cards — 3 por linha
+        _n_cols   = min(3, len(_vends_ativos))
+        _rows_v   = [_vends_ativos[i:i+_n_cols] for i in range(0, len(_vends_ativos), _n_cols)]
+        st.caption(f"Referência: **{_label_mes_card}** — vendedores que positivaram neste mês")
+
+        for _rv in _rows_v:
+            _ccols = st.columns(len(_rv))
+            for _ci2, _vend in zip(_ccols, _rv):
+                _fat_r   = float(_fat_card.get(_vend, 0))
+                _meta_v, _meta_lbl, _base_meta = _meta_card(_vend)
+                _perc_m  = (_fat_r / _meta_v * 100) if _meta_v > 0 else 0
+                _posit_v = int(_posit_card.get(_vend, 0))
+                _base_v  = int(_base_hist.get(_vend, 0))
+                _posit_p = (_posit_v / _base_v * 100) if _base_v > 0 else 0
+
+                _cor   = "#28A745" if _perc_m >= 100 else ("#F4A261" if _perc_m >= 70 else "#EF4444")
+                _barra = min(int(_perc_m), 100)
+                _sinal = "✅" if _perc_m >= 100 else ("⚠️" if _perc_m >= 70 else "🔴")
+                _posit_cor = "#28A745" if _posit_p >= 60 else ("#F4A261" if _posit_p >= 40 else "#EF4444")
+
+                _html = f"""<div style="background:#fff;border:1.5px solid #E2E8F0;border-radius:14px;
+padding:16px 14px 12px;box-shadow:0 2px 10px rgba(31,71,136,0.09);margin-bottom:14px;">
+  <div style="font-size:0.95rem;font-weight:700;color:#1F4788;border-bottom:2px solid #EEF3FC;
+              padding-bottom:7px;margin-bottom:10px;">👤 {_vend}</div>
+  <div style="font-size:0.7rem;color:#6C757D;margin-bottom:8px;text-align:center;">
+    {_label_mes_card}
   </div>
-  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-    <span style="color:#6C757D;font-size:0.8rem;">Meta ({_meta_label})</span>
-    <span style="font-weight:600;color:#4A7BC8;font-size:0.88rem;">R$ {_meta:,.0f}</span>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+    <span style="color:#6C757D;font-size:0.78rem;">💰 Faturamento</span>
+    <span style="font-weight:700;color:#163561;font-size:0.95rem;">R$ {_fat_r:,.0f}</span>
   </div>
-  <div style="background:#F1F5F9;border-radius:6px;height:8px;margin:6px 0 4px;">
-    <div style="background:{_cor_meta};width:{_barra_w}%;height:8px;border-radius:6px;"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+    <span style="color:#6C757D;font-size:0.78rem;">🎯 Meta <span style="font-size:0.7rem;">({_meta_lbl})</span></span>
+    <span style="font-weight:600;color:#4A7BC8;font-size:0.85rem;">R$ {_meta_v:,.0f}</span>
   </div>
-  <div style="text-align:right;font-size:0.82rem;font-weight:700;color:{_cor_meta};margin-bottom:10px;">
-    {_perc_meta:.1f}% da meta
+  <div style="background:#F1F5F9;border-radius:6px;height:7px;margin:7px 0 3px;">
+    <div style="background:{_cor};width:{_barra}%;height:7px;border-radius:6px;"></div>
   </div>
-  <div style="display:flex;justify-content:space-between;border-top:1px solid #EEF3FC;padding-top:8px;">
-    <div style="text-align:center;flex:1;">
-      <div style="font-size:1.2rem;font-weight:700;color:#28A745;">{_posit}</div>
-      <div style="font-size:0.72rem;color:#6C757D;">Positivados</div>
+  <div style="text-align:right;font-size:0.8rem;font-weight:700;color:{_cor};margin-bottom:11px;">
+    {_sinal} {_perc_m:.1f}% da meta
+  </div>
+  <div style="background:#F8FAFF;border-radius:8px;padding:8px 6px;border:1px solid #EEF3FC;">
+    <div style="font-size:0.72rem;color:#6C757D;text-align:center;margin-bottom:6px;font-weight:600;">
+      POSITIVAÇÃO {_label_mes_card}
     </div>
-    <div style="width:1px;background:#EEF3FC;"></div>
-    <div style="text-align:center;flex:1;">
-      <div style="font-size:1.2rem;font-weight:700;color:#1F4788;">{_base_tot}</div>
-      <div style="font-size:0.72rem;color:#6C757D;">Base ativa</div>
-    </div>
-    <div style="width:1px;background:#EEF3FC;"></div>
-    <div style="text-align:center;flex:1;">
-      <div style="font-size:1.2rem;font-weight:700;color:#F4A261;">{_posit_pct}</div>
-      <div style="font-size:0.72rem;color:#6C757D;">% posit.</div>
+    <div style="display:flex;justify-content:space-around;align-items:center;">
+      <div style="text-align:center;">
+        <div style="font-size:1.15rem;font-weight:700;color:#28A745;">{_posit_v}</div>
+        <div style="font-size:0.68rem;color:#6C757D;">Positivados</div>
+      </div>
+      <div style="font-size:1.2rem;color:#CDD4E0;">|</div>
+      <div style="text-align:center;">
+        <div style="font-size:1.15rem;font-weight:700;color:#1F4788;">{_base_v}</div>
+        <div style="font-size:0.68rem;color:#6C757D;">Base total</div>
+      </div>
+      <div style="font-size:1.2rem;color:#CDD4E0;">|</div>
+      <div style="text-align:center;">
+        <div style="font-size:1.15rem;font-weight:700;color:{_posit_cor};">{_posit_p:.0f}%</div>
+        <div style="font-size:0.68rem;color:#6C757D;">% posit.</div>
+      </div>
     </div>
   </div>
 </div>"""
-            with _ci:
-                st.markdown(_card_html, unsafe_allow_html=True)
+                with _ci2:
+                    st.markdown(_html, unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -6514,143 +6559,124 @@ elif menu == "Performance de Vendedores":
             _H_FILL = PatternFill("solid", fgColor="1F4788")
             _H_FONT = Font(bold=True, color="FFFFFF", size=10)
             _H_ALN  = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            _BRD    = Border(left=Side(style='thin'), right=Side(style='thin'),
-                             top=Side(style='thin'), bottom=Side(style='thin'))
+            _BRD    = Border(left=Side(style="thin"), right=Side(style="thin"),
+                             top=Side(style="thin"),  bottom=Side(style="thin"))
             _ALT    = PatternFill("solid", fgColor="EEF3FC")
 
-            for _vend in _vends_exibir:
-                _fat_real  = float(_fat_mes_vend.get(_vend, 0))
-                _meta, _meta_label = _calcular_meta(_vend)
-                _perc_meta = (_fat_real / _meta * 100) if _meta > 0 else 0
-                _posit     = int(_posit_periodo.get(_vend, 0))
-                _base_tot  = int(_base_total_vend.get(_vend, 0))
+            _vends_dl = _vends_ativos if _vends_ativos else []
 
-                _mes_ant     = _pv_mes_ref - 1 if _pv_mes_ref > 1 else 12
-                _ano_mes_ant = _pv_ano_ref if _pv_mes_ref > 1 else _pv_ano_ref - 1
-                _fat_mes_ant = float(_df_nf_all[
-                    (_df_nf_all['Vendedor'] == _vend) &
-                    (_df_nf_all['DataEmissao'].dt.month == _mes_ant) &
-                    (_df_nf_all['DataEmissao'].dt.year == _ano_mes_ant)
-                ]['TotalProduto'].sum())
-                _cresc_mes = ((_fat_real - _fat_mes_ant) / _fat_mes_ant * 100) if _fat_mes_ant > 0 else 0
+            for _vend in _vends_dl:
+                _fat_r   = float(_fat_card.get(_vend, 0))
+                _meta_v, _meta_lbl, _base_meta = _meta_card(_vend)
+                _perc_m  = (_fat_r / _meta_v * 100) if _meta_v > 0 else 0
+                _posit_v = int(_posit_card.get(_vend, 0))
+                _base_v  = int(_base_hist.get(_vend, 0))
+                _posit_p = (_posit_v / _base_v * 100) if _base_v > 0 else 0
 
-                _fat_ano_ant = float(_df_nf_all[
-                    (_df_nf_all['Vendedor'] == _vend) &
-                    (_df_nf_all['DataEmissao'].dt.month == _pv_mes_ref) &
-                    (_df_nf_all['DataEmissao'].dt.year == _pv_ano_ant)
-                ]['TotalProduto'].sum())
-                _cresc_ano = ((_fat_real - _fat_ano_ant) / _fat_ano_ant * 100) if _fat_ano_ant > 0 else 0
+                # Crescimento vs mês anterior ao de referência
+                _mes_ant2    = _mes_card - 1 if _mes_card > 1 else 12
+                _ano_ant2    = _ano_card if _mes_card > 1 else _ano_card - 1
+                _fat_mes_ant = float(_df_nf_hist[
+                    (_df_nf_hist["Vendedor"] == _vend) &
+                    (_df_nf_hist["DataEmissao"].dt.month == _mes_ant2) &
+                    (_df_nf_hist["DataEmissao"].dt.year  == _ano_ant2)
+                ]["TotalProduto"].sum())
+                _cresc_m = ((_fat_r - _fat_mes_ant) / _fat_mes_ant * 100) if _fat_mes_ant > 0 else 0
+                _cresc_a = ((_fat_r - _base_meta) / _base_meta * 100) if _base_meta > 0 else 0
 
-                _cpfs_mes_ant = set(_df_nf_all[
-                    (_df_nf_all['Vendedor'] == _vend) &
-                    (_df_nf_all['DataEmissao'].dt.month == _mes_ant) &
-                    (_df_nf_all['DataEmissao'].dt.year == _ano_mes_ant)
-                ]['CPF_CNPJ'].unique())
-                _cpfs_periodo = set(_df_nf_periodo[_df_nf_periodo['Vendedor'] == _vend]['CPF_CNPJ'].unique())
-                _reativados = len(_cpfs_periodo - _cpfs_mes_ant)
+                # Clientes sem compra há 60 dias (base do vendedor)
+                _corte60 = _pv_now2 - pd.Timedelta(days=60)
+                _ult_cli = _df_nf_hist[_df_nf_hist["Vendedor"] == _vend].groupby("CPF_CNPJ")["DataEmissao"].max()
+                _sem60   = int((_ult_cli < _corte60).sum())
 
-                _corte_60 = _pv_now - pd.Timedelta(days=60)
-                _ultima_compra_cli = (
-                    _df_nf_all[_df_nf_all['Vendedor'] == _vend]
-                    .groupby('CPF_CNPJ')['DataEmissao'].max()
-                )
-                _sem_compra_60 = int((_ultima_compra_cli < _corte_60).sum())
-
-                _top_prod = (
-                    _pv_df[(_pv_df['Vendedor'] == _vend) & (_pv_df['TipoMov'] == 'NF Venda')]
-                    .groupby('NomeProduto')['TotalProduto'].sum()
+                # Top 3 produtos no mês de referência
+                _top3 = (
+                    _df_mes_card[_df_mes_card["Vendedor"] == _vend]
+                    .groupby("NomeProduto")["TotalProduto"].sum()
                     .sort_values(ascending=False).head(3)
                 )
-                _top_prod_str = " | ".join(_top_prod.index.tolist()) if len(_top_prod) > 0 else "Sem dados"
+                _top3_str = " | ".join(_top3.index.tolist()) if len(_top3) > 0 else "Sem dados"
 
-                _mes_str2 = f"{_mes_nome_det.get(_pv_mes_ref, str(_pv_mes_ref)).upper()}/{_pv_ano_ref}"
-                _aba_nome = _vend[:28]
-                _ws = _wb_det.create_sheet(title=_aba_nome)
+                _aba = _vend[:28]
+                _ws  = _wb_det.create_sheet(title=_aba)
 
-                _resumo = [
-                    [f"RESUMO MENSAL - {_mes_str2}", ""],
+                _resumo_xl = [
+                    [f"RESUMO — {_label_mes_card.upper()}", ""],
                     ["Vendedor", _vend],
                     ["", ""],
-                    ["Faturamento", f"R$ {_fat_real:,.2f}"],
-                    ["Meta", f"R$ {_meta:,.2f} ({_meta_label})"],
-                    ["Meta atingida (%)", f"{_perc_meta:.1f}%"],
-                    [f"Crescimento vs {_mes_nome_det.get(_mes_ant,str(_mes_ant))[:3]}/{_ano_mes_ant}",
-                     f"{_cresc_mes:+.1f}%"],
-                    [f"Crescimento vs {_mes_nome_det.get(_pv_mes_ref,str(_pv_mes_ref))[:3]}/{_pv_ano_ant}",
-                     f"{_cresc_ano:+.1f}%"],
+                    ["Faturamento", f"R$ {_fat_r:,.2f}"],
+                    ["Meta", f"R$ {_meta_v:,.2f} ({_meta_lbl})"],
+                    ["Meta atingida (%)", f"{_perc_m:.1f}%"],
+                    [f"Crescimento vs {_mes_nome_det.get(_mes_ant2,'')[:3]}/{_ano_ant2}", f"{_cresc_m:+.1f}%"],
+                    [f"Crescimento vs {_mes_nome_det.get(_mes_meta,'')[:3]}/{_ano_meta}", f"{_cresc_a:+.1f}%"],
                     ["", ""],
-                    ["Clientes ativos na base", str(_base_tot)],
-                    ["Positivados no periodo", str(_posit)],
-                    ["% Positivacao", f"{(_posit/_base_tot*100):.1f}%" if _base_tot > 0 else "0%"],
-                    ["Clientes reativados", str(_reativados)],
-                    ["Sem compra ha 60 dias", str(_sem_compra_60)],
+                    ["Base total de clientes", str(_base_v)],
+                    ["Positivados no mês", str(_posit_v)],
+                    ["% Positivação", f"{_posit_p:.1f}%"],
+                    ["Clientes sem compra há 60 dias", str(_sem60)],
                     ["", ""],
-                    ["Produtos destaque", _top_prod_str],
+                    ["Top 3 produtos", _top3_str],
                 ]
 
-                for _ri, (_k, _v2) in enumerate(_resumo, 1):
-                    _ws.cell(_ri, 1, _k)
-                    _ws.cell(_ri, 2, _v2)
-                    if _ri == 1:
-                        for _ci2 in (1, 2):
-                            _c = _ws.cell(_ri, _ci2)
-                            _c.fill = _H_FILL; _c.font = _H_FONT; _c.alignment = _H_ALN
-                    elif _k:
-                        _ws.cell(_ri, 1).font = Font(bold=True, color="1F4788")
-                        if _ri % 2 == 0:
-                            for _ci2 in (1, 2):
-                                _ws.cell(_ri, _ci2).fill = _ALT
-                    for _ci2 in (1, 2):
-                        _ws.cell(_ri, _ci2).border = _BRD
+                for _ri3, (_k3, _v3) in enumerate(_resumo_xl, 1):
+                    _ws.cell(_ri3, 1, _k3)
+                    _ws.cell(_ri3, 2, _v3)
+                    if _ri3 == 1:
+                        for _ci3 in (1, 2):
+                            _c3 = _ws.cell(_ri3, _ci3)
+                            _c3.fill = _H_FILL; _c3.font = _H_FONT; _c3.alignment = _H_ALN
+                    elif _k3:
+                        _ws.cell(_ri3, 1).font = Font(bold=True, color="1F4788")
+                        if _ri3 % 2 == 0:
+                            for _ci3 in (1, 2): _ws.cell(_ri3, _ci3).fill = _ALT
+                    for _ci3 in (1, 2): _ws.cell(_ri3, _ci3).border = _BRD
 
-                _ws.column_dimensions['A'].width = 40
-                _ws.column_dimensions['B'].width = 32
+                _ws.column_dimensions["A"].width = 38
+                _ws.column_dimensions["B"].width = 32
                 _ws.row_dimensions[1].height = 22
 
-                _linha_tab = len(_resumo) + 2
-                _ws.cell(_linha_tab, 1, "Vendas Detalhadas no Periodo").font = Font(bold=True, size=11, color="1F4788")
-                _linha_tab += 1
+                # Tabela detalhada de vendas do mês
+                _lr = len(_resumo_xl) + 2
+                _ws.cell(_lr, 1, f"Vendas Detalhadas — {_label_mes_card}").font = Font(bold=True, size=11, color="1F4788")
+                _lr += 1
 
-                _df_det = _pv_df[
-                    (_pv_df['Vendedor'] == _vend) & (_pv_df['TipoMov'] == 'NF Venda')
-                ][['DataEmissao','RazaoSocial','NomeProduto','Quantidade','TotalProduto']].copy()
-                _df_det['DataEmissao'] = pd.to_datetime(_df_det['DataEmissao']).dt.strftime('%d/%m/%Y')
-                _hdr_det = ['Data','Cliente','Produto','Qtd','Valor (R$)']
+                _df_dl = _df_mes_card[_df_mes_card["Vendedor"] == _vend][
+                    ["DataEmissao","RazaoSocial","NomeProduto","Quantidade","TotalProduto"]
+                ].copy()
+                _df_dl["DataEmissao"] = _df_dl["DataEmissao"].dt.strftime("%d/%m/%Y")
+                _hdrs = ["Data","Cliente","Produto","Qtd","Valor (R$)"]
 
-                for _ci2, _col in enumerate(_hdr_det, 1):
-                    _c = _ws.cell(_linha_tab, _ci2, _col)
-                    _c.fill = _H_FILL; _c.font = _H_FONT; _c.alignment = _H_ALN; _c.border = _BRD
+                for _ci3, _h3 in enumerate(_hdrs, 1):
+                    _c3 = _ws.cell(_lr, _ci3, _h3)
+                    _c3.fill = _H_FILL; _c3.font = _H_FONT; _c3.alignment = _H_ALN; _c3.border = _BRD
 
-                for _ri2, _row2 in enumerate(_df_det.values.tolist(), _linha_tab + 1):
-                    for _ci2, _val2 in enumerate(_row2, 1):
-                        _c = _ws.cell(_ri2, _ci2, _val2)
-                        _c.border = _BRD
-                        if _ri2 % 2 == 0:
-                            _c.fill = _ALT
-                        if _ci2 == 5:
+                for _ri3, _rw in enumerate(_df_dl.values.tolist(), _lr + 1):
+                    for _ci3, _vl in enumerate(_rw, 1):
+                        _c3 = _ws.cell(_ri3, _ci3, _vl)
+                        _c3.border = _BRD
+                        if _ri3 % 2 == 0: _c3.fill = _ALT
+                        if _ci3 == 5:
                             try:
-                                _ws.cell(_ri2, _ci2, float(_val2))
-                                _ws.cell(_ri2, _ci2).number_format = 'R$ #,##0.00'
-                            except:
-                                pass
+                                _ws.cell(_ri3, _ci3, float(_vl))
+                                _ws.cell(_ri3, _ci3).number_format = "R$ #,##0.00"
+                            except: pass
 
-                for _ci2, _larg in enumerate([12, 30, 35, 10, 14], 1):
-                    _ws.column_dimensions[get_column_letter(_ci2)].width = _larg
+                for _ci3, _lg in enumerate([12, 30, 35, 10, 14], 1):
+                    _ws.column_dimensions[get_column_letter(_ci3)].width = _lg
 
-            _buf_det = _io_det.BytesIO()
-            _wb_det.save(_buf_det)
-            _buf_det.seek(0)
+            _buf3 = _io_det.BytesIO()
+            _wb_det.save(_buf3)
+            _buf3.seek(0)
             st.download_button(
-                label="Baixar Relatório Detalhado (Excel)",
-                data=_buf_det.getvalue(),
-                file_name=f"performance_vendedores_{_pv_now.strftime('%Y%m')}.xlsx",
+                label="⬇️ Baixar Relatório (Excel)",
+                data=_buf3.getvalue(),
+                file_name=f"performance_{_mes_card:02d}_{_ano_card}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_perf_det_xlsx"
             )
-            st.success("Relatório gerado! Clique no botão acima para baixar.")
-        except Exception as _e_det:
-            st.error(f"Erro ao gerar relatório: {_e_det}")
-
+            st.success("✅ Relatório gerado!")
+        except Exception as _e3:
+            st.error(f"Erro ao gerar relatório: {_e3}")
 
 # ====================== RANKINGS ======================
 elif menu == "Rankings":
