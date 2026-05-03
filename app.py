@@ -6477,6 +6477,50 @@ elif menu == "Performance de Vendedores":
                 return _fat_3m.mean() * 1.15, "Média 3m +15%", 0
             return 0, "Sem histórico", 0
 
+        # ── Pré-calcular indicadores extras para todos os vendedores ativos ──
+
+        # Mês anterior ao de referência (para crescimento mensal)
+        _mes_ant_c = _mes_card - 1 if _mes_card > 1 else 12
+        _ano_ant_c = _ano_card if _mes_card > 1 else _ano_card - 1
+
+        # Faturamento do mês anterior por vendedor (deduplicado)
+        _fat_mes_ant_c = _df_nf_hist[
+            (_df_nf_hist["DataEmissao"].dt.month == _mes_ant_c) &
+            (_df_nf_hist["DataEmissao"].dt.year  == _ano_ant_c)
+        ].groupby("Vendedor")["TotalProduto"].sum()
+
+        # Faturamento mesmo mês ano anterior por vendedor (deduplicado) — já usado em meta
+        _fat_ano_ant_c = _df_nf_hist[
+            (_df_nf_hist["DataEmissao"].dt.month == _mes_card) &
+            (_df_nf_hist["DataEmissao"].dt.year  == _ano_card - 1)
+        ].groupby("Vendedor")["TotalProduto"].sum()
+
+        # Clientes reativados: compraram no mês de referência MAS não compraram
+        # nos 3 meses anteriores (= inativos por 3+ meses que voltaram)
+        _ref_ts_c   = pd.Timestamp(year=_ano_card, month=_mes_card, day=1)
+        _3m_antes_c = _ref_ts_c - pd.DateOffset(months=3)
+
+        # CPFs que compraram no mês de referência por vendedor
+        _cpfs_mes_ref = (
+            _df_nf_hist_raw[
+                (_df_nf_hist_raw["DataEmissao"].dt.month == _mes_card) &
+                (_df_nf_hist_raw["DataEmissao"].dt.year  == _ano_card)
+            ].groupby("Vendedor")["CPF_CNPJ"].apply(set)
+        )
+
+        # CPFs que compraram nos 3 meses anteriores por vendedor
+        _cpfs_3m = (
+            _df_nf_hist_raw[
+                (_df_nf_hist_raw["DataEmissao"] >= _3m_antes_c) &
+                (_df_nf_hist_raw["DataEmissao"] <  _ref_ts_c)
+            ].groupby("Vendedor")["CPF_CNPJ"].apply(set)
+        )
+
+        def _reativados_vend(vendedor):
+            _ativos_mes = _cpfs_mes_ref.get(vendedor, set())
+            _ativos_3m  = _cpfs_3m.get(vendedor, set())
+            return len(_ativos_mes - _ativos_3m)
+
         # Renderizar cards — 3 por linha
         _n_cols   = min(3, len(_vends_ativos))
         _rows_v   = [_vends_ativos[i:i+_n_cols] for i in range(0, len(_vends_ativos), _n_cols)]
@@ -6492,54 +6536,99 @@ elif menu == "Performance de Vendedores":
                 _base_v  = int(_base_hist.get(_vend, 0))
                 _posit_p = (_posit_v / _base_v * 100) if _base_v > 0 else 0
 
-                _cor   = "#28A745" if _perc_m >= 100 else ("#F4A261" if _perc_m >= 70 else "#EF4444")
-                _barra = min(int(_perc_m), 100)
-                _sinal = "✅" if _perc_m >= 100 else ("⚠️" if _perc_m >= 70 else "🔴")
+                # Crescimento mensal vs mês anterior
+                _fat_ant_m  = float(_fat_mes_ant_c.get(_vend, 0))
+                _cresc_m    = ((_fat_r - _fat_ant_m) / _fat_ant_m * 100) if _fat_ant_m > 0 else None
+                _cresc_m_str = f"{_cresc_m:+.1f}%" if _cresc_m is not None else "—"
+                _cresc_m_cor = "#28A745" if (_cresc_m or 0) >= 0 else "#EF4444"
+                _cresc_m_ico = "📈" if (_cresc_m or 0) >= 0 else "📉"
+                _mes_ant_label = f"{_meses_pt[_mes_ant_c][:3]}/{_ano_ant_c}"
+
+                # Crescimento anual vs mesmo mês ano anterior
+                _fat_ant_a  = float(_fat_ano_ant_c.get(_vend, 0))
+                _cresc_a    = ((_fat_r - _fat_ant_a) / _fat_ant_a * 100) if _fat_ant_a > 0 else None
+                _cresc_a_str = f"{_cresc_a:+.1f}%" if _cresc_a is not None else "—"
+                _cresc_a_cor = "#28A745" if (_cresc_a or 0) >= 0 else "#EF4444"
+                _cresc_a_ico = "📈" if (_cresc_a or 0) >= 0 else "📉"
+                _mesmo_mes_ant = f"{_meses_pt[_mes_card][:3]}/{_ano_card - 1}"
+
+                # Clientes reativados
+                _reat_v = _reativados_vend(_vend)
+
+                _cor      = "#28A745" if _perc_m >= 100 else ("#F4A261" if _perc_m >= 70 else "#EF4444")
+                _barra    = min(int(_perc_m), 100)
+                _sinal    = "✅" if _perc_m >= 100 else ("⚠️" if _perc_m >= 70 else "🔴")
                 _posit_cor = "#28A745" if _posit_p >= 60 else ("#F4A261" if _posit_p >= 40 else "#EF4444")
 
-                _html = f"""<div style="background:#fff;border:1.5px solid #E2E8F0;border-radius:14px;
-padding:16px 14px 12px;box-shadow:0 2px 10px rgba(31,71,136,0.09);margin-bottom:14px;">
-  <div style="font-size:0.95rem;font-weight:700;color:#1F4788;border-bottom:2px solid #EEF3FC;
-              padding-bottom:7px;margin-bottom:10px;">👤 {_vend}</div>
-  <div style="font-size:0.7rem;color:#6C757D;margin-bottom:8px;text-align:center;">
-    {_label_mes_card}
-  </div>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-    <span style="color:#6C757D;font-size:0.78rem;">💰 Faturamento</span>
-    <span style="font-weight:700;color:#163561;font-size:0.95rem;">R$ {_fat_r:,.0f}</span>
-  </div>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-    <span style="color:#6C757D;font-size:0.78rem;">🎯 Meta <span style="font-size:0.7rem;">({_meta_lbl})</span></span>
-    <span style="font-weight:600;color:#4A7BC8;font-size:0.85rem;">R$ {_meta_v:,.0f}</span>
-  </div>
-  <div style="background:#F1F5F9;border-radius:6px;height:7px;margin:7px 0 3px;">
-    <div style="background:{_cor};width:{_barra}%;height:7px;border-radius:6px;"></div>
-  </div>
-  <div style="text-align:right;font-size:0.8rem;font-weight:700;color:{_cor};margin-bottom:11px;">
-    {_sinal} {_perc_m:.1f}% da meta
-  </div>
-  <div style="background:#F8FAFF;border-radius:8px;padding:8px 6px;border:1px solid #EEF3FC;">
-    <div style="font-size:0.72rem;color:#6C757D;text-align:center;margin-bottom:6px;font-weight:600;">
-      POSITIVAÇÃO {_label_mes_card}
-    </div>
-    <div style="display:flex;justify-content:space-around;align-items:center;">
-      <div style="text-align:center;">
-        <div style="font-size:1.15rem;font-weight:700;color:#28A745;">{_posit_v}</div>
-        <div style="font-size:0.68rem;color:#6C757D;">Positivados</div>
-      </div>
-      <div style="font-size:1.2rem;color:#CDD4E0;">|</div>
-      <div style="text-align:center;">
-        <div style="font-size:1.15rem;font-weight:700;color:#1F4788;">{_base_v}</div>
-        <div style="font-size:0.68rem;color:#6C757D;">Base total</div>
-      </div>
-      <div style="font-size:1.2rem;color:#CDD4E0;">|</div>
-      <div style="text-align:center;">
-        <div style="font-size:1.15rem;font-weight:700;color:{_posit_cor};">{_posit_p:.0f}%</div>
-        <div style="font-size:0.68rem;color:#6C757D;">% posit.</div>
-      </div>
-    </div>
-  </div>
-</div>"""
+                _html = (
+                    f'<div style="background:#fff;border:1.5px solid #E2E8F0;border-radius:14px;'
+                    f'padding:16px 14px 12px;box-shadow:0 2px 10px rgba(31,71,136,0.09);margin-bottom:14px;">'
+
+                    # Header
+                    f'<div style="font-size:0.95rem;font-weight:700;color:#1F4788;border-bottom:2px solid #EEF3FC;'
+                    f'padding-bottom:7px;margin-bottom:10px;">👤 {_vend}</div>'
+                    f'<div style="font-size:0.7rem;color:#6C757D;margin-bottom:8px;text-align:center;">{_label_mes_card}</div>'
+
+                    # Faturamento
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
+                    f'<span style="color:#6C757D;font-size:0.78rem;">💰 Faturamento</span>'
+                    f'<span style="font-weight:700;color:#163561;font-size:0.95rem;">R$ {_fat_r:,.0f}</span></div>'
+
+                    # Meta
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">'
+                    f'<span style="color:#6C757D;font-size:0.78rem;">🎯 Meta ({_meta_lbl})</span>'
+                    f'<span style="font-weight:600;color:#4A7BC8;font-size:0.85rem;">R$ {_meta_v:,.0f}</span></div>'
+
+                    # Barra progresso meta
+                    f'<div style="background:#F1F5F9;border-radius:6px;height:7px;margin:7px 0 3px;">'
+                    f'<div style="background:{_cor};width:{_barra}%;height:7px;border-radius:6px;"></div></div>'
+                    f'<div style="text-align:right;font-size:0.8rem;font-weight:700;color:{_cor};margin-bottom:10px;">'
+                    f'{_sinal} {_perc_m:.1f}% da meta</div>'
+
+                    # Crescimentos
+                    f'<div style="display:flex;gap:6px;margin-bottom:10px;">'
+
+                    f'<div style="flex:1;background:#F8FAFF;border-radius:8px;padding:6px 4px;border:1px solid #EEF3FC;text-align:center;">'
+                    f'<div style="font-size:0.65rem;color:#6C757D;margin-bottom:3px;font-weight:600;">vs {_mes_ant_label}</div>'
+                    f'<div style="font-size:0.88rem;font-weight:700;color:{_cresc_m_cor};">{_cresc_m_ico} {_cresc_m_str}</div>'
+                    f'<div style="font-size:0.62rem;color:#6C757D;">Cresc. mensal</div></div>'
+
+                    f'<div style="flex:1;background:#F8FAFF;border-radius:8px;padding:6px 4px;border:1px solid #EEF3FC;text-align:center;">'
+                    f'<div style="font-size:0.65rem;color:#6C757D;margin-bottom:3px;font-weight:600;">vs {_mesmo_mes_ant}</div>'
+                    f'<div style="font-size:0.88rem;font-weight:700;color:{_cresc_a_cor};">{_cresc_a_ico} {_cresc_a_str}</div>'
+                    f'<div style="font-size:0.62rem;color:#6C757D;">Cresc. anual</div></div>'
+
+                    f'<div style="flex:1;background:#F8FAFF;border-radius:8px;padding:6px 4px;border:1px solid #EEF3FC;text-align:center;">'
+                    f'<div style="font-size:0.65rem;color:#6C757D;margin-bottom:3px;font-weight:600;">Reativados</div>'
+                    f'<div style="font-size:0.88rem;font-weight:700;color:#9B59B6;">🔄 {_reat_v}</div>'
+                    f'<div style="font-size:0.62rem;color:#6C757D;">3m+ sem compra</div></div>'
+
+                    f'</div>'
+
+                    # Positivação
+                    f'<div style="background:#F8FAFF;border-radius:8px;padding:8px 6px;border:1px solid #EEF3FC;">'
+                    f'<div style="font-size:0.72rem;color:#6C757D;text-align:center;margin-bottom:6px;font-weight:600;">POSITIVAÇÃO {_label_mes_card}</div>'
+                    f'<div style="display:flex;justify-content:space-around;align-items:center;">'
+
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:1.15rem;font-weight:700;color:#28A745;">{_posit_v}</div>'
+                    f'<div style="font-size:0.68rem;color:#6C757D;">Positivados</div></div>'
+
+                    f'<div style="font-size:1.2rem;color:#CDD4E0;">|</div>'
+
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:1.15rem;font-weight:700;color:#1F4788;">{_base_v}</div>'
+                    f'<div style="font-size:0.68rem;color:#6C757D;">Base total</div></div>'
+
+                    f'<div style="font-size:1.2rem;color:#CDD4E0;">|</div>'
+
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:1.15rem;font-weight:700;color:{_posit_cor};">{_posit_p:.0f}%</div>'
+                    f'<div style="font-size:0.68rem;color:#6C757D;">% posit.</div></div>'
+
+                    f'</div></div>'
+                    f'</div>'
+                )
                 with _ci2:
                     st.markdown(_html, unsafe_allow_html=True)
 
@@ -6549,6 +6638,213 @@ padding:16px 14px 12px;box-shadow:0 2px 10px rgba(31,71,136,0.09);margin-bottom:
     st.markdown("### 📥 Relatório Detalhado por Vendedor")
     _mes_nome_det = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",
                      7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
+
+    # ── Geração de imagem PNG por vendedor (estilo post Medtextil) ────────────
+    _col_btn1, _col_btn2 = st.columns(2)
+    with _col_btn1:
+        _vend_img_opts = ["Todos"] + _vends_ativos
+        _vend_img_sel  = st.selectbox("Vendedor para imagem:", _vend_img_opts, key="sel_vend_img")
+    with _col_btn2:
+        _foco1 = st.text_input("Foco 01", placeholder="Ex: Reativação de clientes", key="foco1_img")
+        _foco2 = st.text_input("Foco 02", placeholder="Ex: Ampliar mix hospitalar", key="foco2_img")
+        _foco3 = st.text_input("Foco 03", placeholder="Ex: Recuperar orçamentos", key="foco3_img")
+
+    if st.button("🖼️ Gerar Card(s) como Imagem PNG", key="btn_gerar_png_card", type="primary"):
+        try:
+            from PIL import Image as _PilImg, ImageDraw as _PilDraw, ImageFont as _PilFont
+            import requests as _req_img
+            import io as _io_img
+
+            # Baixar logo do GitHub
+            _logo_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_FOLDER}/logo.png"
+            try:
+                _logo_resp = _req_img.get(_logo_url, timeout=5)
+                _logo_pil  = _PilImg.open(_io_img.BytesIO(_logo_resp.content)).convert("RGBA")
+            except:
+                _logo_pil = None
+
+            # Paleta Medtextil
+            _C_NAVY  = (13,  35,  75)   # #0D234B
+            _C_GREEN = (39, 174,  96)   # #27AE60
+            _C_WHITE = (255,255,255)
+            _C_BG    = (240,246,255)    # fundo azul claro
+            _C_LGRAY = (220,230,245)
+            _C_DARK  = (10, 25, 60)
+
+            # Tamanho: 1080×1080 (quadrado Instagram/WhatsApp)
+            _W, _H = 1080, 1080
+
+            def _draw_card_img(vendedor):
+                _fat_r   = float(_fat_card.get(vendedor, 0))
+                _meta_v, _meta_lbl, _bm = _meta_card(vendedor)
+                _perc_m  = (_fat_r / _meta_v * 100) if _meta_v > 0 else 0
+                _posit_v = int(_posit_card.get(vendedor, 0))
+                _base_v  = int(_base_hist.get(vendedor, 0))
+                _posit_p = (_posit_v / _base_v * 100) if _base_v > 0 else 0
+                _fat_am  = float(_fat_mes_ant_c.get(vendedor, 0))
+                _fat_aa  = float(_fat_ano_ant_c.get(vendedor, 0))
+                _cresc_m = ((_fat_r - _fat_am) / _fat_am * 100) if _fat_am > 0 else 0
+                _cresc_a = ((_fat_r - _fat_aa) / _fat_aa * 100) if _fat_aa > 0 else 0
+                _reat_v  = _reativados_vend(vendedor)
+
+                img = _PilImg.new("RGB", (_W, _H), _C_BG)
+                draw = _PilDraw.Draw(img)
+
+                # ── Fundo gradiente manual (linhas horizontais) ──
+                for _y in range(_H):
+                    _r = int(220 + (_y/_H) * (255-220))
+                    _g = int(235 + (_y/_H) * (246-235))
+                    _b = int(255)
+                    draw.line([(_W//4, _y), (_W, _y)], fill=(_r,_g,_b))
+
+                # ── Header navy ──
+                draw.rectangle([0, 0, _W, 210], fill=_C_NAVY)
+
+                # Logo no header
+                if _logo_pil:
+                    _lw = 180
+                    _lh = int(_logo_pil.height * _lw / _logo_pil.width)
+                    _lh = min(_lh, 100)
+                    _lw = int(_logo_pil.width * _lh / _logo_pil.height)
+                    _logo_r = _logo_pil.resize((_lw, _lh), _PilImg.LANCZOS)
+                    img.paste(_logo_r, (30, (210-_lh)//2), _logo_r)
+
+                # Título RESULTADO MENSAL
+                try:
+                    _fnt_big   = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
+                    _fnt_med   = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
+                    _fnt_sm    = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+                    _fnt_xs    = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
+                    _fnt_label = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+                except:
+                    _fnt_big = _fnt_med = _fnt_sm = _fnt_xs = _fnt_label = _PilFont.load_default()
+
+                draw.text((_W//2 - 10, 50), "RESULTADO", font=_fnt_big, fill=_C_WHITE, anchor="mm")
+                draw.text((_W//2 - 10, 115), "MENSAL", font=_fnt_big, fill=_C_GREEN, anchor="mm")
+                draw.text((_W//2 - 10, 165), _label_mes_card.upper(), font=_fnt_sm, fill=_C_LGRAY, anchor="mm")
+
+                # ── Linha verde separadora ──
+                draw.rectangle([60, 220, _W-60, 225], fill=_C_GREEN)
+
+                # ── Helper: rounded rect ──
+                def _rrect(x1, y1, x2, y2, r=18, fill=_C_NAVY, border=None):
+                    draw.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill,
+                                           outline=border or fill, width=2)
+
+                def _card_box(x1, y1, x2, y2, icon_ch, label_txt, value_txt,
+                               sub_txt="", val_color=_C_WHITE, bg=_C_NAVY):
+                    _rrect(x1, y1, x2, y2, fill=bg)
+                    # Ícone círculo verde
+                    _cr = 28
+                    _cx, _cy = x1 + _cr + 14, y1 + _cr + 14
+                    draw.ellipse([_cx-_cr, _cy-_cr, _cx+_cr, _cy+_cr], fill=_C_GREEN)
+                    draw.text((_cx, _cy), icon_ch, font=_fnt_sm, fill=_C_WHITE, anchor="mm")
+                    # Label
+                    draw.text((x1+14, _cy+_cr+8), label_txt, font=_fnt_label, fill=_C_GREEN)
+                    # Valor
+                    draw.text((x1+14, _cy+_cr+36), value_txt, font=_fnt_med, fill=val_color)
+                    # Sub
+                    if sub_txt:
+                        draw.text((x1+14, _cy+_cr+78), sub_txt, font=_fnt_xs, fill=_C_LGRAY)
+                    # Ponto decorativo
+                    draw.ellipse([x1+14, y2-22, x1+28, y2-8], fill=_C_GREEN)
+
+                # ── Linha 1: Vendedor + Mês ──
+                _rrect(60, 238, 510, 318, fill=_C_NAVY)
+                draw.text((105, 258), "VENDEDOR", font=_fnt_label, fill=_C_GREEN)
+                draw.text((105, 283), vendedor[:28], font=_fnt_sm, fill=_C_WHITE)
+
+                _rrect(530, 238, 1020, 318, fill=_C_NAVY)
+                draw.text((575, 258), "MES DE REFERENCIA", font=_fnt_label, fill=_C_GREEN)
+                draw.text((575, 283), _label_mes_card.upper(), font=_fnt_sm, fill=_C_WHITE)
+
+                # ── Linha 2: 3 cards ──
+                _y2s, _y2e = 335, 490
+                _fat_str  = f"R$ {_fat_r:,.0f}"
+                _meta_str = f"{_perc_m:.1f}%"
+                _cm_str   = f"{_cresc_m:+.1f}%"
+                _cm_col   = (39,174,96) if _cresc_m >= 0 else (231,76,60)
+
+                _card_box(60,  _y2s, 360, _y2e, "$", "FATURAMENTO",    _fat_str)
+                _card_box(380, _y2s, 700, _y2e, "@", "META ATINGIDA",  _meta_str,
+                          f"Meta: R$ {_meta_v:,.0f}", val_color=_C_GREEN)
+                _card_box(720, _y2s, 1020, _y2e, "~", "CRESC. MENSAL", _cm_str,
+                          f"vs {_meses_pt[_mes_ant_c][:3]}/{_ano_ant_c}", val_color=_cm_col)
+
+                # ── Linha 3: 3 cards ──
+                _y3s, _y3e = 508, 660
+                _ca_str = f"{_cresc_a:+.1f}%"
+                _ca_col = (39,174,96) if _cresc_a >= 0 else (231,76,60)
+                _pp_str = f"{_posit_v} / {_base_v}"
+                _pp_sub = f"{_posit_p:.0f}% positivados"
+
+                _card_box(60,  _y3s, 360, _y3e, "^", "CRESC. ANUAL",
+                          _ca_str, f"vs {_meses_pt[_mes_card][:3]}/{_ano_card-1}", val_color=_ca_col)
+                _card_box(380, _y3s, 700, _y3e, "+", "CLIENTES POSITIVADOS",
+                          _pp_str, _pp_sub)
+                _card_box(720, _y3s, 1020, _y3e, "*", "CLIENTES REATIVADOS",
+                          str(_reat_v), "3+ meses sem compra")
+
+                # ── Barra FOCO DO PRÓXIMO MÊS ──
+                _rrect(60, 680, 1020, 780, fill=_C_DARK)
+                draw.text((80, 700), "FOCO DO", font=_fnt_label, fill=_C_GREEN)
+                draw.text((80, 725), "PROXIMO MES", font=_fnt_med, fill=_C_WHITE)
+
+                _focos = [_foco1 or "—", _foco2 or "—", _foco3 or "—"]
+                _fx = 310
+                for _fi, _ft in enumerate(_focos, 1):
+                    draw.ellipse([_fx-18, 718, _fx+18, 754], fill=_C_GREEN)
+                    draw.text((_fx, 736), str(_fi), font=_fnt_label, fill=_C_WHITE, anchor="mm")
+                    draw.text((_fx+28, 720), _ft[:22], font=_fnt_sm, fill=_C_WHITE)
+                    draw.line([(_fx+28, 756), (_fx+250, 756)], fill=_C_GREEN, width=2)
+                    _fx += 260
+
+                # ── Rodapé ──
+                draw.rectangle([0, 800, _W, 900], fill=_C_NAVY)
+                draw.text((60, 840), "QUALIDADE QUE PROTEGE, CONFIANCA QUE TRANSFORMA.",
+                          font=_fnt_xs, fill=_C_GREEN)
+
+                # Decoração hex no rodapé
+                for _hx in [880, 930, 970, 1010]:
+                    draw.ellipse([_hx-15, 845, _hx+15, 875], outline=_C_GREEN, width=2)
+
+                _buf_img = _io_img.BytesIO()
+                img.save(_buf_img, format="PNG", dpi=(150,150))
+                _buf_img.seek(0)
+                return _buf_img.getvalue()
+
+            _vends_gerar = _vends_ativos if _vend_img_sel == "Todos" else [_vend_img_sel]
+
+            if len(_vends_gerar) == 1:
+                _png_bytes = _draw_card_img(_vends_gerar[0])
+                st.image(_png_bytes, caption=f"Card — {_vends_gerar[0]}")
+                st.download_button(
+                    "⬇️ Baixar imagem PNG",
+                    data=_png_bytes,
+                    file_name=f"resultado_{_vends_gerar[0].replace(' ','_')}_{_mes_card:02d}_{_ano_card}.png",
+                    mime="image/png",
+                    key="dl_png_single"
+                )
+            else:
+                import zipfile as _zf
+                _zip_buf = _io_img.BytesIO()
+                with _zf.ZipFile(_zip_buf, "w") as _zobj:
+                    for _vg in _vends_gerar:
+                        _pb = _draw_card_img(_vg)
+                        _fname = f"resultado_{_vg.replace(' ','_')}_{_mes_card:02d}_{_ano_card}.png"
+                        _zobj.writestr(_fname, _pb)
+                _zip_buf.seek(0)
+                st.download_button(
+                    f"⬇️ Baixar todos os cards ({len(_vends_gerar)} imagens .zip)",
+                    data=_zip_buf.getvalue(),
+                    file_name=f"cards_resultado_{_mes_card:02d}_{_ano_card}.zip",
+                    mime="application/zip",
+                    key="dl_png_zip"
+                )
+            st.success("✅ Imagem(ns) gerada(s)!")
+        except Exception as _e_png:
+            st.error(f"Erro ao gerar imagem: {_e_png}")
+            st.info("Instale Pillow: pip install Pillow")
 
     if st.button("📊 Gerar Relatório Detalhado (Excel)", key="btn_rel_det_vend", type="primary"):
         try:
