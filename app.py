@@ -6687,126 +6687,147 @@ elif menu == "Performance de Vendedores":
                 _cresc_a = ((_fat_r - _fat_aa) / _fat_aa * 100) if _fat_aa > 0 else 0
                 _reat_v  = _reativados_vend(vendedor)
 
-                img = _PilImg.new("RGB", (_W, _H), _C_BG)
+                # Canvas 1080x1350 (retrato — mais espaço vertical para os dados)
+                _W2, _H2 = 1080, 1350
+                img = _PilImg.new("RGB", (_W2, _H2), (245, 249, 255))
                 draw = _PilDraw.Draw(img)
 
-                # ── Fundo gradiente manual (linhas horizontais) ──
-                for _y in range(_H):
-                    _r = int(220 + (_y/_H) * (255-220))
-                    _g = int(235 + (_y/_H) * (246-235))
-                    _b = int(255)
-                    draw.line([(_W//4, _y), (_W, _y)], fill=(_r,_g,_b))
+                # Fundo gradiente suave
+                for _y in range(_H2):
+                    _t = _y / _H2
+                    _r2 = int(232 + _t * 18)
+                    _g2 = int(241 + _t * 10)
+                    _b2 = 255
+                    draw.line([(0, _y), (_W2, _y)], fill=(_r2, _g2, _b2))
 
-                # ── Header navy ──
-                draw.rectangle([0, 0, _W, 210], fill=_C_NAVY)
-
-                # Logo no header
-                if _logo_pil:
-                    _lw = 180
-                    _lh = int(_logo_pil.height * _lw / _logo_pil.width)
-                    _lh = min(_lh, 100)
-                    _lw = int(_logo_pil.width * _lh / _logo_pil.height)
-                    _logo_r = _logo_pil.resize((_lw, _lh), _PilImg.LANCZOS)
-                    img.paste(_logo_r, (30, (210-_lh)//2), _logo_r)
-
-                # Título RESULTADO MENSAL
+                # Fontes — bem maiores
                 try:
-                    _fnt_big   = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
-                    _fnt_med   = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
-                    _fnt_sm    = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
-                    _fnt_xs    = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
-                    _fnt_label = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+                    _fb  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 110)
+                    _fbd = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
+                    _fm  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
+                    _fs  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+                    _fv  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
+                    _fl  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34)
+                    _fxs = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
                 except:
-                    _fnt_big = _fnt_med = _fnt_sm = _fnt_xs = _fnt_label = _PilFont.load_default()
+                    _fb = _fbd = _fm = _fs = _fv = _fl = _fxs = _PilFont.load_default()
 
-                draw.text((_W//2 - 10, 50), "RESULTADO", font=_fnt_big, fill=_C_WHITE, anchor="mm")
-                draw.text((_W//2 - 10, 115), "MENSAL", font=_fnt_big, fill=_C_GREEN, anchor="mm")
-                draw.text((_W//2 - 10, 165), _label_mes_card.upper(), font=_fnt_sm, fill=_C_LGRAY, anchor="mm")
+                # ── HEADER: branco ──
+                draw.rectangle([0, 0, _W2, 320], fill=(255, 255, 255))
 
-                # ── Linha verde separadora ──
-                draw.rectangle([60, 220, _W-60, 225], fill=_C_GREEN)
+                # Logo centralizado no header
+                if _logo_pil:
+                    _lh2 = 120
+                    _lw2 = int(_logo_pil.width * _lh2 / _logo_pil.height)
+                    _lr2 = _logo_pil.resize((_lw2, _lh2), _PilImg.LANCZOS)
+                    img.paste(_lr2, ((_W2 - _lw2) // 2, 20), _lr2)
 
-                # ── Helper: rounded rect ──
-                def _rrect(x1, y1, x2, y2, r=18, fill=_C_NAVY, border=None):
-                    draw.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill,
-                                           outline=border or fill, width=2)
+                # RESULTADO / MENSAL
+                draw.text((_W2 // 2, 175), "RESULTADO", font=_fb, fill=(10, 30, 70), anchor="mm")
+                draw.text((_W2 // 2, 278), "MENSAL", font=_fb, fill=(39, 174, 96), anchor="mm")
 
-                def _card_box(x1, y1, x2, y2, icon_ch, label_txt, value_txt,
-                               sub_txt="", val_color=_C_WHITE, bg=_C_NAVY):
-                    _rrect(x1, y1, x2, y2, fill=bg)
-                    # Ícone círculo verde
-                    _cr = 28
-                    _cx, _cy = x1 + _cr + 14, y1 + _cr + 14
-                    draw.ellipse([_cx-_cr, _cy-_cr, _cx+_cr, _cy+_cr], fill=_C_GREEN)
-                    draw.text((_cx, _cy), icon_ch, font=_fnt_sm, fill=_C_WHITE, anchor="mm")
-                    # Label
-                    draw.text((x1+14, _cy+_cr+8), label_txt, font=_fnt_label, fill=_C_GREEN)
-                    # Valor
-                    draw.text((x1+14, _cy+_cr+36), value_txt, font=_fnt_med, fill=val_color)
-                    # Sub
-                    if sub_txt:
-                        draw.text((x1+14, _cy+_cr+78), sub_txt, font=_fnt_xs, fill=_C_LGRAY)
-                    # Ponto decorativo
-                    draw.ellipse([x1+14, y2-22, x1+28, y2-8], fill=_C_GREEN)
+                # Linha separadora verde
+                draw.rectangle([60, 315, _W2 - 60, 321], fill=(39, 174, 96))
 
-                # ── Linha 1: Vendedor + Mês ──
-                _rrect(60, 238, 510, 318, fill=_C_NAVY)
-                draw.text((105, 258), "VENDEDOR", font=_fnt_label, fill=_C_GREEN)
-                draw.text((105, 283), vendedor[:28], font=_fnt_sm, fill=_C_WHITE)
+                # ── Helper rounded rect ──
+                def _rr(x1, y1, x2, y2, r=22, fill=(13,35,75), outline=None):
+                    draw.rounded_rectangle([x1,y1,x2,y2], radius=r,
+                                           fill=fill, outline=outline or fill, width=3)
 
-                _rrect(530, 238, 1020, 318, fill=_C_NAVY)
-                draw.text((575, 258), "MES DE REFERENCIA", font=_fnt_label, fill=_C_GREEN)
-                draw.text((575, 283), _label_mes_card.upper(), font=_fnt_sm, fill=_C_WHITE)
+                # ── Helper: bloco card estilo referência ──
+                # Topo navy (ícone círculo + label), fundo branco (valor), ponto verde base
+                def _bloco(x1, y1, x2, y2, icon_txt, label, valor, sub="", val_col=(10,30,70)):
+                    _th = 115  # altura do topo navy
+                    # Fundo total arredondado branco com borda
+                    _rr(x1, y1, x2, y2, r=24, fill=(255,255,255), outline=(200,215,240))
+                    # Topo navy
+                    _rr(x1, y1, x2, y1+_th, r=24, fill=(13,35,75))
+                    # Cobrir cantos inferiores do navy (para não arredondar embaixo)
+                    draw.rectangle([x1, y1+_th-24, x2, y1+_th], fill=(13,35,75))
+                    # Círculo verde com ícone
+                    _cr2 = 36
+                    _cx2, _cy2 = x1 + _cr2 + 18, y1 + _th // 2
+                    draw.ellipse([_cx2-_cr2, _cy2-_cr2, _cx2+_cr2, _cy2+_cr2], fill=(39,174,96))
+                    draw.text((_cx2, _cy2), icon_txt, font=_fm, fill=(255,255,255), anchor="mm")
+                    # Label no topo
+                    _lx2 = _cx2 + _cr2 + 16
+                    draw.text((_lx2, _cy2), label, font=_fs, fill=(255,255,255), anchor="lm")
+                    # Valor no fundo branco
+                    _mid_val = y1 + _th + (y2 - y1 - _th) // 2 - (20 if sub else 0)
+                    draw.text((x1 + 24, _mid_val), valor, font=_fv, fill=val_col, anchor="lm")
+                    if sub:
+                        draw.text((x1 + 24, _mid_val + 68), sub, font=_fxs, fill=(100,120,160), anchor="lm")
+                    # Ponto verde decorativo na base
+                    draw.ellipse([x1+20, y2-20, x1+36, y2-4], fill=(39,174,96))
 
-                # ── Linha 2: 3 cards ──
-                _y2s, _y2e = 335, 490
+                # ── ROW 1: Vendedor | Mês de Referência ──
+                _rr(60, 330, 520, 440, fill=(13,35,75))
+                draw.ellipse([78, 348, 130, 400], fill=(39,174,96))
+                draw.text((104, 374), "V", font=_fm, fill=(255,255,255), anchor="mm")
+                draw.text((148, 354), "VENDEDOR", font=_fxs, fill=(39,174,96))
+                draw.text((148, 390), vendedor[:20], font=_fs, fill=(255,255,255))
+
+                _rr(540, 330, 1020, 440, fill=(13,35,75))
+                draw.ellipse([558, 348, 610, 400], fill=(39,174,96))
+                draw.text((584, 374), "M", font=_fm, fill=(255,255,255), anchor="mm")
+                draw.text((628, 354), "MES DE REFERENCIA", font=_fxs, fill=(39,174,96))
+                draw.text((628, 390), _label_mes_card.upper(), font=_fs, fill=(255,255,255))
+
+                # ── ROW 2: 3 blocos ──
+                _p  = 20   # padding entre blocos
+                _bw = (_W2 - 60*2 - _p*2) // 3   # largura de cada bloco
+                _bh = 230  # altura de cada bloco
+                _y2 = 460
+
                 _fat_str  = f"R$ {_fat_r:,.0f}"
                 _meta_str = f"{_perc_m:.1f}%"
                 _cm_str   = f"{_cresc_m:+.1f}%"
-                _cm_col   = (39,174,96) if _cresc_m >= 0 else (231,76,60)
+                _cm_col2  = (39,174,96) if _cresc_m >= 0 else (210,50,50)
+                _cm_sub   = f"vs {_meses_pt[_mes_ant_c][:3]}/{_ano_ant_c}"
 
-                _card_box(60,  _y2s, 360, _y2e, "$", "FATURAMENTO",    _fat_str)
-                _card_box(380, _y2s, 700, _y2e, "@", "META ATINGIDA",  _meta_str,
-                          f"Meta: R$ {_meta_v:,.0f}", val_color=_C_GREEN)
-                _card_box(720, _y2s, 1020, _y2e, "~", "CRESC. MENSAL", _cm_str,
-                          f"vs {_meses_pt[_mes_ant_c][:3]}/{_ano_ant_c}", val_color=_cm_col)
+                _x0 = 60
+                _bloco(_x0,            _y2, _x0+_bw,         _y2+_bh, "$", "FATURAMENTO",    _fat_str, f"Meta: R$ {_meta_v:,.0f}")
+                _bloco(_x0+_bw+_p,     _y2, _x0+2*_bw+_p,   _y2+_bh, "%", "META ATINGIDA",  _meta_str, f"{_meta_lbl}", val_col=(39,174,96))
+                _bloco(_x0+2*_bw+2*_p, _y2, _x0+3*_bw+2*_p, _y2+_bh, "^", "CRESC. MENSAL", _cm_str, _cm_sub, val_col=_cm_col2)
 
-                # ── Linha 3: 3 cards ──
-                _y3s, _y3e = 508, 660
+                # ── ROW 3: 3 blocos ──
+                _y3 = _y2 + _bh + _p
                 _ca_str = f"{_cresc_a:+.1f}%"
-                _ca_col = (39,174,96) if _cresc_a >= 0 else (231,76,60)
-                _pp_str = f"{_posit_v} / {_base_v}"
-                _pp_sub = f"{_posit_p:.0f}% positivados"
+                _ca_col2 = (39,174,96) if _cresc_a >= 0 else (210,50,50)
+                _ca_sub  = f"vs {_meses_pt[_mes_card][:3]}/{_ano_card-1}"
+                _pp_str  = f"{_posit_v}/{_base_v}"
+                _pp_sub2 = f"{_posit_p:.0f}% positivados"
 
-                _card_box(60,  _y3s, 360, _y3e, "^", "CRESC. ANUAL",
-                          _ca_str, f"vs {_meses_pt[_mes_card][:3]}/{_ano_card-1}", val_color=_ca_col)
-                _card_box(380, _y3s, 700, _y3e, "+", "CLIENTES POSITIVADOS",
-                          _pp_str, _pp_sub)
-                _card_box(720, _y3s, 1020, _y3e, "*", "CLIENTES REATIVADOS",
-                          str(_reat_v), "3+ meses sem compra")
+                _bloco(_x0,            _y3, _x0+_bw,         _y3+_bh, "A", "CRESC. ANUAL",       _ca_str, _ca_sub, val_col=_ca_col2)
+                _bloco(_x0+_bw+_p,     _y3, _x0+2*_bw+_p,   _y3+_bh, "C", "CLI. POSITIVADOS",   _pp_str, _pp_sub2)
+                _bloco(_x0+2*_bw+2*_p, _y3, _x0+3*_bw+2*_p, _y3+_bh, "R", "CLI. REATIVADOS",    str(_reat_v), "3+ meses sem compra")
 
-                # ── Barra FOCO DO PRÓXIMO MÊS ──
-                _rrect(60, 680, 1020, 780, fill=_C_DARK)
-                draw.text((80, 700), "FOCO DO", font=_fnt_label, fill=_C_GREEN)
-                draw.text((80, 725), "PROXIMO MES", font=_fnt_med, fill=_C_WHITE)
+                # ── FOCO DO PRÓXIMO MÊS ──
+                _yf = _y3 + _bh + _p
+                _rr(60, _yf, _W2-60, _yf+140, fill=(10,25,60))
+                draw.ellipse([78, _yf+18, 138, _yf+78], fill=(39,174,96))
+                draw.text((108, _yf+48), "@", font=_fm, fill=(255,255,255), anchor="mm")
+                draw.text((155, _yf+18), "FOCO DO", font=_fs, fill=(39,174,96))
+                draw.text((155, _yf+58), "PROXIMO MES", font=_fbd, fill=(255,255,255))
 
-                _focos = [_foco1 or "—", _foco2 or "—", _foco3 or "—"]
-                _fx = 310
-                for _fi, _ft in enumerate(_focos, 1):
-                    draw.ellipse([_fx-18, 718, _fx+18, 754], fill=_C_GREEN)
-                    draw.text((_fx, 736), str(_fi), font=_fnt_label, fill=_C_WHITE, anchor="mm")
-                    draw.text((_fx+28, 720), _ft[:22], font=_fnt_sm, fill=_C_WHITE)
-                    draw.line([(_fx+28, 756), (_fx+250, 756)], fill=_C_GREEN, width=2)
-                    _fx += 260
+                _focos2 = [_foco1 or "—", _foco2 or "—", _foco3 or "—"]
+                _fxpos = 420
+                for _fi2, _ft2 in enumerate(_focos2, 1):
+                    draw.ellipse([_fxpos, _yf+38, _fxpos+46, _yf+84], fill=(39,174,96))
+                    draw.text((_fxpos+23, _yf+61), str(_fi2), font=_fs, fill=(255,255,255), anchor="mm")
+                    _ftxt = _ft2[:18]
+                    draw.text((_fxpos+58, _yf+55), _ftxt, font=_fl, fill=(255,255,255), anchor="lm")
+                    draw.line([(_fxpos+58, _yf+92), (_fxpos+190, _yf+92)], fill=(39,174,96), width=3)
+                    _fxpos += 210
 
-                # ── Rodapé ──
-                draw.rectangle([0, 800, _W, 900], fill=_C_NAVY)
-                draw.text((60, 840), "QUALIDADE QUE PROTEGE, CONFIANCA QUE TRANSFORMA.",
-                          font=_fnt_xs, fill=_C_GREEN)
-
-                # Decoração hex no rodapé
-                for _hx in [880, 930, 970, 1010]:
-                    draw.ellipse([_hx-15, 845, _hx+15, 875], outline=_C_GREEN, width=2)
+                # ── RODAPÉ ──
+                _yr = _yf + 148
+                draw.rectangle([0, _yr, _W2, _H2], fill=(10,25,60))
+                draw.text((60, _yr + 30), "QUALIDADE QUE PROTEGE,", font=_fl, fill=(255,255,255))
+                draw.text((60, _yr + 68), "CONFIANCA QUE TRANSFORMA.", font=_fm, fill=(39,174,96))
+                # Ícone escudo simples
+                draw.rounded_rectangle([_W2-120, _yr+20, _W2-40, _yr+100], radius=12, outline=(39,174,96), width=3)
+                draw.text((_W2-80, _yr+60), "+", font=_fbd, fill=(39,174,96), anchor="mm")
 
                 _buf_img = _io_img.BytesIO()
                 img.save(_buf_img, format="PNG", dpi=(150,150))
