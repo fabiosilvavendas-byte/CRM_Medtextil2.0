@@ -2947,19 +2947,23 @@ elif menu == "Positivação":
         _prod_fat = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].copy()
 
         # Filtros
-        _col_fp1, _col_fp2, _col_fp3 = st.columns(3)
+        _col_fp1, _col_fp2, _col_fp3, _col_fp4 = st.columns(4)
         with _col_fp1:
             _fp_vend = st.selectbox(
                 "Vendedor", ['Todos'] + sorted(_prod_fat['Vendedor'].dropna().unique().tolist()),
                 key="fp_vend_posit"
             )
         with _col_fp2:
-            _fp_busca = st.text_input("🔍 Buscar produto", placeholder="Digite o nome...", key="fp_busca_posit")
+            _fp_cod = st.text_input("🔍 Código do produto", placeholder="Ex: 3", key="fp_cod_posit")
         with _col_fp3:
+            _fp_busca = st.text_input("🔍 Nome do produto", placeholder="Digite o nome...", key="fp_busca_posit")
+        with _col_fp4:
             _fp_ordem = st.selectbox("Ordenar por", ["Faturamento (Maior)", "Quantidade (Maior)", "Nome (A-Z)"], key="fp_ordem_posit")
 
         if _fp_vend != 'Todos':
             _prod_fat = _prod_fat[_prod_fat['Vendedor'] == _fp_vend]
+        if _fp_cod and len(_fp_cod) >= 1:
+            _prod_fat = _prod_fat[_prod_fat['CodigoProduto'].astype(str).str.strip() == str(_fp_cod).strip()]
         if _fp_busca and len(_fp_busca) >= 2:
             _prod_fat = _prod_fat[_prod_fat['NomeProduto'].str.contains(_fp_busca, case=False, na=False)]
 
@@ -5686,193 +5690,94 @@ elif menu == "Pedidos Pendentes":
                                 _gram_map[_gk] = _gv
 
             # ── PASSO 3: copiar arquivo ATUAL aba a aba injetando os valores ──
-            _wb_at  = openpyxl.load_workbook(_BIO(_bytes_atual))
-            _wb_out = openpyxl.Workbook()
-            _wb_out.remove(_wb_out.active)
+            # ── PASSO 3: reutilizar _gerar_relatorio_previsao com dados conciliados ──
+            # Reconstruir df_merge a partir do arquivo atual, injetando Previsão/Obs do anterior
 
-            _S_HDR  = PatternFill("solid", fgColor="1F4788")
-            _S_FONT = Font(bold=True, color="FFFFFF", size=10)
-            _S_ALGN = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            _S_BRD  = Border(left=Side(style='thin'), right=Side(style='thin'),
-                             top=Side(style='thin'),  bottom=Side(style='thin'))
-            _S_ALT  = PatternFill("solid", fgColor="EEF3FC")
-
+            _wb_at2 = openpyxl.load_workbook(_BIO(_bytes_atual))
             _total_aplicados = 0
 
-            for _ws_src in _wb_at.worksheets:
-                _src_rows = list(_ws_src.iter_rows(values_only=True))
-                if len(_src_rows) < 2:
+            # Reconstruir linhas no formato que _gerar_relatorio_previsao espera (df_merge)
+            _rows_conc = []
+            for _ws2 in _wb_at2.worksheets:
+                _src2 = list(_ws2.iter_rows(values_only=True))
+                if len(_src2) < 2:
                     continue
+                _hdr2 = [str(c).strip() if c is not None else '' for c in _src2[0]]
 
-                _hdr_src = [str(c).strip() if c is not None else '' for c in _src_rows[0]]
+                # Mapear cabeçalho → índice
+                def _ci2(keywords):
+                    for i, h in enumerate(_hdr2):
+                        hu = h.upper()
+                        if all(k.upper() in hu for k in (keywords if isinstance(keywords, list) else [keywords])):
+                            return i
+                    return None
 
-                # índices das colunas-chave no arquivo atual
-                _si_num = _si_cod = _si_prev = _si_obs = _si_gram = None
-                for _i, _h in enumerate(_hdr_src):
-                    _hu = _h.upper()
-                    if _si_num  is None and any(x in _hu for x in ['N° PEDIDO','N PEDIDO','NUMERO','NUM']):
-                        _si_num = _i
-                    if _si_cod  is None and any(x in _hu for x in ['CÓDIGO','CODIGO']) and 'N°' not in _hu:
-                        _si_cod = _i
-                    if _si_prev is None and 'PREV' in _hu:
-                        _si_prev = _i
-                    if _si_obs  is None and ('OBSERV' in _hu or _hu == 'OBS'):
-                        _si_obs = _i
-                    if _si_gram is None and 'GRAMATUR' in _hu:
-                        _si_gram = _i
+                _i_num2  = _ci2(['N°']) or _ci2(['PEDIDO']) or _ci2(['NUM'])
+                _i_cli2  = _ci2(['CLIENTE'])
+                _i_cod2  = _ci2(['CÓDIGO']) or _ci2(['CODIGO'])
+                _i_desc2 = _ci2(['DESCRIÇÃO']) or _ci2(['DESCRICAO']) or _ci2(['DESCRI'])
+                _i_cont2 = _ci2(['CONTRAT'])
+                _i_ent2  = _ci2(['ENTREGUE'])
+                _i_pend2 = _ci2(['PENDENTE'])
+                _i_vunt2 = _ci2(['VALOR UNIT']) or _ci2(['VLUNIT']) or _ci2(['UNIT'])
+                _i_vped2 = _ci2(['VALOR PEND']) or _ci2(['VLPEND'])
+                _i_data2 = _ci2(['DATA'])
+                _i_dias2 = _ci2(['DIAS'])
+                _i_vend2 = _ci2(['VENDEDOR'])
+                _i_perc2 = _ci2(['%'])
+                _i_cat2  = _ci2(['CATEG'])
 
-                # cabeçalho de saída = mesmo do atual (já tem N° Pedido e Gramatura
-                # desde a correção anterior; se por acaso faltar, adiciona)
-                _hdr_out = list(_hdr_src)
-                if _si_num is None:
-                    _hdr_out = ['N° Pedido'] + _hdr_out
-                    _si_num = 0  # agora está na pos 0
+                for _row2 in _src2[1:]:
+                    _first2 = str(_row2[0]).strip().upper() if _row2[0] is not None else ''
+                    # Pular TOTAL, cabeçalhos e separadores de fios
+                    if _first2 in ('TOTAL', '') or any(f in _first2 for f in ['FIOS', 'OUTROS']):
+                        continue
 
-                # garantir Gramatura depois de Código
-                if _si_gram is None:
-                    _pos_cod = next((i for i,h in enumerate(_hdr_out) if any(x in h.upper() for x in ['CÓDIGO','CODIGO']) and 'N°' not in h.upper()), None)
-                    if _pos_cod is not None:
-                        _hdr_out.insert(_pos_cod + 1, 'Gramatura')
-                        _si_gram = _pos_cod + 1
-                        # reajustar índices que deslocaram
-                        if _si_prev is not None and _si_prev > _pos_cod: _si_prev += 1
-                        if _si_obs  is not None and _si_obs  > _pos_cod: _si_obs  += 1
-                    else:
-                        _hdr_out.append('Gramatura')
-                        _si_gram = len(_hdr_out) - 1
+                    def _gv(idx):
+                        if idx is not None and idx < len(_row2):
+                            v = _row2[idx]
+                            return '' if v is None else v
+                        return ''
 
-                # garantir Previsão
-                if _si_prev is None:
-                    # inserir antes de Observações se existir, senão no fim
-                    _pos_obs = next((i for i,h in enumerate(_hdr_out) if 'OBSERV' in h.upper() or h.upper()=='OBS'), None)
-                    if _pos_obs is not None:
-                        _hdr_out.insert(_pos_obs, 'Previsão')
-                        _si_prev = _pos_obs
-                        _si_obs  = _pos_obs + 1
-                    else:
-                        _hdr_out.append('Previsão')
-                        _si_prev = len(_hdr_out) - 1
+                    _num2 = str(_gv(_i_num2)).strip()
 
-                # garantir Observações
-                if _si_obs is None:
-                    _hdr_out.append('Observações')
-                    _si_obs = len(_hdr_out) - 1
+                    # Buscar previsão/obs
+                    _lookup2 = _num2 if _num2 and _num2.upper() != 'TOTAL' else ''
+                    if not _lookup2:
+                        _cod2v = str(_gv(_i_cod2)).strip()
+                        _cli2v = str(_gv(_i_cli2)).strip()
+                        _lookup2 = f"{_cod2v}|{_cli2v}"
 
-                # criar aba de saída
-                _ws_out = _wb_out.create_sheet(title=_ws_src.title)
-
-                # cabeçalho estilizado
-                _ws_out.append(_hdr_out)
-                for _ci in range(1, len(_hdr_out) + 1):
-                    _c = _ws_out.cell(1, _ci)
-                    _c.fill = _S_HDR; _c.font = _S_FONT
-                    _c.alignment = _S_ALGN; _c.border = _S_BRD
-                _ws_out.row_dimensions[1].height = 30
-
-                # dados: linha a linha
-                _ri = 2
-                for _row_src in _src_rows[1:]:
-                    _rv = list(_row_src)
-
-                    # extrair N° Pedido desta linha
-                    _num = ''
-                    if _si_num is not None and _si_num < len(_rv) and _rv[_si_num] not in (None, '', 'None'):
-                        _num = str(_rv[_si_num]).strip()
-
-                    # extrair código para gramatura
-                    _gram_val = ''
-                    _ck = ''
-                    if _si_cod is not None and _si_cod < len(_rv) and _rv[_si_cod] not in (None, ''):
-                        try:    _ck = str(int(float(str(_rv[_si_cod]))))
-                        except: _ck = str(_rv[_si_cod]).strip()
-                        _gram_val = _gram_map.get(_ck, '')
-
-                    # buscar previsão/obs: chave primária = N° Pedido
-                    # fallback = Código|Cliente (para arquivos gerados antes da correção)
-                    _prev_val = _obs_val = ''
-                    _lookup_key = _num if _num and _num.upper() != 'TOTAL' else ''
-                    if not _lookup_key and _ck:
-                        _cli_v = ''
-                        _si_cli = next((i for i,h in enumerate(_hdr_out) if 'CLIENTE' in h.upper()), None)
-                        if _si_cli is not None and _si_cli < len(_rv):
-                            _cli_v = str(_rv[_si_cli]).strip() if _rv[_si_cli] not in (None,'','None') else ''
-                        _lookup_key = f"{_ck}|{_cli_v}"
-
-                    if _lookup_key:
-                        _entry = _obs_map.get(_lookup_key, {})
-                        _prev_val = _entry.get('previsao', '')
-                        _obs_val  = _entry.get('obs', '')
-                        if _prev_val or _obs_val:
+                    _prev2 = _obs2 = ''
+                    if _lookup2:
+                        _ent2 = _obs_map.get(_lookup2, {})
+                        _prev2 = _ent2.get('previsao', '')
+                        _obs2  = _ent2.get('obs', '')
+                        if _prev2 or _obs2:
                             _total_aplicados += 1
 
-                    # montar linha de saída na ordem do _hdr_out
-                    _row_out = []
-                    for _oi, _col_name in enumerate(_hdr_out):
-                        if _oi == _si_prev:
-                            _row_out.append(_prev_val)
-                        elif _oi == _si_obs:
-                            _row_out.append(_obs_val)
-                        elif _oi == _si_gram:
-                            _row_out.append(_gram_val)
-                        else:
-                            # encontrar índice correspondente no src pelo nome
-                            _src_i = next(
-                                (i for i, h in enumerate(_hdr_src)
-                                 if str(h).strip().upper() == _col_name.upper()),
-                                None
-                            )
-                            _row_out.append(_rv[_src_i] if _src_i is not None and _src_i < len(_rv) else '')
+                    # Montar linha como dict compatível com df_merge
+                    _rows_conc.append({
+                        'NumeroPedido':  _gv(_i_num2),
+                        'Cliente':       _gv(_i_cli2),
+                        'CodigoProduto': _gv(_i_cod2),
+                        'Descricao':     _gv(_i_desc2),
+                        'QtdContratada': _gv(_i_cont2),
+                        'QtdEntregue':   _gv(_i_ent2),
+                        'QtdPendente':   _gv(_i_pend2),
+                        'ValorUnit':     _gv(_i_vunt2),
+                        'ValorPendente': _gv(_i_vped2),
+                        'DataEmissao':   _gv(_i_data2),
+                        'Vendedor':      _gv(_i_vend2),
+                        'Previsao':      _prev2,
+                        'Observacoes':   _obs2,
+                    })
 
-                    _ws_out.append(_row_out)
+            _df_merge_conc = pd.DataFrame(_rows_conc)
 
-                    # estilos da linha
-                    _fill = _S_ALT if _ri % 2 == 0 else PatternFill()
-                    for _ci in range(1, len(_hdr_out) + 1):
-                        _c = _ws_out.cell(_ri, _ci)
-                        _c.border = _S_BRD
-                        _c.alignment = Alignment(vertical="center")
-                        if _fill.fill_type:
-                            _c.fill = _fill
-                        _hu = _hdr_out[_ci - 1].upper()
-                        if any(x in _hu for x in ['VALOR UNIT', 'VALOR PEND']):
-                            _c.number_format = 'R$ #,##0.00'
-                        elif any(x in _hu for x in ['CONTRAT','ENTREGUE','PENDENTE','VOLUMES']):
-                            try:
-                                if _c.value not in (None, ''):
-                                    _c.value = float(_c.value)
-                                    _c.number_format = '#,##0'
-                            except:
-                                pass
-                    _ri += 1
+            # Gerar Excel usando a mesma função com todas as regras de formatação
+            _buf = _BIO(_gerar_relatorio_previsao(_df_merge_conc, _df_prod_prev, _cx_col, _preco_col, _desc_col))
 
-                # larguras
-                _LARG = {
-                    'N° PEDIDO': 14, 'CLIENTE': 30, 'CÓDIGO': 10, 'GRAMATURA': 12,
-                    'VOLUMES': 10, 'DESCRI': 35, 'CONTRAT': 12, 'ENTREGUE': 12,
-                    'PENDENTE': 12, 'VALOR UNIT': 14, 'VALOR PEND': 14,
-                    'DATA': 14, 'DIAS': 12, 'VENDEDOR': 20, '%': 10,
-                    'PREV': 18, 'CATEG': 12, 'OBSERV': 28, 'OBS': 28,
-                }
-                for _ci, _col_name in enumerate(_hdr_out, 1):
-                    _hu = _col_name.upper()
-                    _w = next((_v for _k, _v in _LARG.items() if _k in _hu), 12)
-                    _ws_out.column_dimensions[get_column_letter(_ci)].width = _w
-
-                # rodapé totais
-                _ultima = _ri
-                _ws_out.cell(_ultima, 1, 'TOTAL').font = Font(bold=True)
-                for _ci, _col_name in enumerate(_hdr_out, 1):
-                    _hu = _col_name.upper()
-                    if any(x in _hu for x in ['CONTRAT','ENTREGUE','PENDENTE','VALOR PEND']):
-                        _tot = 0
-                        for _rr in range(2, _ultima):
-                            try: _tot += float(_ws_out.cell(_rr, _ci).value or 0)
-                            except: pass
-                        _c = _ws_out.cell(_ultima, _ci, _tot)
-                        _c.font = Font(bold=True)
-                        _c.number_format = 'R$ #,##0.00' if 'VALOR' in _hu else '#,##0'
-
-            # ── PASSO 4: gerar download ────────────────────────────────────
             _buf = _BIO()
             _wb_out.save(_buf)
 
@@ -6729,40 +6634,51 @@ elif menu == "Performance de Vendedores":
                  7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
     _label_mes_card = f"{_meses_pt[_mes_card]}/{_ano_card}"
 
-    # Base completa apenas NF Venda — excluindo explicitamente devoluções antes de deduplicar
-    _df_nf_hist_raw = df[df["TipoMov"] == "NF Venda"].copy()
-    _df_nf_hist_raw["DataEmissao"] = pd.to_datetime(_df_nf_hist_raw["DataEmissao"], errors="coerce")
+    # Base histórica completa — todas as linhas, sem deduplicar
+    # TotalProduto é valor por item, então somamos todas as linhas por NF Venda
+    _df_hist_venda = df[df["TipoMov"] == "NF Venda"].copy()
+    _df_hist_venda["DataEmissao"] = pd.to_datetime(_df_hist_venda["DataEmissao"], errors="coerce")
 
-    # Deduplicar por Numero_NF dentro de NF Venda (já filtrado, não há risco de NF Dev aqui)
-    _df_nf_hist = _df_nf_hist_raw.drop_duplicates(subset=["Numero_NF"], keep="first")
+    _df_hist_dev = df[df["TipoMov"] == "NF Dev.Venda"].copy()
+    _df_hist_dev["DataEmissao"] = pd.to_datetime(_df_hist_dev["DataEmissao"], errors="coerce")
 
-    # Vendas do mês de referência (mês anterior ao vigente) — deduplicadas
-    _df_mes_card = _df_nf_hist[
-        (_df_nf_hist["DataEmissao"].dt.month == _mes_card) &
-        (_df_nf_hist["DataEmissao"].dt.year  == _ano_card)
+    # _df_nf_hist_raw: para CPF_CNPJ (positivação) — só NF Venda
+    _df_nf_hist_raw = _df_hist_venda
+
+    # Alias para compatibilidade com restante do bloco
+    _df_nf_hist = _df_hist_venda
+
+    # Vendas do mês de referência (todas as linhas de NF Venda)
+    _df_mes_venda = _df_hist_venda[
+        (_df_hist_venda["DataEmissao"].dt.month == _mes_card) &
+        (_df_hist_venda["DataEmissao"].dt.year  == _ano_card)
+    ]
+    # Devoluções do mês de referência
+    _df_mes_dev = _df_hist_dev[
+        (_df_hist_dev["DataEmissao"].dt.month == _mes_card) &
+        (_df_hist_dev["DataEmissao"].dt.year  == _ano_card)
     ]
 
-    # Vendedores ativos = apenas quem positivou no mês de referência
-    _vends_ativos = sorted(_df_mes_card["Vendedor"].dropna().unique().tolist())
+    # _df_mes_card usado pelo restante do bloco (positivação, reativados, etc.)
+    _df_mes_card = _df_mes_venda
 
-    # Se filtro de vendedor selecionado, restringir
+    # Vendedores ativos = quem tem NF Venda no mês de referência
+    _vends_ativos = sorted(_df_mes_venda["Vendedor"].dropna().unique().tolist())
+
     if _pv_vendedor != "Todos":
         _vends_ativos = [v for v in _vends_ativos if v == _pv_vendedor]
 
     if not _vends_ativos:
         st.info(f"Nenhum vendedor com vendas em {_label_mes_card}.")
     else:
-        # Faturamento do mês de referência por vendedor (NFs deduplicadas)
-        _fat_card = _df_mes_card.groupby("Vendedor")["TotalProduto"].sum()
+        # Faturamento líquido = soma NF Venda − soma NF Dev.Venda (por item, sem deduplicar)
+        _fat_bruto_card = _df_mes_venda.groupby("Vendedor")["TotalProduto"].sum()
+        _fat_dev_card   = _df_mes_dev.groupby("Vendedor")["TotalProduto"].sum()
+        _fat_card = _fat_bruto_card.subtract(_fat_dev_card, fill_value=0)
 
-        # Positivação: clientes únicos no mês / base histórica do vendedor
-        # Usar df_raw (todas as linhas) para CPF_CNPJ — nunique não é afetado por deduplicação de NF
-        _posit_card = _df_nf_hist_raw[
-            (_df_nf_hist_raw["DataEmissao"].dt.month == _mes_card) &
-            (_df_nf_hist_raw["DataEmissao"].dt.year  == _ano_card)
-        ].groupby("Vendedor")["CPF_CNPJ"].nunique()
-
-        _base_hist = _df_nf_hist_raw.groupby("Vendedor")["CPF_CNPJ"].nunique()
+        # Positivação: clientes únicos com NF Venda no mês
+        _posit_card = _df_mes_venda.groupby("Vendedor")["CPF_CNPJ"].nunique()
+        _base_hist  = _df_hist_venda.groupby("Vendedor")["CPF_CNPJ"].nunique()
 
         # Cálculo de meta por vendedor — usa NFs deduplicadas para soma correta
         def _meta_card(vendedor):
