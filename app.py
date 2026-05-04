@@ -2090,9 +2090,6 @@ with st.sidebar:
                     _raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
                     if _raw_inad is not None:
                         _df_inad_sem = processar_inadimplencia(_raw_inad)
-                        # Normalizar vendedor para garantir match
-                        if _df_inad_sem is not None and 'Vendedor' in _df_inad_sem.columns:
-                            _df_inad_sem['Vendedor'] = _df_inad_sem['Vendedor'].astype(str).str.strip().str.upper()
 
                 # ── Carregar pedidos pendentes ──
                 _df_pend_sem = None
@@ -2155,12 +2152,13 @@ with st.sidebar:
                                             except:
                                                 continue
                         _df_pend_sem = pd.DataFrame(_data_p)
-                        # Normalizar nome do vendedor: strip + upper para garantir match
-                        if len(_df_pend_sem) > 0 and 'Vendedor' in _df_pend_sem.columns:
-                            _df_pend_sem['Vendedor'] = _df_pend_sem['Vendedor'].astype(str).str.strip().str.upper()
-                        # Filtrar apenas QtdPendente > 0 (sem restrição de data — pedidos pendentes podem ser de meses anteriores)
-                        if len(_df_pend_sem) > 0:
+                        # Filtrar: primeiro dia do mês até hoje
+                        if len(_df_pend_sem) > 0 and 'DataEmissao' in _df_pend_sem.columns:
                             _df_pend_sem = _df_pend_sem[_df_pend_sem['QtdPendente'] > 0]
+                            _df_pend_sem = _df_pend_sem[
+                                (_df_pend_sem['DataEmissao'] >= _inicio_mes) &
+                                (_df_pend_sem['DataEmissao'] <= _hoje)
+                            ]
                     except:
                         _df_pend_sem = None
 
@@ -2170,55 +2168,12 @@ with st.sidebar:
                     (df['DataEmissao'] >= _inicio_mes) &
                     (df['DataEmissao'] <= _hoje)
                 ].copy()
-                # Normalizar nome do vendedor para garantir match com outras fontes
-                if 'Vendedor' in _df_fat_sem.columns:
-                    _df_fat_sem['Vendedor'] = _df_fat_sem['Vendedor'].astype(str).str.strip().str.upper()
 
                 # ── Lista de vendedores ativos ──
-                # Tenta pelo mês atual; se vazio, usa últimas 4 semanas; se ainda vazio, usa todos com NF Venda
-                _vends_fat = set(df[
+                _vendedores_ativos = sorted(df[
                     (df['TipoMov'] == 'NF Venda') &
                     (df['DataEmissao'] >= _inicio_mes)
-                ]['Vendedor'].dropna().astype(str).str.strip().str.upper().unique().tolist())
-
-                if not _vends_fat:
-                    _4sem = _hoje - pd.Timedelta(weeks=4)
-                    _vends_fat = set(df[
-                        (df['TipoMov'] == 'NF Venda') &
-                        (df['DataEmissao'] >= _4sem)
-                    ]['Vendedor'].dropna().astype(str).str.strip().str.upper().unique().tolist())
-                    if _vends_fat:
-                        _df_fat_sem = df[
-                            (df['TipoMov'] == 'NF Venda') &
-                            (df['DataEmissao'] >= _4sem) &
-                            (df['DataEmissao'] <= _hoje)
-                        ].copy()
-                        if 'Vendedor' in _df_fat_sem.columns:
-                            _df_fat_sem['Vendedor'] = _df_fat_sem['Vendedor'].astype(str).str.strip().str.upper()
-
-                if not _vends_fat:
-                    _vends_fat = set(df[
-                        df['TipoMov'] == 'NF Venda'
-                    ]['Vendedor'].dropna().astype(str).str.strip().str.upper().unique().tolist())
-                    if _vends_fat:
-                        _df_fat_sem = df[df['TipoMov'] == 'NF Venda'].copy()
-                        if 'Vendedor' in _df_fat_sem.columns:
-                            _df_fat_sem['Vendedor'] = _df_fat_sem['Vendedor'].astype(str).str.strip().str.upper()
-
-                # Incluir vendedores que aparecem em pendentes ou inadimplência mas não em faturados
-                _vends_pend = set()
-                if _df_pend_sem is not None and len(_df_pend_sem) > 0:
-                    _vends_pend = set(_df_pend_sem['Vendedor'].dropna().unique().tolist())
-
-                _vends_inad = set()
-                if _df_inad_sem is not None and len(_df_inad_sem) > 0 and 'Vendedor' in _df_inad_sem.columns:
-                    _vends_inad = set(_df_inad_sem['Vendedor'].astype(str).str.strip().str.upper().dropna().unique().tolist())
-
-                _vendedores_ativos = sorted(_vends_fat | _vends_pend | _vends_inad)
-
-                if not _vendedores_ativos:
-                    st.sidebar.warning("⚠️ Nenhum vendedor com NF Venda encontrado nos dados. ZIP não gerado.")
-                    st.stop()
+                ]['Vendedor'].dropna().unique().tolist())
 
                 with zipfile.ZipFile(_zip_buf, 'w', zipfile.ZIP_DEFLATED) as _zout:
                     for _vend in _vendedores_ativos:
@@ -2309,11 +2264,7 @@ with st.sidebar:
 
                 st.session_state['_zip_semanal'] = _zip_buf.getvalue()
                 st.session_state['_zip_semanal_nome'] = f"RELATORIO_SEMANAL_{_hoje.strftime('%d-%m-%Y')}.zip"
-                if len(_zip_buf.getvalue()) < 100:
-                    st.sidebar.warning("⚠️ ZIP gerado está vazio. Nenhum dado encontrado para os vendedores no período.")
-                    st.session_state['_zip_semanal'] = None
-                else:
-                    st.rerun()
+                st.rerun()
 
             except Exception as _e:
                 st.sidebar.error(f"Erro: {_e}")
@@ -2731,7 +2682,7 @@ elif menu == "Positivação":
 
     st.markdown("---")
 
-    tab1, tab2, tab3_fat = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado", "🧾 Pedidos Faturados"])
+    tab1, tab2, tab3_fat, tab4_prod = st.tabs(["📊 Por Vendedor", "🗺️ Por Estado", "🧾 Pedidos Faturados", "📦 Faturamento por Produto"])
     
     with tab1:
         base_vendedor = df.groupby('Vendedor')['CPF_CNPJ'].nunique().reset_index()
@@ -2989,6 +2940,65 @@ elif menu == "Positivação":
                 "application/vnd.ms-excel",
                 key="download_fat"
             )
+
+    with tab4_prod:
+        st.subheader("📦 Faturamento por Produto no Período")
+
+        _prod_fat = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].copy()
+
+        # Filtros
+        _col_fp1, _col_fp2, _col_fp3 = st.columns(3)
+        with _col_fp1:
+            _fp_vend = st.selectbox(
+                "Vendedor", ['Todos'] + sorted(_prod_fat['Vendedor'].dropna().unique().tolist()),
+                key="fp_vend_posit"
+            )
+        with _col_fp2:
+            _fp_busca = st.text_input("🔍 Buscar produto", placeholder="Digite o nome...", key="fp_busca_posit")
+        with _col_fp3:
+            _fp_ordem = st.selectbox("Ordenar por", ["Faturamento (Maior)", "Quantidade (Maior)", "Nome (A-Z)"], key="fp_ordem_posit")
+
+        if _fp_vend != 'Todos':
+            _prod_fat = _prod_fat[_prod_fat['Vendedor'] == _fp_vend]
+        if _fp_busca and len(_fp_busca) >= 2:
+            _prod_fat = _prod_fat[_prod_fat['NomeProduto'].str.contains(_fp_busca, case=False, na=False)]
+
+        _prod_agrup = _prod_fat.groupby(['CodigoProduto', 'NomeProduto']).agg(
+            Quantidade=('Quantidade', 'sum'),
+            TotalProduto=('TotalProduto', 'sum')
+        ).reset_index()
+
+        if _fp_ordem == "Faturamento (Maior)":
+            _prod_agrup = _prod_agrup.sort_values('TotalProduto', ascending=False)
+        elif _fp_ordem == "Quantidade (Maior)":
+            _prod_agrup = _prod_agrup.sort_values('Quantidade', ascending=False)
+        else:
+            _prod_agrup = _prod_agrup.sort_values('NomeProduto')
+
+        _col_fp_m1, _col_fp_m2, _col_fp_m3 = st.columns(3)
+        with _col_fp_m1:
+            st.metric("Total Produtos", len(_prod_agrup))
+        with _col_fp_m2:
+            st.metric("Faturamento Total", f"R$ {_prod_agrup['TotalProduto'].sum():,.2f}")
+        with _col_fp_m3:
+            st.metric("Qtd Total", f"{_prod_agrup['Quantidade'].sum():,.0f}")
+
+        _prod_display = _prod_agrup.copy()
+        _prod_display['TotalProduto'] = _prod_display['TotalProduto'].apply(lambda x: f"R$ {x:,.2f}")
+        _prod_display['Quantidade']   = _prod_display['Quantidade'].apply(lambda x: f"{x:,.0f}")
+        _prod_display = _prod_display.rename(columns={
+            'CodigoProduto': 'Código', 'NomeProduto': 'Produto',
+            'Quantidade': 'Qtd', 'TotalProduto': 'Faturamento'
+        })
+        st.dataframe(_prod_display, use_container_width=True, height=420, hide_index=True)
+
+        st.download_button(
+            "📥 Exportar Faturamento por Produto",
+            to_excel(_prod_agrup),
+            "faturamento_por_produto.xlsx",
+            "application/vnd.ms-excel",
+            key="dl_fat_produto_posit"
+        )
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
@@ -4476,66 +4486,25 @@ elif menu == "Preço Médio":
     df_produtos.columns       = df_produtos.columns.str.upper().str.strip()
 
     # Verificar coluna obrigatoria
-    if 'CODPRODUTO' not in df_vendas_produto.columns:
-        st.error(f"\u274c Coluna CODPRODUTO n\u00e3o encontrada na planilha de vendas")
-        st.info(f"\ud83d\udccb Colunas encontradas: {', '.join(df_vendas_produto.columns.tolist())}")
-        st.stop()
+    # A planilha de preço médio já contém todos os dados consolidados:
+    # CODPRODUTO, NOMEPRODUTO, GRAMATURA, TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO, MesAno, Mes, Ano
+    # Nenhum merge ou recálculo é necessário — usar diretamente.
+    df_preco_medio = df_vendas_produto.copy()
+    df_preco_medio.columns = df_preco_medio.columns.str.strip()
 
-    # PROCV: buscar NOMEPRODUTO e GRAMATURA da planilha Produtos Agrupados
-    _cod_col = next((c for c in df_produtos.columns if c in ('ID_COD','CODPRODUTO','COD','CODIGO')), None)
-    if _cod_col is None:
-        st.error("\u274c Coluna de c\u00f3digo n\u00e3o encontrada na planilha de produtos (esperado: ID_COD ou CODPRODUTO)")
-        st.stop()
-    df_produtos = df_produtos.rename(columns={_cod_col: 'CODPRODUTO'})
-
-    # Montar NOMEPRODUTO com a mesma concatenação usada na Tabela de Preços / Histórico:
-    # GRUPO + DESCRIÇÃO + LINHA (com fallback para variações de nome de coluna)
-    for _alias_pair in [('DESCRICAO', 'DESCRIÇÃO'), ('LINHAS', 'LINHA'), ('GRUPOS', 'GRUPO')]:
-        if _alias_pair[0] in df_produtos.columns and _alias_pair[1] not in df_produtos.columns:
-            df_produtos = df_produtos.rename(columns={_alias_pair[0]: _alias_pair[1]})
-
-    _partes_nome = [c for c in ['GRUPO', 'DESCRIÇÃO', 'LINHA'] if c in df_produtos.columns]
-    if _partes_nome:
-        # Concatenação igual à linha 3771: GRUPO + DESCRIÇÃO + LINHA
-        df_produtos['NOMEPRODUTO'] = df_produtos[_partes_nome].fillna('').astype(str).apply(
-            lambda r: ' '.join(p.strip() for p in r if p.strip()), axis=1
-        ).str.strip()
-        # Fallback para linhas sem descrição
-        _mask_vazio = df_produtos['NOMEPRODUTO'].str.strip() == ''
-        df_produtos.loc[_mask_vazio, 'NOMEPRODUTO'] = df_produtos.loc[_mask_vazio, 'CODPRODUTO'].astype(str)
-    else:
-        # Se não tem nenhuma das colunas, tenta NOMEPRODUTO direto ou usa código
-        _nome_col = next((c for c in df_produtos.columns if c in ('NOMEPRODUTO','NOME','PRODUTO')), None)
-        if _nome_col and _nome_col != 'NOMEPRODUTO':
-            df_produtos = df_produtos.rename(columns={_nome_col: 'NOMEPRODUTO'})
-        if 'NOMEPRODUTO' not in df_produtos.columns:
-            df_produtos['NOMEPRODUTO'] = df_produtos['CODPRODUTO'].astype(str)
-
-    if 'GRAMATURA' not in df_produtos.columns:
-        df_produtos['GRAMATURA'] = ''
-
-    # Garantir tipo string para join correto
-    df_vendas_produto['CODPRODUTO'] = df_vendas_produto['CODPRODUTO'].astype(str).str.strip()
-    df_produtos['CODPRODUTO']       = df_produtos['CODPRODUTO'].astype(str).str.strip()
-
-    # Remover colunas que conflitam com o lookup para evitar sufixos _x/_y
-    for _drop_col in ['NOMEPRODUTO', 'GRAMATURA']:
-        if _drop_col in df_vendas_produto.columns:
-            df_vendas_produto = df_vendas_produto.drop(columns=[_drop_col])
-
-    # Lookup sem duplicatas (PROCV)
-    _lookup = df_produtos[['CODPRODUTO','NOMEPRODUTO','GRAMATURA']].drop_duplicates(subset='CODPRODUTO')
-
-    # Merge: dados de TOTQTD, PRECOUNITMEDIO, TOTLIQUIDO vem direto da planilha, sem recalcular
-    df_preco_medio = pd.merge(df_vendas_produto, _lookup, on='CODPRODUTO', how='left')
-
-    produtos_nao_catalogados = int(df_preco_medio['NOMEPRODUTO'].isna().sum())
+    # Garantir coluna NOMEPRODUTO
+    if 'NOMEPRODUTO' not in df_preco_medio.columns:
+        df_preco_medio['NOMEPRODUTO'] = df_preco_medio['CODPRODUTO'].astype(str)
     df_preco_medio['NOMEPRODUTO'] = df_preco_medio['NOMEPRODUTO'].fillna(
-        'N\u00e3o catalogado (' + df_preco_medio['CODPRODUTO'].astype(str) + ')'
+        'Não catalogado (' + df_preco_medio['CODPRODUTO'].astype(str) + ')'
     )
+
+    # Garantir GRAMATURA
+    if 'GRAMATURA' not in df_preco_medio.columns:
+        df_preco_medio['GRAMATURA'] = ''
     df_preco_medio['GRAMATURA'] = df_preco_medio['GRAMATURA'].fillna('')
 
-    # Colunas de periodo: usar as da planilha se existirem
+    # Garantir colunas de período
     data_atual = pd.Timestamp.now()
     if 'MES' in df_preco_medio.columns:
         df_preco_medio = df_preco_medio.rename(columns={'MES': 'Mes'})
@@ -4550,6 +4519,8 @@ elif menu == "Preço Médio":
             df_preco_medio['Ano'].astype(str) + '-' +
             df_preco_medio['Mes'].astype(str).str.zfill(2)
         )
+
+    produtos_nao_catalogados = 0
     
     
     
@@ -5330,13 +5301,35 @@ elif menu == "Pedidos Pendentes":
                         except:
                             pass
 
-                COLUNAS = [
+                COLUNAS_BASE = [
                     'N° Pedido', 'Cliente', 'Código', 'Gramatura', 'Volumes (cx)', 'Descrição',
                     'Contratado', 'Entregue', 'Pendente',
                     'Valor Unitário', 'Valor Pendente',
                     'Data Emissão', 'Dias Pendentes', 'Vendedor',
                     '% Entregue', 'Previsão', 'Categoria', 'Observações'
                 ]
+
+                # Abas que exibem Gramatura
+                ABAS_COM_GRAM  = {'Tipo Queijo', 'Pacote'}  # Gaze não estéril e Gaze circular
+                # Abas com agrupamento por fios
+                ABAS_COM_FIOS  = {'Esteril', 'Tipo Queijo', 'Pacote'}
+                ORDEM_FIOS_REL = ['09', '11', '13', 'Outros']
+
+                IDX_GRAM_B  = COLUNAS_BASE.index('Gramatura')
+                IDX_CONT_B  = COLUNAS_BASE.index('Contratado')
+                IDX_ENT_B   = COLUNAS_BASE.index('Entregue')
+                IDX_PEND_B  = COLUNAS_BASE.index('Pendente')
+                IDX_VUNIT_B = COLUNAS_BASE.index('Valor Unitário')
+                IDX_VPEND_B = COLUNAS_BASE.index('Valor Pendente')
+                IDX_DESC_B  = COLUNAS_BASE.index('Descrição')
+
+                import re as _re_fios
+                def _fios(desc):
+                    d = str(desc).upper()
+                    for f in ['13', '11', '09', '9']:
+                        if _re_fios.search(r'\b' + f + r'\s*F', d) or                            _re_fios.search(r'(^|[\s\-_])' + f + r'(\s|$)', d):
+                            return '09' if f == '9' else f
+                    return 'Outros'
 
                 # Agrupar linhas por aba
                 abas_data = {}
@@ -5420,58 +5413,127 @@ elif menu == "Pedidos Pendentes":
                 ALT_FILL  = PatternFill("solid", fgColor="EEF3FC")
 
                 ORDEM_ABAS = ['Atadura Farma', 'Atadura Hospitalar', 'Campo', 'Tipo Queijo', 'Esteril', 'Pacote', 'Outros']
+                SEP_FILL   = PatternFill("solid", fgColor="1F4788")
+                SEP_FONT   = Font(bold=True, color="FFFFFF", size=10)
 
                 for nome_aba in ORDEM_ABAS:
-                    linhas = abas_data.get(nome_aba, [])
+                    linhas_base = abas_data.get(nome_aba, [])
                     ws = wb.create_sheet(title=nome_aba)
+
+                    # Gramatura: apenas Tipo Queijo (Gaze circular) e Pacote (Gaze não estéril)
+                    sem_gram = nome_aba not in ABAS_COM_GRAM
+                    COLUNAS  = [c for c in COLUNAS_BASE if not (sem_gram and c == 'Gramatura')]
+
+                    # col_map: índice em COLUNAS_BASE → posição 1-based em COLUNAS
+                    col_map = {i_b: i_a for i_a, i_b in
+                               enumerate([j for j, c in enumerate(COLUNAS_BASE)
+                                          if not (sem_gram and c == 'Gramatura')], 1)}
+
+                    def _linha_aba(lb):
+                        return [v for i, v in enumerate(lb) if not (sem_gram and i == IDX_GRAM_B)]
 
                     # Cabeçalho
                     ws.append(COLUNAS)
-                    for col_idx, _ in enumerate(COLUNAS, 1):
+                    for col_idx in range(1, len(COLUNAS) + 1):
                         cell = ws.cell(row=1, column=col_idx)
-                        cell.fill   = HDR_FILL
-                        cell.font   = HDR_FONT
-                        cell.alignment = HDR_ALIGN
-                        cell.border = BORDER
-
+                        cell.fill = HDR_FILL; cell.font = HDR_FONT
+                        cell.alignment = HDR_ALIGN; cell.border = BORDER
                     ws.row_dimensions[1].height = 30
 
-                    # Dados
-                    for r_idx, linha in enumerate(linhas, 2):
-                        ws.append(linha)
-                        fill = ALT_FILL if r_idx % 2 == 0 else PatternFill()
-                        for col_idx in range(1, len(COLUNAS) + 1):
-                            cell = ws.cell(row=r_idx, column=col_idx)
-                            cell.border = BORDER
-                            cell.alignment = Alignment(vertical="center")
-                            if fill.fill_type:
-                                cell.fill = fill
-                            # Formatar moeda
-                            if col_idx in (10, 11):
-                                cell.number_format = 'R$ #,##0.00'
-                            # Formatar números inteiros
-                            if col_idx in (7, 8, 9):
-                                cell.number_format = '#,##0'
+                    # Índices de coluna para formatos (1-based em COLUNAS)
+                    ci_cont  = col_map.get(IDX_CONT_B,  0)
+                    ci_ent   = col_map.get(IDX_ENT_B,   0)
+                    ci_pend  = col_map.get(IDX_PEND_B,  0)
+                    ci_vunit = col_map.get(IDX_VUNIT_B, 0)
+                    ci_vpend = col_map.get(IDX_VPEND_B, 0)
 
-                    # Larguras de coluna
-                    larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
-                    for i, larg in enumerate(larguras, 1):
+                    def _estilizar(r_idx, fill):
+                        for ci in range(1, len(COLUNAS) + 1):
+                            c = ws.cell(r_idx, ci)
+                            c.border = BORDER
+                            c.alignment = Alignment(vertical="center")
+                            if fill and fill.fill_type: c.fill = fill
+                            if ci in (ci_vunit, ci_vpend): c.number_format = 'R$ #,##0.00'
+                            if ci in (ci_cont, ci_ent, ci_pend): c.number_format = '#,##0'
+
+                    r_idx = 2
+
+                    if nome_aba in ABAS_COM_FIOS:
+                        # Agrupar por fios
+                        grupos_f = {f: [] for f in ORDEM_FIOS_REL}
+                        for lb in linhas_base:
+                            grupos_f[_fios(lb[IDX_DESC_B])].append(lb)
+
+                        dados_escritos = []
+                        for fio in ORDEM_FIOS_REL:
+                            grp = grupos_f[fio]
+                            if not grp:
+                                continue
+                            # Linha separadora
+                            label = f"{fio} Fios" if fio != 'Outros' else "Outros"
+                            ws.cell(r_idx, 1, label)
+                            ws.merge_cells(start_row=r_idx, start_column=1,
+                                           end_row=r_idx, end_column=len(COLUNAS))
+                            for ci in range(1, len(COLUNAS) + 1):
+                                c = ws.cell(r_idx, ci)
+                                c.fill = SEP_FILL; c.font = SEP_FONT
+                                c.alignment = Alignment(horizontal="center", vertical="center")
+                                c.border = BORDER
+                            ws.row_dimensions[r_idx].height = 18
+                            r_idx += 1
+                            for lb in grp:
+                                ws.append(_linha_aba(lb))
+                                _estilizar(r_idx, ALT_FILL if r_idx % 2 == 0 else PatternFill())
+                                dados_escritos.append(lb)
+                                r_idx += 1
+
+                        # Total — r_idx aponta para linha após último dado
+                        if dados_escritos:
+                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
+                            for i_b, ci in col_map.items():
+                                if i_b in (IDX_CONT_B, IDX_ENT_B, IDX_PEND_B, IDX_VPEND_B):
+                                    # Valor Pendente = Pendente × Valor Unitário (recalculado)
+                                    if i_b == IDX_VPEND_B:
+                                        tot = sum(
+                                            float(lb[IDX_PEND_B]) * float(lb[IDX_VUNIT_B])
+                                            if isinstance(lb[IDX_PEND_B], (int,float)) and isinstance(lb[IDX_VUNIT_B], (int,float)) else 0
+                                            for lb in dados_escritos
+                                        )
+                                    else:
+                                        tot = sum(float(lb[i_b]) if isinstance(lb[i_b], (int,float)) else 0 for lb in dados_escritos)
+                                    c = ws.cell(r_idx, ci, tot)
+                                    c.font = Font(bold=True)
+                                    c.number_format = 'R$ #,##0.00' if i_b == IDX_VPEND_B else '#,##0'
+                    else:
+                        for lb in linhas_base:
+                            ws.append(_linha_aba(lb))
+                            _estilizar(r_idx, ALT_FILL if r_idx % 2 == 0 else PatternFill())
+                            r_idx += 1
+
+                        # Total
+                        if linhas_base:
+                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
+                            for i_b, ci in col_map.items():
+                                if i_b in (IDX_CONT_B, IDX_ENT_B, IDX_PEND_B, IDX_VPEND_B):
+                                    if i_b == IDX_VPEND_B:
+                                        tot = sum(
+                                            float(lb[IDX_PEND_B]) * float(lb[IDX_VUNIT_B])
+                                            if isinstance(lb[IDX_PEND_B], (int,float)) and isinstance(lb[IDX_VUNIT_B], (int,float)) else 0
+                                            for lb in linhas_base
+                                        )
+                                    else:
+                                        tot = sum(float(lb[i_b]) if isinstance(lb[i_b], (int,float)) else 0 for lb in linhas_base)
+                                    c = ws.cell(r_idx, ci, tot)
+                                    c.font = Font(bold=True)
+                                    c.number_format = 'R$ #,##0.00' if i_b == IDX_VPEND_B else '#,##0'
+
+                    # Larguras
+                    if sem_gram:
+                        larguras = [14, 30, 10, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    else:
+                        larguras = [14, 30, 10, 12, 10, 35, 12, 12, 12, 14, 14, 14, 12, 20, 10, 14, 12, 20]
+                    for i, larg in enumerate(larguras[:len(COLUNAS)], 1):
                         ws.column_dimensions[get_column_letter(i)].width = larg
-
-                    # Rodapé com totais (última linha)
-                    if linhas:
-                        ultima = len(linhas) + 2
-                        ws.cell(ultima, 1, 'TOTAL').font = Font(bold=True)
-                        # Somar Contratado, Entregue, Pendente, ValorPendente
-                        for col_idx, nome_col in enumerate(COLUNAS, 1):
-                            if nome_col in ('Contratado', 'Entregue', 'Pendente', 'Valor Pendente'):
-                                total = sum(
-                                    float(linha[col_idx - 1]) if isinstance(linha[col_idx - 1], (int, float)) else 0
-                                    for linha in linhas
-                                )
-                                c = ws.cell(ultima, col_idx, total)
-                                c.font = Font(bold=True)
-                                c.number_format = '#,##0.00' if nome_col == 'Valor Pendente' else '#,##0'
 
                 output = BytesIO()
                 wb.save(output)
@@ -6667,12 +6729,11 @@ elif menu == "Performance de Vendedores":
                  7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
     _label_mes_card = f"{_meses_pt[_mes_card]}/{_ano_card}"
 
-    # Base completa de NF Venda (histórico todo) — deduplicada por NF igual ao restante do sistema
+    # Base completa apenas NF Venda — excluindo explicitamente devoluções antes de deduplicar
     _df_nf_hist_raw = df[df["TipoMov"] == "NF Venda"].copy()
     _df_nf_hist_raw["DataEmissao"] = pd.to_datetime(_df_nf_hist_raw["DataEmissao"], errors="coerce")
 
-    # Deduplicar por Numero_NF: uma linha por nota, TotalProduto = total da NF
-    # Igual ao obter_notas_unicas usado no restante do sistema
+    # Deduplicar por Numero_NF dentro de NF Venda (já filtrado, não há risco de NF Dev aqui)
     _df_nf_hist = _df_nf_hist_raw.drop_duplicates(subset=["Numero_NF"], keep="first")
 
     # Vendas do mês de referência (mês anterior ao vigente) — deduplicadas
