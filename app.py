@@ -4126,8 +4126,6 @@ elif menu == "__novo_pedido__":
             if df_produtos_pedido is not None:
                 df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
 
-    # Renderizar via Histórico tab3 — abrimos o mesmo bloco encapsulado em uma função inline
-    # Reutilizamos o mesmo código do Histórico mas sem os outros tabs
     st.markdown("### 👤 Informações do Cliente")
     col_cli1, col_cli2 = st.columns(2)
     with col_cli1:
@@ -4135,13 +4133,13 @@ elif menu == "__novo_pedido__":
         cliente_selecionado = st.selectbox("Selecione o Cliente", [''] + clientes_lista, key="cliente_pedido_np")
     dados_cliente = {}
     if cliente_selecionado:
-        df_cliente = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
+        df_cliente_row = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
         dados_cliente = {
-            'razao_social': df_cliente.get('RazaoSocial', ''),
-            'cpf_cnpj': df_cliente.get('CPF_CNPJ', ''),
-            'cidade': df_cliente.get('Cidade', ''),
-            'estado': df_cliente.get('Estado', ''),
-            'vendedor': df_cliente.get('Vendedor', '')
+            'razao_social': df_cliente_row.get('RazaoSocial', ''),
+            'cpf_cnpj':     df_cliente_row.get('CPF_CNPJ', ''),
+            'cidade':       df_cliente_row.get('Cidade', ''),
+            'estado':       df_cliente_row.get('Estado', ''),
+            'vendedor':     df_cliente_row.get('Vendedor', '')
         }
     with col_cli2:
         representante = st.text_input("Representante", value=dados_cliente.get('vendedor', ''), key="representante_pedido_np")
@@ -4157,11 +4155,177 @@ elif menu == "__novo_pedido__":
         telefone_pedido = st.text_input("Telefone", key="tel_pedido_np")
     with col_cli7:
         email_pedido = st.text_input("Email NF-e", key="email_pedido_np")
-    endereco_pedido = st.text_input("Endereço", value=f"{dados_cliente.get('cidade','')}/{dados_cliente.get('estado','')}" if dados_cliente else "", key="end_pedido_np")
+    _end_default = f"{dados_cliente.get('cidade','')}/{dados_cliente.get('estado','')}" if dados_cliente else ""
+    endereco_pedido = st.text_input("Endereço", value=_end_default, key="end_pedido_np")
     obs_cliente = st.text_area("Observação (Cliente)", key="obs_cli_pedido_np", height=80)
     st.markdown("---")
-    # Aviso para usar o módulo completo para geração de PDF
-    st.info("💡 Para gerar PDF e acessar todas as funcionalidades do pedido, utilize o módulo **Histórico** › aba **Pedidos**.")
+
+    st.markdown("### 📋 Informações do Pedido")
+    col_ped1, col_ped2, col_ped3, col_ped4 = st.columns(4)
+    with col_ped1:
+        num_pedido = st.text_input("Nº do Pedido", key="num_pedido_np")
+    with col_ped2:
+        tabela_preco = st.text_input("Tabela de Preço", key="tab_preco_np")
+    with col_ped3:
+        tipo_frete = st.selectbox("Tipo de Frete", ["CIF", "FOB"], key="tipo_frete_np")
+    with col_ped4:
+        data_venda = st.date_input("Data da Venda", value=pd.Timestamp.now(), key="data_venda_np")
+    condicoes_pagto = st.text_input("Condições de Pagamento", key="cond_pagto_np")
+    st.markdown("---")
+
+    st.markdown("### 🛒 Adicionar Produtos ao Pedido")
+    col_prod1, col_prod2, col_prod3, col_prod4 = st.columns([2, 1, 1, 1])
+    produto_info = {}
+    with col_prod1:
+        tipo_busca_prod = st.radio("Buscar por:", ["Código", "Descrição"], horizontal=True, key="tipo_busca_prod_np")
+        if tipo_busca_prod == "Código":
+            if df_produtos_pedido is not None:
+                codigos_lista = [''] + sorted(df_produtos_pedido['ID_COD'].dropna().astype(str).unique().tolist())
+                codigo_selecionado = st.selectbox("Código do Produto", codigos_lista, key="cod_prod_pedido_np")
+            else:
+                codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_np")
+        else:
+            busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido_np")
+            codigo_selecionado = None
+
+    if df_produtos_pedido is not None and codigo_selecionado:
+        prod_row = df_produtos_pedido[df_produtos_pedido['ID_COD'].astype(str) == str(codigo_selecionado)]
+        if len(prod_row) > 0:
+            prod_row = prod_row.iloc[0]
+            _desc_parts = [str(prod_row.get(c, '') or '') for c in ['GRUPO','DESCRIÇÃO','DESCRICAO','LINHA','LINHAS'] if c in df_produtos_pedido.columns]
+            descricao_completa = ' '.join(p.strip() for p in _desc_parts if p.strip())
+            produto_info = {
+                'codigo':      str(prod_row.get('ID_COD', '')),
+                'descricao':   descricao_completa or str(codigo_selecionado),
+                'peso':        prod_row.get('GRAMATURA', ''),
+                'cx_embarque': prod_row.get('CX_EMB', ''),
+                'preco_ref':   prod_row.get('PRECO', 0) or 0
+            }
+            if cliente_selecionado:
+                hist_cli = df[(df['RazaoSocial'] == cliente_selecionado) &
+                              (df['CodigoProduto'].astype(str) == str(codigo_selecionado))]
+                if len(hist_cli) > 0:
+                    hist_cli = hist_cli.sort_values('DataEmissao', ascending=False)
+                    produto_info['preco_sugerido'] = hist_cli.iloc[0]['PrecoUnit']
+                else:
+                    produto_info['preco_sugerido'] = produto_info['preco_ref']
+            else:
+                produto_info['preco_sugerido'] = produto_info['preco_ref']
+
+    with col_prod2:
+        qtde_item = st.number_input("Quantidade", min_value=0, value=0, key="qtde_item_pedido_np")
+    with col_prod3:
+        valor_item = st.number_input("Valor Unit.", min_value=0.0,
+                                     value=float(produto_info.get('preco_sugerido', 0)),
+                                     format="%.2f", key="valor_item_pedido_np")
+    with col_prod4:
+        st.write(""); st.write("")
+        if st.button("➕ Adicionar Item", use_container_width=True, key="add_item_pedido_np"):
+            if produto_info and qtde_item > 0:
+                comissao = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
+                st.session_state.itens_pedido.append({
+                    'codigo':          produto_info['codigo'],
+                    'descricao':       produto_info['descricao'],
+                    'peso':            produto_info.get('peso', ''),
+                    'cx_embarque':     produto_info.get('cx_embarque', ''),
+                    'quantidade':      qtde_item,
+                    'valor_unit':      valor_item,
+                    'preco_historico': produto_info.get('preco_sugerido', 0),
+                    'total':           qtde_item * valor_item,
+                    'comissao':        comissao
+                })
+                st.success(f"✅ Item adicionado: {produto_info['descricao']}")
+                st.rerun()
+
+    # Preview em tempo real
+    if produto_info and qtde_item > 0 and valor_item > 0:
+        st.markdown("---")
+        st.markdown("### 👁️ Preview do Item")
+        _total_prev = qtde_item * valor_item
+        _preco_hist  = produto_info.get('preco_sugerido', 0)
+        _comissao_p  = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
+        st.dataframe(pd.DataFrame([{
+            'Código': produto_info['codigo'],
+            'Produto': produto_info['descricao'][:50],
+            'Peso': produto_info.get('peso', ''),
+            'Cx Embarque': produto_info.get('cx_embarque', ''),
+            'Qtde': f"{qtde_item:,.0f}",
+            'Preço Histórico': f"R$ {_preco_hist:,.2f}",
+            'Valor Unit.': f"R$ {valor_item:,.2f}",
+            'Total': f"R$ {_total_prev:,.2f}",
+            'Comissão%': _comissao_p
+        }]), use_container_width=True, hide_index=True)
+        if _preco_hist > 0:
+            _var = ((valor_item - _preco_hist) / _preco_hist) * 100
+            if _var > 0:
+                st.info(f"📈 Valor {_var:.1f}% **acima** do histórico (R$ {_preco_hist:,.2f})")
+            elif _var < 0:
+                st.warning(f"📉 Valor {abs(_var):.1f}% **abaixo** do histórico (R$ {_preco_hist:,.2f})")
+            else:
+                st.success(f"✅ Valor **igual** ao histórico")
+        st.markdown("---")
+
+    # Itens do pedido
+    if st.session_state.itens_pedido:
+        st.markdown("---")
+        st.markdown("### 📦 Itens do Pedido")
+        df_itens = pd.DataFrame(st.session_state.itens_pedido)
+        df_itens_display = df_itens.copy()
+        df_itens_display['preco_historico'] = df_itens_display['preco_historico'].apply(lambda x: f"R$ {x:,.2f}")
+        df_itens_display['valor_unit']      = df_itens_display['valor_unit'].apply(lambda x: f"R$ {x:,.2f}")
+        df_itens_display['total']           = df_itens_display['total'].apply(lambda x: f"R$ {x:,.2f}")
+        df_itens_display = df_itens_display.rename(columns={
+            'codigo':'COD.','descricao':'PRODUTO','peso':'PESO',
+            'cx_embarque':'CX EMBARQUE','quantidade':'QTDE',
+            'preco_historico':'PREÇO HISTÓRICO','valor_unit':'VALOR',
+            'total':'TOTAL','comissao':'COMISSÃO%'
+        })
+        st.dataframe(df_itens_display, use_container_width=True, height=300)
+        col_met1, col_met2, col_met3 = st.columns(3)
+        with col_met1:
+            st.metric("Qtde Total", f"{df_itens['quantidade'].sum():,.0f}")
+        with col_met2:
+            st.metric("Frete", tipo_frete)
+        with col_met3:
+            st.metric("Total Final", f"R$ {df_itens['total'].sum():,.2f}")
+        obs_pedido = st.text_area("Observação (Pedido)", key="obs_pedido_np", height=100)
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🗑️ Limpar Pedido", use_container_width=True, key="limpar_pedido_np"):
+                st.session_state.itens_pedido = []
+                st.rerun()
+        with col_btn2:
+            if st.button("📄 Gerar PDF do Pedido", use_container_width=True, key="gerar_pdf_pedido_np", type="primary"):
+                try:
+                    dados_cliente_pdf = {
+                        'representante': representante, 'razao_social': cliente_selecionado,
+                        'nome_fantasia': nome_fantasia, 'cnpj': cnpj_pedido,
+                        'ie': insc_estadual, 'telefone': telefone_pedido,
+                        'email': email_pedido, 'endereco': endereco_pedido,
+                        'obs_cliente': obs_cliente
+                    }
+                    dados_pedido_pdf = {
+                        'numero': num_pedido, 'tabela_preco': tabela_preco,
+                        'tipo_frete': tipo_frete,
+                        'data_venda': data_venda.strftime('%d/%m/%Y'),
+                        'condicoes_pagto': condicoes_pagto
+                    }
+                    pdf_bytes = gerar_pdf_pedido(dados_cliente_pdf, dados_pedido_pdf,
+                                                  st.session_state.itens_pedido, obs_pedido)
+                    st.download_button(
+                        label="📥 Baixar PDF do Pedido",
+                        data=pdf_bytes,
+                        file_name=f"Pedido_{num_pedido or 'SN'}_{(cliente_selecionado or 'cliente').replace(' ','_')}.pdf",
+                        mime="application/pdf",
+                        key="download_pdf_pedido_np"
+                    )
+                    st.success("✅ PDF gerado com sucesso!")
+                except Exception as _e_pdf:
+                    st.error(f"❌ Erro ao gerar PDF: {str(_e_pdf)}")
+    else:
+        st.info("ℹ️ Nenhum item adicionado. Use o formulário acima para adicionar produtos.")
+
+
 
 # ====================== HISTÓRICO DO CLIENTE (alias de Histórico > tab Por Cliente) ======================
 elif menu == "__historico_cliente__":
@@ -4288,6 +4452,11 @@ elif menu == "Preço Médio":
     # Garantir tipo string para join correto
     df_vendas_produto['CODPRODUTO'] = df_vendas_produto['CODPRODUTO'].astype(str).str.strip()
     df_produtos['CODPRODUTO']       = df_produtos['CODPRODUTO'].astype(str).str.strip()
+
+    # Remover colunas que conflitam com o lookup para evitar sufixos _x/_y
+    for _drop_col in ['NOMEPRODUTO', 'GRAMATURA']:
+        if _drop_col in df_vendas_produto.columns:
+            df_vendas_produto = df_vendas_produto.drop(columns=[_drop_col])
 
     # Lookup sem duplicatas (PROCV)
     _lookup = df_produtos[['CODPRODUTO','NOMEPRODUTO','GRAMATURA']].drop_duplicates(subset='CODPRODUTO')
@@ -6674,6 +6843,56 @@ elif menu == "Performance de Vendedores":
             # Tamanho: 1080×1080 (quadrado Instagram/WhatsApp)
             _W, _H = 1080, 1080
 
+            def _focos_automaticos(vendedor, cresc_m, cresc_a, posit_p):
+                """Gera 3 focos automáticos baseados nos pontos fracos do vendedor."""
+                _candidatos = []
+                # Crescimento mensal fraco → reativação
+                if cresc_m < 5:
+                    _candidatos.append(("cresc_m", cresc_m, "Reativacao de clientes inativos"))
+                # Positivação fraca → novos clientes
+                if posit_p < 50:
+                    _candidatos.append(("posit", posit_p, "Ampliar base de clientes ativos"))
+                # Crescimento anual fraco → mix de produtos
+                if cresc_a < 10:
+                    _candidatos.append(("cresc_a", cresc_a, "Ampliar mix de produtos"))
+                # Sempre adicionar como fallback
+                _candidatos += [
+                    ("pad1", 99, "Manter ritmo de positivacao"),
+                    ("pad2", 99, "Recuperar orcamentos pendentes"),
+                    ("pad3", 99, "Fortalecer relacionamento com clientes"),
+                ]
+                # Ordenar pelos mais fracos primeiro
+                _candidatos.sort(key=lambda x: x[1])
+                return [c[2] for c in _candidatos[:3]]
+
+            def _meta_proximo_mes(vendedor):
+                """Meta do mês SEGUINTE ao de referência (mesmo algoritmo dos cards)."""
+                _mes_prox = _mes_card + 1 if _mes_card < 12 else 1
+                _ano_prox = _ano_card if _mes_card < 12 else _ano_card + 1
+                _ano_prox_ant = _ano_prox - 1
+                # Historico do mesmo mes do ano anterior ao proximo
+                _hist = float(_df_nf_hist[
+                    (_df_nf_hist["Vendedor"] == vendedor) &
+                    (_df_nf_hist["DataEmissao"].dt.month == _mes_prox) &
+                    (_df_nf_hist["DataEmissao"].dt.year  == _ano_prox_ant)
+                ]["TotalProduto"].sum())
+                if _hist > 0:
+                    return _hist * 1.15, f"{_meses_pt[_mes_prox][:3]}/{_ano_prox_ant} +15%"
+                # Sem historico: media dos 3 meses anteriores ao proximo mes
+                _ref2   = pd.Timestamp(year=_ano_prox, month=_mes_prox, day=1)
+                _3m2    = _ref2 - pd.DateOffset(months=3)
+                _ult3b  = _df_nf_hist[
+                    (_df_nf_hist["Vendedor"] == vendedor) &
+                    (_df_nf_hist["DataEmissao"] >= _3m2) &
+                    (_df_nf_hist["DataEmissao"] <  _ref2)
+                ]
+                if len(_ult3b) > 0:
+                    _fat3b = _ult3b.groupby(
+                        [_ult3b["DataEmissao"].dt.year, _ult3b["DataEmissao"].dt.month]
+                    )["TotalProduto"].sum()
+                    return _fat3b.mean() * 1.15, "Media 3m +15%"
+                return 0, "Sem historico"
+
             def _draw_card_img(vendedor):
                 _fat_r   = float(_fat_card.get(vendedor, 0))
                 _meta_v, _meta_lbl, _bm = _meta_card(vendedor)
@@ -6687,152 +6906,310 @@ elif menu == "Performance de Vendedores":
                 _cresc_a = ((_fat_r - _fat_aa) / _fat_aa * 100) if _fat_aa > 0 else 0
                 _reat_v  = _reativados_vend(vendedor)
 
-                # Canvas 1080x1350 (retrato — mais espaço vertical para os dados)
-                _W2, _H2 = 1080, 1350
-                img = _PilImg.new("RGB", (_W2, _H2), (245, 249, 255))
-                draw = _PilDraw.Draw(img)
+                # Meta próximo mês
+                _meta_prox, _meta_prox_lbl = _meta_proximo_mes(vendedor)
+                _mes_prox_nm = _meses_pt[(_mes_card % 12) + 1]
+                _ano_prox_nm = _ano_card if _mes_card < 12 else _ano_card + 1
 
-                # Fundo gradiente suave
-                for _y in range(_H2):
-                    _t = _y / _H2
-                    _r2 = int(232 + _t * 18)
-                    _g2 = int(241 + _t * 10)
-                    _b2 = 255
-                    draw.line([(0, _y), (_W2, _y)], fill=(_r2, _g2, _b2))
+                # Focos automáticos
+                _focos_auto = _focos_automaticos(vendedor, _cresc_m, _cresc_a, _posit_p)
+                _f1, _f2, _f3 = _focos_auto[0], _focos_auto[1], _focos_auto[2]
 
-                # Fontes — bem maiores
+                # Cores crescimento
+                def _cc(v): return "#27AE60" if v >= 0 else "#E74C3C"
+                def _cs(v): return f"{v:+.1f}%"
+
+                # Cor barra meta
+                _meta_cor = "#27AE60" if _perc_m >= 100 else ("#F39C12" if _perc_m >= 70 else "#E74C3C")
+                _barra_w  = min(int(_perc_m), 100)
+
+                # Logo base64
+                _logo_b64 = ""
                 try:
-                    _fb  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 110)
-                    _fbd = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
-                    _fm  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
-                    _fs  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
-                    _fv  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
-                    _fl  = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34)
-                    _fxs = _PilFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+                    import base64 as _b64
+                    import requests as _req2
+                    _lr2 = _req2.get(f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_FOLDER}/logo.png", timeout=5)
+                    _logo_b64 = _b64.b64encode(_lr2.content).decode()
+                    _logo_tag = f'<img src="data:image/png;base64,{_logo_b64}" style="height:90px;margin-bottom:4px;">'
                 except:
-                    _fb = _fbd = _fm = _fs = _fv = _fl = _fxs = _PilFont.load_default()
+                    _logo_tag = '<div style="font-size:48px;font-weight:900;color:#0D234B;">MEDTEXTIL</div>'
 
-                # ── HEADER: branco ──
-                draw.rectangle([0, 0, _W2, 320], fill=(255, 255, 255))
+                _html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap');
+  * {{ margin:0; padding:0; box-sizing:border-box; }}
+  body {{
+    width:1080px; background:#EAF1FB;
+    font-family: 'Montserrat', 'DejaVu Sans', Arial, sans-serif;
+  }}
+  .wrap {{ width:1080px; background:#EAF1FB; }}
 
-                # Logo centralizado no header
-                if _logo_pil:
-                    _lh2 = 120
-                    _lw2 = int(_logo_pil.width * _lh2 / _logo_pil.height)
-                    _lr2 = _logo_pil.resize((_lw2, _lh2), _PilImg.LANCZOS)
-                    img.paste(_lr2, ((_W2 - _lw2) // 2, 20), _lr2)
+  /* HEADER */
+  .header {{
+    background:#fff; text-align:center;
+    padding:28px 40px 18px; border-bottom:5px solid #27AE60;
+  }}
+  .header .titulo {{ font-size:96px; font-weight:900; color:#0D234B; line-height:1.0; letter-spacing:2px; }}
+  .header .mensal  {{ font-size:96px; font-weight:900; color:#27AE60; line-height:1.0; letter-spacing:2px; }}
+  .header .mesref  {{ font-size:32px; color:#6C8EBD; margin-top:8px; font-weight:600; }}
 
-                # RESULTADO / MENSAL
-                draw.text((_W2 // 2, 175), "RESULTADO", font=_fb, fill=(10, 30, 70), anchor="mm")
-                draw.text((_W2 // 2, 278), "MENSAL", font=_fb, fill=(39, 174, 96), anchor="mm")
+  /* ROW VENDEDOR/MES */
+  .row-info {{ display:flex; gap:16px; padding:20px 40px 0; }}
+  .info-box {{
+    flex:1; background:#0D234B; border-radius:18px;
+    display:flex; align-items:center; gap:16px; padding:18px 22px;
+  }}
+  .info-icon {{
+    width:64px; height:64px; border-radius:50%; background:#27AE60;
+    display:flex; align-items:center; justify-content:center;
+    font-size:32px; color:#fff; font-weight:900; flex-shrink:0;
+  }}
+  .info-label {{ font-size:22px; color:#27AE60; font-weight:700; }}
+  .info-val   {{ font-size:30px; color:#fff; font-weight:800; margin-top:2px; }}
 
-                # Linha separadora verde
-                draw.rectangle([60, 315, _W2 - 60, 321], fill=(39, 174, 96))
+  /* GRID DE CARDS */
+  .grid {{ display:flex; gap:16px; padding:16px 40px 0; }}
+  .card {{
+    flex:1; background:#fff; border-radius:22px;
+    overflow:hidden; border:2px solid #D0DFF5;
+  }}
+  .card-top {{
+    background:#0D234B; padding:18px 16px;
+    display:flex; align-items:center; gap:14px;
+  }}
+  .card-icon {{
+    width:60px; height:60px; border-radius:50%; background:#27AE60;
+    display:flex; align-items:center; justify-content:center;
+    font-size:30px; color:#fff; font-weight:900; flex-shrink:0;
+  }}
+  .card-label {{ font-size:26px; font-weight:800; color:#fff; line-height:1.2; }}
+  .card-body  {{ padding:20px 20px 14px; }}
+  .card-val   {{ font-size:56px; font-weight:900; color:#0D234B; line-height:1.0; }}
+  .card-sub   {{ font-size:22px; color:#7A90B0; margin-top:6px; font-weight:600; }}
+  .card-dot   {{
+    width:16px; height:16px; border-radius:50%; background:#27AE60;
+    margin: 8px 0 4px 20px;
+  }}
+  .green  {{ color:#27AE60 !important; }}
+  .red    {{ color:#E74C3C !important; }}
+  .orange {{ color:#F39C12 !important; }}
 
-                # ── Helper rounded rect ──
-                def _rr(x1, y1, x2, y2, r=22, fill=(13,35,75), outline=None):
-                    draw.rounded_rectangle([x1,y1,x2,y2], radius=r,
-                                           fill=fill, outline=outline or fill, width=3)
+  /* BARRA META */
+  .meta-bar-wrap {{ padding:4px 20px 0; }}
+  .meta-bar-bg {{ background:#E8EFF8; border-radius:6px; height:10px; }}
+  .meta-bar-fg {{ background:{_meta_cor}; border-radius:6px; height:10px; width:{_barra_w}%; }}
 
-                # ── Helper: bloco card estilo referência ──
-                # Topo navy (ícone círculo + label), fundo branco (valor), ponto verde base
-                def _bloco(x1, y1, x2, y2, icon_txt, label, valor, sub="", val_col=(10,30,70)):
-                    _th = 115  # altura do topo navy
-                    # Fundo total arredondado branco com borda
-                    _rr(x1, y1, x2, y2, r=24, fill=(255,255,255), outline=(200,215,240))
-                    # Topo navy
-                    _rr(x1, y1, x2, y1+_th, r=24, fill=(13,35,75))
-                    # Cobrir cantos inferiores do navy (para não arredondar embaixo)
-                    draw.rectangle([x1, y1+_th-24, x2, y1+_th], fill=(13,35,75))
-                    # Círculo verde com ícone
-                    _cr2 = 36
-                    _cx2, _cy2 = x1 + _cr2 + 18, y1 + _th // 2
-                    draw.ellipse([_cx2-_cr2, _cy2-_cr2, _cx2+_cr2, _cy2+_cr2], fill=(39,174,96))
-                    draw.text((_cx2, _cy2), icon_txt, font=_fm, fill=(255,255,255), anchor="mm")
-                    # Label no topo
-                    _lx2 = _cx2 + _cr2 + 16
-                    draw.text((_lx2, _cy2), label, font=_fs, fill=(255,255,255), anchor="lm")
-                    # Valor no fundo branco
-                    _mid_val = y1 + _th + (y2 - y1 - _th) // 2 - (20 if sub else 0)
-                    draw.text((x1 + 24, _mid_val), valor, font=_fv, fill=val_col, anchor="lm")
-                    if sub:
-                        draw.text((x1 + 24, _mid_val + 68), sub, font=_fxs, fill=(100,120,160), anchor="lm")
-                    # Ponto verde decorativo na base
-                    draw.ellipse([x1+20, y2-20, x1+36, y2-4], fill=(39,174,96))
+  /* META PROXIMO MES */
+  .prox-box {{
+    margin:16px 40px 0;
+    background:#0D234B; border-radius:18px; padding:22px 28px;
+    display:flex; align-items:center; gap:24px;
+  }}
+  .prox-label {{ font-size:26px; color:#27AE60; font-weight:800; }}
+  .prox-val   {{ font-size:44px; color:#fff; font-weight:900; }}
+  .prox-sub   {{ font-size:20px; color:#7AAED6; margin-top:2px; }}
 
-                # ── ROW 1: Vendedor | Mês de Referência ──
-                _rr(60, 330, 520, 440, fill=(13,35,75))
-                draw.ellipse([78, 348, 130, 400], fill=(39,174,96))
-                draw.text((104, 374), "V", font=_fm, fill=(255,255,255), anchor="mm")
-                draw.text((148, 354), "VENDEDOR", font=_fxs, fill=(39,174,96))
-                draw.text((148, 390), vendedor[:20], font=_fs, fill=(255,255,255))
+  /* FOCO */
+  .foco-box {{
+    margin:16px 40px 0;
+    background:#0B1C45; border-radius:18px; padding:20px 24px;
+    display:flex; align-items:center; gap:20px;
+  }}
+  .foco-title-wrap {{ min-width:170px; }}
+  .foco-title {{ font-size:22px; color:#27AE60; font-weight:800; line-height:1.2; }}
+  .foco-big   {{ font-size:32px; color:#fff; font-weight:900; line-height:1.2; }}
+  .foco-sep   {{ width:3px; background:#27AE60; align-self:stretch; border-radius:2px; }}
+  .foco-items {{ display:flex; gap:18px; flex:1; }}
+  .foco-item  {{ display:flex; align-items:center; gap:10px; flex:1; }}
+  .foco-num   {{
+    width:44px; height:44px; border-radius:50%; background:#27AE60;
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:900; color:#fff; flex-shrink:0;
+  }}
+  .foco-txt   {{ font-size:21px; color:#fff; font-weight:600; line-height:1.2; }}
 
-                _rr(540, 330, 1020, 440, fill=(13,35,75))
-                draw.ellipse([558, 348, 610, 400], fill=(39,174,96))
-                draw.text((584, 374), "M", font=_fm, fill=(255,255,255), anchor="mm")
-                draw.text((628, 354), "MES DE REFERENCIA", font=_fxs, fill=(39,174,96))
-                draw.text((628, 390), _label_mes_card.upper(), font=_fs, fill=(255,255,255))
+  /* RODAPE */
+  .rodape {{
+    margin:16px 0 0; background:#0B1C45;
+    padding:20px 40px; display:flex; align-items:center; justify-content:space-between;
+  }}
+  .rodape-txt {{ font-size:24px; color:#fff; font-weight:600; }}
+  .rodape-txt span {{ color:#27AE60; font-weight:800; }}
+</style>
+</head><body><div class="wrap">
 
-                # ── ROW 2: 3 blocos ──
-                _p  = 20   # padding entre blocos
-                _bw = (_W2 - 60*2 - _p*2) // 3   # largura de cada bloco
-                _bh = 230  # altura de cada bloco
-                _y2 = 460
+  <!-- HEADER -->
+  <div class="header">
+    {_logo_tag}
+    <div class="titulo">RESULTADO</div>
+    <div class="mensal">MENSAL</div>
+    <div class="mesref">{_label_mes_card.upper()}</div>
+  </div>
 
-                _fat_str  = f"R$ {_fat_r:,.0f}"
-                _meta_str = f"{_perc_m:.1f}%"
-                _cm_str   = f"{_cresc_m:+.1f}%"
-                _cm_col2  = (39,174,96) if _cresc_m >= 0 else (210,50,50)
-                _cm_sub   = f"vs {_meses_pt[_mes_ant_c][:3]}/{_ano_ant_c}"
+  <!-- VENDEDOR / MÊS -->
+  <div class="row-info">
+    <div class="info-box">
+      <div class="info-icon">V</div>
+      <div>
+        <div class="info-label">VENDEDOR</div>
+        <div class="info-val">{vendedor}</div>
+      </div>
+    </div>
+    <div class="info-box">
+      <div class="info-icon">M</div>
+      <div>
+        <div class="info-label">MÊS DE REFERÊNCIA</div>
+        <div class="info-val">{_label_mes_card.upper()}</div>
+      </div>
+    </div>
+  </div>
 
-                _x0 = 60
-                _bloco(_x0,            _y2, _x0+_bw,         _y2+_bh, "$", "FATURAMENTO",    _fat_str, f"Meta: R$ {_meta_v:,.0f}")
-                _bloco(_x0+_bw+_p,     _y2, _x0+2*_bw+_p,   _y2+_bh, "%", "META ATINGIDA",  _meta_str, f"{_meta_lbl}", val_col=(39,174,96))
-                _bloco(_x0+2*_bw+2*_p, _y2, _x0+3*_bw+2*_p, _y2+_bh, "^", "CRESC. MENSAL", _cm_str, _cm_sub, val_col=_cm_col2)
+  <!-- ROW 1: Faturamento | Meta | Cresc. Mensal -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">$</div>
+        <div class="card-label">FATURAMENTO</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val">R$ {_fat_r:,.0f}</div>
+        <div class="card-sub">Meta: R$ {_meta_v:,.0f}</div>
+        <div class="meta-bar-wrap">
+          <div class="meta-bar-bg"><div class="meta-bar-fg"></div></div>
+        </div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">%</div>
+        <div class="card-label">META ATINGIDA</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val {'green' if _perc_m>=100 else ('orange' if _perc_m>=70 else 'red')}">{_perc_m:.1f}%</div>
+        <div class="card-sub">{_meta_lbl}</div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">{'↑' if _cresc_m>=0 else '↓'}</div>
+        <div class="card-label">CRESC. MENSAL</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val {'green' if _cresc_m>=0 else 'red'}">{_cs(_cresc_m)}</div>
+        <div class="card-sub">vs {_meses_pt[_mes_ant_c][:3]}/{_ano_ant_c}</div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+  </div>
 
-                # ── ROW 3: 3 blocos ──
-                _y3 = _y2 + _bh + _p
-                _ca_str = f"{_cresc_a:+.1f}%"
-                _ca_col2 = (39,174,96) if _cresc_a >= 0 else (210,50,50)
-                _ca_sub  = f"vs {_meses_pt[_mes_card][:3]}/{_ano_card-1}"
-                _pp_str  = f"{_posit_v}/{_base_v}"
-                _pp_sub2 = f"{_posit_p:.0f}% positivados"
+  <!-- ROW 2: Cresc. Anual | Positivados | Reativados -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">A</div>
+        <div class="card-label">CRESC. ANUAL</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val {'green' if _cresc_a>=0 else 'red'}">{_cs(_cresc_a)}</div>
+        <div class="card-sub">vs {_meses_pt[_mes_card][:3]}/{_ano_card-1}</div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">C</div>
+        <div class="card-label">CLI. POSITIVADOS</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val">{_posit_v}<span style="font-size:32px;color:#7A90B0;">/{_base_v}</span></div>
+        <div class="card-sub">{_posit_p:.0f}% da base ativa</div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">R</div>
+        <div class="card-label">CLI. REATIVADOS</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val">{_reat_v}</div>
+        <div class="card-sub">3+ meses sem compra</div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+  </div>
 
-                _bloco(_x0,            _y3, _x0+_bw,         _y3+_bh, "A", "CRESC. ANUAL",       _ca_str, _ca_sub, val_col=_ca_col2)
-                _bloco(_x0+_bw+_p,     _y3, _x0+2*_bw+_p,   _y3+_bh, "C", "CLI. POSITIVADOS",   _pp_str, _pp_sub2)
-                _bloco(_x0+2*_bw+2*_p, _y3, _x0+3*_bw+2*_p, _y3+_bh, "R", "CLI. REATIVADOS",    str(_reat_v), "3+ meses sem compra")
+  <!-- META PRÓXIMO MÊS -->
+  <div class="prox-box">
+    <div class="card-icon" style="width:70px;height:70px;font-size:34px;">M</div>
+    <div>
+      <div class="prox-label">META {_mes_prox_nm.upper()}/{_ano_prox_nm}</div>
+      <div class="prox-val">R$ {_meta_prox:,.0f}</div>
+      <div class="prox-sub">{_meta_prox_lbl}</div>
+    </div>
+  </div>
 
-                # ── FOCO DO PRÓXIMO MÊS ──
-                _yf = _y3 + _bh + _p
-                _rr(60, _yf, _W2-60, _yf+140, fill=(10,25,60))
-                draw.ellipse([78, _yf+18, 138, _yf+78], fill=(39,174,96))
-                draw.text((108, _yf+48), "@", font=_fm, fill=(255,255,255), anchor="mm")
-                draw.text((155, _yf+18), "FOCO DO", font=_fs, fill=(39,174,96))
-                draw.text((155, _yf+58), "PROXIMO MES", font=_fbd, fill=(255,255,255))
+  <!-- FOCO DO PRÓXIMO MÊS -->
+  <div class="foco-box">
+    <div class="foco-title-wrap">
+      <div class="foco-title">FOCO DO</div>
+      <div class="foco-big">PRÓXIMO MÊS</div>
+    </div>
+    <div class="foco-sep"></div>
+    <div class="foco-items">
+      <div class="foco-item">
+        <div class="foco-num">1</div>
+        <div class="foco-txt">{_f1}</div>
+      </div>
+      <div class="foco-item">
+        <div class="foco-num">2</div>
+        <div class="foco-txt">{_f2}</div>
+      </div>
+      <div class="foco-item">
+        <div class="foco-num">3</div>
+        <div class="foco-txt">{_f3}</div>
+      </div>
+    </div>
+  </div>
 
-                _focos2 = [_foco1 or "—", _foco2 or "—", _foco3 or "—"]
-                _fxpos = 420
-                for _fi2, _ft2 in enumerate(_focos2, 1):
-                    draw.ellipse([_fxpos, _yf+38, _fxpos+46, _yf+84], fill=(39,174,96))
-                    draw.text((_fxpos+23, _yf+61), str(_fi2), font=_fs, fill=(255,255,255), anchor="mm")
-                    _ftxt = _ft2[:18]
-                    draw.text((_fxpos+58, _yf+55), _ftxt, font=_fl, fill=(255,255,255), anchor="lm")
-                    draw.line([(_fxpos+58, _yf+92), (_fxpos+190, _yf+92)], fill=(39,174,96), width=3)
-                    _fxpos += 210
+  <!-- RODAPÉ -->
+  <div class="rodape">
+    <div class="rodape-txt">QUALIDADE QUE <span>PROTEGE</span>,<br>CONFIANÇA QUE <span>TRANSFORMA</span>.</div>
+    <div style="font-size:40px;">🛡️</div>
+  </div>
 
-                # ── RODAPÉ ──
-                _yr = _yf + 148
-                draw.rectangle([0, _yr, _W2, _H2], fill=(10,25,60))
-                draw.text((60, _yr + 30), "QUALIDADE QUE PROTEGE,", font=_fl, fill=(255,255,255))
-                draw.text((60, _yr + 68), "CONFIANCA QUE TRANSFORMA.", font=_fm, fill=(39,174,96))
-                # Ícone escudo simples
-                draw.rounded_rectangle([_W2-120, _yr+20, _W2-40, _yr+100], radius=12, outline=(39,174,96), width=3)
-                draw.text((_W2-80, _yr+60), "+", font=_fbd, fill=(39,174,96), anchor="mm")
+</div></body></html>"""
 
-                _buf_img = _io_img.BytesIO()
-                img.save(_buf_img, format="PNG", dpi=(150,150))
-                _buf_img.seek(0)
-                return _buf_img.getvalue()
+                # Gerar PNG via wkhtmltoimage
+                import subprocess as _sp, tempfile as _tf, os as _os2
+                import io as _io_img
+
+                with _tf.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as _hf:
+                    _hf.write(_html)
+                    _hf_path = _hf.name
+
+                _png_path = _hf_path.replace(".html", ".png")
+                _sp.run([
+                    "wkhtmltoimage",
+                    "--width", "1080",
+                    "--quality", "95",
+                    "--zoom", "1.0",
+                    "--disable-smart-width",
+                    "--quiet",
+                    _hf_path, _png_path
+                ], capture_output=True)
+
+                _os2.unlink(_hf_path)
+
+                with open(_png_path, "rb") as _pf:
+                    _png_data = _pf.read()
+                _os2.unlink(_png_path)
+
+                return _png_data
+
 
             _vends_gerar = _vends_ativos if _vend_img_sel == "Todos" else [_vend_img_sel]
 
