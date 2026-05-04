@@ -2090,6 +2090,9 @@ with st.sidebar:
                     _raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
                     if _raw_inad is not None:
                         _df_inad_sem = processar_inadimplencia(_raw_inad)
+                        # Normalizar vendedor para garantir match
+                        if _df_inad_sem is not None and 'Vendedor' in _df_inad_sem.columns:
+                            _df_inad_sem['Vendedor'] = _df_inad_sem['Vendedor'].astype(str).str.strip().str.upper()
 
                 # ── Carregar pedidos pendentes ──
                 _df_pend_sem = None
@@ -2152,13 +2155,12 @@ with st.sidebar:
                                             except:
                                                 continue
                         _df_pend_sem = pd.DataFrame(_data_p)
-                        # Filtrar: primeiro dia do mês até hoje
-                        if len(_df_pend_sem) > 0 and 'DataEmissao' in _df_pend_sem.columns:
+                        # Normalizar nome do vendedor: strip + upper para garantir match
+                        if len(_df_pend_sem) > 0 and 'Vendedor' in _df_pend_sem.columns:
+                            _df_pend_sem['Vendedor'] = _df_pend_sem['Vendedor'].astype(str).str.strip().str.upper()
+                        # Filtrar apenas QtdPendente > 0 (sem restrição de data — pedidos pendentes podem ser de meses anteriores)
+                        if len(_df_pend_sem) > 0:
                             _df_pend_sem = _df_pend_sem[_df_pend_sem['QtdPendente'] > 0]
-                            _df_pend_sem = _df_pend_sem[
-                                (_df_pend_sem['DataEmissao'] >= _inicio_mes) &
-                                (_df_pend_sem['DataEmissao'] <= _hoje)
-                            ]
                     except:
                         _df_pend_sem = None
 
@@ -2168,34 +2170,51 @@ with st.sidebar:
                     (df['DataEmissao'] >= _inicio_mes) &
                     (df['DataEmissao'] <= _hoje)
                 ].copy()
+                # Normalizar nome do vendedor para garantir match com outras fontes
+                if 'Vendedor' in _df_fat_sem.columns:
+                    _df_fat_sem['Vendedor'] = _df_fat_sem['Vendedor'].astype(str).str.strip().str.upper()
 
                 # ── Lista de vendedores ativos ──
                 # Tenta pelo mês atual; se vazio, usa últimas 4 semanas; se ainda vazio, usa todos com NF Venda
-                _vendedores_ativos = sorted(df[
+                _vends_fat = set(df[
                     (df['TipoMov'] == 'NF Venda') &
                     (df['DataEmissao'] >= _inicio_mes)
-                ]['Vendedor'].dropna().unique().tolist())
+                ]['Vendedor'].dropna().astype(str).str.strip().str.upper().unique().tolist())
 
-                if not _vendedores_ativos:
+                if not _vends_fat:
                     _4sem = _hoje - pd.Timedelta(weeks=4)
-                    _vendedores_ativos = sorted(df[
+                    _vends_fat = set(df[
                         (df['TipoMov'] == 'NF Venda') &
                         (df['DataEmissao'] >= _4sem)
-                    ]['Vendedor'].dropna().unique().tolist())
-                    if _vendedores_ativos:
-                        # Expandir janela de faturados para as 4 semanas
+                    ]['Vendedor'].dropna().astype(str).str.strip().str.upper().unique().tolist())
+                    if _vends_fat:
                         _df_fat_sem = df[
                             (df['TipoMov'] == 'NF Venda') &
                             (df['DataEmissao'] >= _4sem) &
                             (df['DataEmissao'] <= _hoje)
                         ].copy()
+                        if 'Vendedor' in _df_fat_sem.columns:
+                            _df_fat_sem['Vendedor'] = _df_fat_sem['Vendedor'].astype(str).str.strip().str.upper()
 
-                if not _vendedores_ativos:
-                    _vendedores_ativos = sorted(df[
+                if not _vends_fat:
+                    _vends_fat = set(df[
                         df['TipoMov'] == 'NF Venda'
-                    ]['Vendedor'].dropna().unique().tolist())
-                    if _vendedores_ativos:
+                    ]['Vendedor'].dropna().astype(str).str.strip().str.upper().unique().tolist())
+                    if _vends_fat:
                         _df_fat_sem = df[df['TipoMov'] == 'NF Venda'].copy()
+                        if 'Vendedor' in _df_fat_sem.columns:
+                            _df_fat_sem['Vendedor'] = _df_fat_sem['Vendedor'].astype(str).str.strip().str.upper()
+
+                # Incluir vendedores que aparecem em pendentes ou inadimplência mas não em faturados
+                _vends_pend = set()
+                if _df_pend_sem is not None and len(_df_pend_sem) > 0:
+                    _vends_pend = set(_df_pend_sem['Vendedor'].dropna().unique().tolist())
+
+                _vends_inad = set()
+                if _df_inad_sem is not None and len(_df_inad_sem) > 0 and 'Vendedor' in _df_inad_sem.columns:
+                    _vends_inad = set(_df_inad_sem['Vendedor'].astype(str).str.strip().str.upper().dropna().unique().tolist())
+
+                _vendedores_ativos = sorted(_vends_fat | _vends_pend | _vends_inad)
 
                 if not _vendedores_ativos:
                     st.sidebar.warning("⚠️ Nenhum vendedor com NF Venda encontrado nos dados. ZIP não gerado.")
