@@ -4439,12 +4439,28 @@ elif menu == "Preço Médio":
         st.stop()
     df_produtos = df_produtos.rename(columns={_cod_col: 'CODPRODUTO'})
 
-    # Coluna de nome do produto
-    _nome_col = next((c for c in df_produtos.columns if c in ('NOMEPRODUTO','NOME','DESCRICAO','DESCRI\u00c7\u00c3O','PRODUTO')), None)
-    if _nome_col and _nome_col != 'NOMEPRODUTO':
-        df_produtos = df_produtos.rename(columns={_nome_col: 'NOMEPRODUTO'})
-    if 'NOMEPRODUTO' not in df_produtos.columns:
-        df_produtos['NOMEPRODUTO'] = df_produtos['CODPRODUTO'].astype(str)
+    # Montar NOMEPRODUTO com a mesma concatenação usada na Tabela de Preços / Histórico:
+    # GRUPO + DESCRIÇÃO + LINHA (com fallback para variações de nome de coluna)
+    for _alias_pair in [('DESCRICAO', 'DESCRIÇÃO'), ('LINHAS', 'LINHA'), ('GRUPOS', 'GRUPO')]:
+        if _alias_pair[0] in df_produtos.columns and _alias_pair[1] not in df_produtos.columns:
+            df_produtos = df_produtos.rename(columns={_alias_pair[0]: _alias_pair[1]})
+
+    _partes_nome = [c for c in ['GRUPO', 'DESCRIÇÃO', 'LINHA'] if c in df_produtos.columns]
+    if _partes_nome:
+        # Concatenação igual à linha 3771: GRUPO + DESCRIÇÃO + LINHA
+        df_produtos['NOMEPRODUTO'] = df_produtos[_partes_nome].fillna('').astype(str).apply(
+            lambda r: ' '.join(p.strip() for p in r if p.strip()), axis=1
+        ).str.strip()
+        # Fallback para linhas sem descrição
+        _mask_vazio = df_produtos['NOMEPRODUTO'].str.strip() == ''
+        df_produtos.loc[_mask_vazio, 'NOMEPRODUTO'] = df_produtos.loc[_mask_vazio, 'CODPRODUTO'].astype(str)
+    else:
+        # Se não tem nenhuma das colunas, tenta NOMEPRODUTO direto ou usa código
+        _nome_col = next((c for c in df_produtos.columns if c in ('NOMEPRODUTO','NOME','PRODUTO')), None)
+        if _nome_col and _nome_col != 'NOMEPRODUTO':
+            df_produtos = df_produtos.rename(columns={_nome_col: 'NOMEPRODUTO'})
+        if 'NOMEPRODUTO' not in df_produtos.columns:
+            df_produtos['NOMEPRODUTO'] = df_produtos['CODPRODUTO'].astype(str)
 
     if 'GRAMATURA' not in df_produtos.columns:
         df_produtos['GRAMATURA'] = ''
@@ -4610,11 +4626,15 @@ elif menu == "Preço Médio":
         df_evolucao = df_preco_filtrado.copy()
     
     if len(df_evolucao) > 0:
-        evolucao_preco = df_evolucao.groupby('MesAno').agg({
-            'PRECOUNITMEDIO': 'mean',
-            'TOTQTD': 'sum',
-            'TOTLIQUIDO': 'sum'
-        }).reset_index()
+        # Agrupar por período somando quantidade e valor total
+        # PRECOUNITMEDIO = TOTLIQUIDO / TOTQTD (ponderado) — nunca fazer mean() sobre ele
+        evolucao_preco = df_evolucao.groupby('MesAno').agg(
+            TOTQTD=('TOTQTD', 'sum'),
+            TOTLIQUIDO=('TOTLIQUIDO', 'sum')
+        ).reset_index()
+        evolucao_preco['PRECOUNITMEDIO'] = evolucao_preco.apply(
+            lambda r: r['TOTLIQUIDO'] / r['TOTQTD'] if r['TOTQTD'] > 0 else 0, axis=1
+        )
         evolucao_preco = evolucao_preco.sort_values('MesAno')
         
         fig_evolucao = px.line(
