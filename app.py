@@ -4634,39 +4634,54 @@ elif menu == "Preço Médio":
     st.subheader("📋 Detalhamento de Preços")
     
     # Preparar dados para exibição
-    df_detalhado = df_preco_filtrado[[
-        'CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA', 'TOTQTD', 
-        'PRECOUNITMEDIO', 'TOTLIQUIDO', 'DATA'
-    ]].copy()
-    
-    # Ordenar por data (mais recente primeiro)
-    df_detalhado = df_detalhado.sort_values('DATA', ascending=False)
+    # Selecionar apenas colunas que existem no dataframe
+    _cols_det = [c for c in ['CODPRODUTO', 'NOMEPRODUTO', 'GRAMATURA', 'TOTQTD',
+                              'PRECOUNITMEDIO', 'TOTLIQUIDO', 'MesAno', 'Mes', 'Ano', 'DATA']
+                 if c in df_preco_filtrado.columns]
+    df_detalhado = df_preco_filtrado[_cols_det].copy()
+
+    # Ordenar por data se disponível
+    _sort_col = next((c for c in ['DATA', 'MesAno', 'Ano'] if c in df_detalhado.columns), None)
+    if _sort_col:
+        df_detalhado = df_detalhado.sort_values(_sort_col, ascending=False)
     
     # Formatar para exibição
     df_detalhado_display = df_detalhado.copy()
     
-    # Formatar data no padrão brasileiro com mês atual
-    mes_atual = data_atual.month
-    ano_atual = data_atual.year
-    df_detalhado_display['DATA'] = f"{mes_atual:02d}/{ano_atual}"
-    
-    df_detalhado_display['PRECOUNITMEDIO'] = df_detalhado_display['PRECOUNITMEDIO'].apply(
-        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
-    )
-    df_detalhado_display['TOTLIQUIDO'] = df_detalhado_display['TOTLIQUIDO'].apply(
-        lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
-    )
-    
+    # Formatar colunas existentes
+    if 'PRECOUNITMEDIO' in df_detalhado_display.columns:
+        df_detalhado_display['PRECOUNITMEDIO'] = df_detalhado_display['PRECOUNITMEDIO'].apply(
+            lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+        )
+    if 'TOTLIQUIDO' in df_detalhado_display.columns:
+        df_detalhado_display['TOTLIQUIDO'] = df_detalhado_display['TOTLIQUIDO'].apply(
+            lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
+        )
+    # Coluna de período: usar MesAno se existir, senão montar da data atual
+    if 'MesAno' in df_detalhado_display.columns:
+        df_detalhado_display['DATA'] = df_detalhado_display['MesAno']
+    elif 'Mes' in df_detalhado_display.columns and 'Ano' in df_detalhado_display.columns:
+        df_detalhado_display['DATA'] = (
+            df_detalhado_display['Mes'].astype(str).str.zfill(2) + '/' +
+            df_detalhado_display['Ano'].astype(str)
+        )
+    else:
+        df_detalhado_display['DATA'] = f"{data_atual.month:02d}/{data_atual.year}"
+
     # Renomear colunas
     df_detalhado_display = df_detalhado_display.rename(columns={
-        'CODPRODUTO': 'Código',
-        'NOMEPRODUTO': 'Nome do Produto',
-        'GRAMATURA': 'Gramatura',
-        'TOTQTD': 'Qtd Vendida',
-        'PRECOUNITMEDIO': 'Preço Médio Unit.',
-        'TOTLIQUIDO': 'Total Líquido',
-        'DATA': 'Período (Mês/Ano)'
+        'CODPRODUTO':    'Código',
+        'NOMEPRODUTO':   'Nome do Produto',
+        'GRAMATURA':     'Gramatura',
+        'TOTQTD':        'Qtd Vendida',
+        'PRECOUNITMEDIO':'Preço Médio Unit.',
+        'TOTLIQUIDO':    'Total Líquido',
+        'DATA':          'Período (Mês/Ano)'
     })
+    # Remover colunas auxiliares de período da exibição
+    df_detalhado_display = df_detalhado_display.drop(
+        columns=[c for c in ['MesAno', 'Mes', 'Ano'] if c in df_detalhado_display.columns]
+    )
     
     st.dataframe(df_detalhado_display, use_container_width=True, height=400)
     
