@@ -2170,10 +2170,36 @@ with st.sidebar:
                 ].copy()
 
                 # ── Lista de vendedores ativos ──
+                # Tenta pelo mês atual; se vazio, usa últimas 4 semanas; se ainda vazio, usa todos com NF Venda
                 _vendedores_ativos = sorted(df[
                     (df['TipoMov'] == 'NF Venda') &
                     (df['DataEmissao'] >= _inicio_mes)
                 ]['Vendedor'].dropna().unique().tolist())
+
+                if not _vendedores_ativos:
+                    _4sem = _hoje - pd.Timedelta(weeks=4)
+                    _vendedores_ativos = sorted(df[
+                        (df['TipoMov'] == 'NF Venda') &
+                        (df['DataEmissao'] >= _4sem)
+                    ]['Vendedor'].dropna().unique().tolist())
+                    if _vendedores_ativos:
+                        # Expandir janela de faturados para as 4 semanas
+                        _df_fat_sem = df[
+                            (df['TipoMov'] == 'NF Venda') &
+                            (df['DataEmissao'] >= _4sem) &
+                            (df['DataEmissao'] <= _hoje)
+                        ].copy()
+
+                if not _vendedores_ativos:
+                    _vendedores_ativos = sorted(df[
+                        df['TipoMov'] == 'NF Venda'
+                    ]['Vendedor'].dropna().unique().tolist())
+                    if _vendedores_ativos:
+                        _df_fat_sem = df[df['TipoMov'] == 'NF Venda'].copy()
+
+                if not _vendedores_ativos:
+                    st.sidebar.warning("⚠️ Nenhum vendedor com NF Venda encontrado nos dados. ZIP não gerado.")
+                    st.stop()
 
                 with zipfile.ZipFile(_zip_buf, 'w', zipfile.ZIP_DEFLATED) as _zout:
                     for _vend in _vendedores_ativos:
@@ -2264,7 +2290,11 @@ with st.sidebar:
 
                 st.session_state['_zip_semanal'] = _zip_buf.getvalue()
                 st.session_state['_zip_semanal_nome'] = f"RELATORIO_SEMANAL_{_hoje.strftime('%d-%m-%Y')}.zip"
-                st.rerun()
+                if len(_zip_buf.getvalue()) < 100:
+                    st.sidebar.warning("⚠️ ZIP gerado está vazio. Nenhum dado encontrado para os vendedores no período.")
+                    st.session_state['_zip_semanal'] = None
+                else:
+                    st.rerun()
 
             except Exception as _e:
                 st.sidebar.error(f"Erro: {_e}")
