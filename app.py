@@ -5778,9 +5778,6 @@ elif menu == "Pedidos Pendentes":
             # Gerar Excel usando a mesma função com todas as regras de formatação
             _buf = _BIO(_gerar_relatorio_previsao(_df_merge_conc, _df_prod_prev, _cx_col, _preco_col, _desc_col))
 
-            _buf = _BIO()
-            _wb_out.save(_buf)
-
             _n_prev = sum(1 for v in _obs_map.values() if v.get('previsao'))
             _n_obs  = sum(1 for v in _obs_map.values() if v.get('obs'))
             st.success(
@@ -6634,36 +6631,26 @@ elif menu == "Performance de Vendedores":
                  7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
     _label_mes_card = f"{_meses_pt[_mes_card]}/{_ano_card}"
 
-    # Base histórica completa — todas as linhas, sem deduplicar
-    # TotalProduto é valor por item, então somamos todas as linhas por NF Venda
-    _df_hist_venda = df[df["TipoMov"] == "NF Venda"].copy()
-    _df_hist_venda["DataEmissao"] = pd.to_datetime(_df_hist_venda["DataEmissao"], errors="coerce")
+    # Usar notas_unicas (mesma base do dashboard) com Valor_Real já calculado
+    # Valor_Real = +TotalProduto (NF Venda) ou -TotalProduto (NF Dev) — igual ao dashboard
+    _nu_hist = notas_unicas.copy()
+    _nu_hist["DataEmissao"] = pd.to_datetime(_nu_hist["DataEmissao"], errors="coerce")
 
-    _df_hist_dev = df[df["TipoMov"] == "NF Dev.Venda"].copy()
-    _df_hist_dev["DataEmissao"] = pd.to_datetime(_df_hist_dev["DataEmissao"], errors="coerce")
+    # Apenas NF Venda para positivação e base histórica de clientes
+    _df_nf_hist_raw = _nu_hist[_nu_hist["TipoMov"] == "NF Venda"].copy()
+    _df_nf_hist     = _df_nf_hist_raw
 
-    # _df_nf_hist_raw: para CPF_CNPJ (positivação) — só NF Venda
-    _df_nf_hist_raw = _df_hist_venda
-
-    # Alias para compatibilidade com restante do bloco
-    _df_nf_hist = _df_hist_venda
-
-    # Vendas do mês de referência (todas as linhas de NF Venda)
-    _df_mes_venda = _df_hist_venda[
-        (_df_hist_venda["DataEmissao"].dt.month == _mes_card) &
-        (_df_hist_venda["DataEmissao"].dt.year  == _ano_card)
-    ]
-    # Devoluções do mês de referência
-    _df_mes_dev = _df_hist_dev[
-        (_df_hist_dev["DataEmissao"].dt.month == _mes_card) &
-        (_df_hist_dev["DataEmissao"].dt.year  == _ano_card)
+    # Notas do mês de referência (NF Venda + NF Dev — para calcular líquido via Valor_Real)
+    _nu_mes = _nu_hist[
+        (_nu_hist["DataEmissao"].dt.month == _mes_card) &
+        (_nu_hist["DataEmissao"].dt.year  == _ano_card)
     ]
 
-    # _df_mes_card usado pelo restante do bloco (positivação, reativados, etc.)
-    _df_mes_card = _df_mes_venda
+    # _df_mes_card: apenas NF Venda do mês (para positivação e reativados)
+    _df_mes_card = _nu_mes[_nu_mes["TipoMov"] == "NF Venda"]
 
     # Vendedores ativos = quem tem NF Venda no mês de referência
-    _vends_ativos = sorted(_df_mes_venda["Vendedor"].dropna().unique().tolist())
+    _vends_ativos = sorted(_df_mes_card["Vendedor"].dropna().unique().tolist())
 
     if _pv_vendedor != "Todos":
         _vends_ativos = [v for v in _vends_ativos if v == _pv_vendedor]
@@ -6671,59 +6658,55 @@ elif menu == "Performance de Vendedores":
     if not _vends_ativos:
         st.info(f"Nenhum vendedor com vendas em {_label_mes_card}.")
     else:
-        # Faturamento líquido = soma NF Venda − soma NF Dev.Venda (por item, sem deduplicar)
-        _fat_bruto_card = _df_mes_venda.groupby("Vendedor")["TotalProduto"].sum()
-        _fat_dev_card   = _df_mes_dev.groupby("Vendedor")["TotalProduto"].sum()
-        _fat_card = _fat_bruto_card.subtract(_fat_dev_card, fill_value=0)
+        # Faturamento líquido via Valor_Real — igual ao dashboard
+        _fat_card = _nu_mes.groupby("Vendedor")["Valor_Real"].sum()
 
         # Positivação: clientes únicos com NF Venda no mês
-        _posit_card = _df_mes_venda.groupby("Vendedor")["CPF_CNPJ"].nunique()
-        _base_hist  = _df_hist_venda.groupby("Vendedor")["CPF_CNPJ"].nunique()
+        _posit_card = _df_mes_card.groupby("Vendedor")["CPF_CNPJ"].nunique()
+        _base_hist  = _df_nf_hist_raw.groupby("Vendedor")["CPF_CNPJ"].nunique()
 
         # Cálculo de meta por vendedor — usa NFs deduplicadas para soma correta
         def _meta_card(vendedor):
-            _fat_ano_ant = float(_df_nf_hist[
-                (_df_nf_hist["Vendedor"] == vendedor) &
-                (_df_nf_hist["DataEmissao"].dt.month == _mes_meta) &
-                (_df_nf_hist["DataEmissao"].dt.year  == _ano_meta)
-            ]["TotalProduto"].sum())
+            # Usar notas_unicas com Valor_Real — igual ao dashboard
+            _fat_ano_ant = float(_nu_hist[
+                (_nu_hist["Vendedor"] == vendedor) &
+                (_nu_hist["DataEmissao"].dt.month == _mes_meta) &
+                (_nu_hist["DataEmissao"].dt.year  == _ano_meta)
+            ]["Valor_Real"].sum())
 
             if _fat_ano_ant > 0:
-                # COM histórico: meta = mesmo mês ano anterior + 15%
                 return _fat_ano_ant * 1.15, f"{_meses_pt[_mes_meta][:3]}/{_ano_meta} +15%", _fat_ano_ant
 
-            # SEM histórico: média dos últimos 3 meses anteriores ao de referência + 15%
             _ref_ts = pd.Timestamp(year=_ano_card, month=_mes_card, day=1)
             _3m_ini = _ref_ts - pd.DateOffset(months=3)
-            _ult3 = _df_nf_hist[
-                (_df_nf_hist["Vendedor"] == vendedor) &
-                (_df_nf_hist["DataEmissao"] >= _3m_ini) &
-                (_df_nf_hist["DataEmissao"] <  _ref_ts)
+            _ult3 = _nu_hist[
+                (_nu_hist["Vendedor"] == vendedor) &
+                (_nu_hist["DataEmissao"] >= _3m_ini) &
+                (_nu_hist["DataEmissao"] <  _ref_ts)
             ]
             if len(_ult3) > 0:
                 _fat_3m = _ult3.groupby(
                     [_ult3["DataEmissao"].dt.year, _ult3["DataEmissao"].dt.month]
-                )["TotalProduto"].sum()
+                )["Valor_Real"].sum()
                 return _fat_3m.mean() * 1.15, "Média 3m +15%", 0
             return 0, "Sem histórico", 0
 
         # ── Pré-calcular indicadores extras para todos os vendedores ativos ──
 
-        # Mês anterior ao de referência (para crescimento mensal)
         _mes_ant_c = _mes_card - 1 if _mes_card > 1 else 12
         _ano_ant_c = _ano_card if _mes_card > 1 else _ano_card - 1
 
-        # Faturamento do mês anterior por vendedor (deduplicado)
-        _fat_mes_ant_c = _df_nf_hist[
-            (_df_nf_hist["DataEmissao"].dt.month == _mes_ant_c) &
-            (_df_nf_hist["DataEmissao"].dt.year  == _ano_ant_c)
-        ].groupby("Vendedor")["TotalProduto"].sum()
+        # Faturamento mês anterior via Valor_Real (igual dashboard)
+        _fat_mes_ant_c = _nu_hist[
+            (_nu_hist["DataEmissao"].dt.month == _mes_ant_c) &
+            (_nu_hist["DataEmissao"].dt.year  == _ano_ant_c)
+        ].groupby("Vendedor")["Valor_Real"].sum()
 
-        # Faturamento mesmo mês ano anterior por vendedor (deduplicado) — já usado em meta
-        _fat_ano_ant_c = _df_nf_hist[
-            (_df_nf_hist["DataEmissao"].dt.month == _mes_card) &
-            (_df_nf_hist["DataEmissao"].dt.year  == _ano_card - 1)
-        ].groupby("Vendedor")["TotalProduto"].sum()
+        # Faturamento mesmo mês ano anterior via Valor_Real
+        _fat_ano_ant_c = _nu_hist[
+            (_nu_hist["DataEmissao"].dt.month == _mes_card) &
+            (_nu_hist["DataEmissao"].dt.year  == _ano_card - 1)
+        ].groupby("Vendedor")["Valor_Real"].sum()
 
         # Clientes reativados: compraram no mês de referência MAS não compraram
         # nos 3 meses anteriores (= inativos por 3+ meses que voltaram)
