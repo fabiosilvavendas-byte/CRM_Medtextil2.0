@@ -5410,9 +5410,9 @@ elif menu == "Pedidos Pendentes":
                         dias_pend,
                         row.get('Vendedor', ''),
                         f"{perc_ent:.1f}%",
-                        '',            # Previsão — branco
+                        row.get('Previsao', ''),    # Previsão — vem da conciliação ou branco
                         categoria,
-                        '',            # Observações — branco
+                        row.get('Observacoes', ''), # Observações — vem da conciliação ou branco
                     ])
 
                 # Criar workbook
