@@ -4637,7 +4637,7 @@ elif menu == "Preço Médio":
     st.subheader("📅 Evolução de Preço Médio")
     
     # Permitir seleção de produto específico
-    produtos_lista = ['Todos'] + sorted(df_preco_filtrado['NOMEPRODUTO'].unique().tolist())
+    produtos_lista = ['Todos'] + sorted(df_preco_filtrado['NOMEPRODUTO'].dropna().astype(str).unique().tolist())
     produto_selecionado = st.selectbox(
         "Selecione um produto para ver evolução de preço:",
         produtos_lista,
@@ -5382,7 +5382,8 @@ elif menu == "Pedidos Pendentes":
                     gram_val = gram_lookup.get(cod_n, '')
 
                     abas_data[aba].append([
-                        str(row.get('NumeroPedido', '')),  # N° Pedido
+                        # N° Pedido — remover .0 se vier como float
+                        (lambda v: str(int(float(v))) if str(v).replace('.','',1).isdigit() else str(v))(row.get('NumeroPedido', '')),
                         row.get('Cliente', ''),
                         cod,
                         gram_val,      # Gramatura
@@ -6631,23 +6632,26 @@ elif menu == "Performance de Vendedores":
                  7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
     _label_mes_card = f"{_meses_pt[_mes_card]}/{_ano_card}"
 
-    # Usar notas_unicas (mesma base do dashboard) com Valor_Real já calculado
-    # Valor_Real = +TotalProduto (NF Venda) ou -TotalProduto (NF Dev) — igual ao dashboard
+    # Base para faturamento: notas_unicas com Valor_Real (igual ao dashboard)
     _nu_hist = notas_unicas.copy()
     _nu_hist["DataEmissao"] = pd.to_datetime(_nu_hist["DataEmissao"], errors="coerce")
 
-    # Apenas NF Venda para positivação e base histórica de clientes
-    _df_nf_hist_raw = _nu_hist[_nu_hist["TipoMov"] == "NF Venda"].copy()
-    _df_nf_hist     = _df_nf_hist_raw
+    # Base para positivação/clientes: df completo (tem CPF_CNPJ por item), só NF Venda
+    _df_nf_hist_raw = df[df["TipoMov"] == "NF Venda"].copy()
+    _df_nf_hist_raw["DataEmissao"] = pd.to_datetime(_df_nf_hist_raw["DataEmissao"], errors="coerce")
+    _df_nf_hist = _df_nf_hist_raw
 
-    # Notas do mês de referência (NF Venda + NF Dev — para calcular líquido via Valor_Real)
+    # Notas do mês de referência (todas as NF para Valor_Real)
     _nu_mes = _nu_hist[
         (_nu_hist["DataEmissao"].dt.month == _mes_card) &
         (_nu_hist["DataEmissao"].dt.year  == _ano_card)
     ]
 
-    # _df_mes_card: apenas NF Venda do mês (para positivação e reativados)
-    _df_mes_card = _nu_mes[_nu_mes["TipoMov"] == "NF Venda"]
+    # _df_mes_card: NF Venda do mês no df completo (para positivação e reativados)
+    _df_mes_card = _df_nf_hist_raw[
+        (_df_nf_hist_raw["DataEmissao"].dt.month == _mes_card) &
+        (_df_nf_hist_raw["DataEmissao"].dt.year  == _ano_card)
+    ]
 
     # Vendedores ativos = quem tem NF Venda no mês de referência
     _vends_ativos = sorted(_df_mes_card["Vendedor"].dropna().unique().tolist())
@@ -6658,10 +6662,10 @@ elif menu == "Performance de Vendedores":
     if not _vends_ativos:
         st.info(f"Nenhum vendedor com vendas em {_label_mes_card}.")
     else:
-        # Faturamento líquido via Valor_Real — igual ao dashboard
+        # Faturamento líquido via Valor_Real (notas_unicas) — igual ao dashboard
         _fat_card = _nu_mes.groupby("Vendedor")["Valor_Real"].sum()
 
-        # Positivação: clientes únicos com NF Venda no mês
+        # Positivação: clientes únicos com NF Venda no mês (df completo, tem CPF_CNPJ)
         _posit_card = _df_mes_card.groupby("Vendedor")["CPF_CNPJ"].nunique()
         _base_hist  = _df_nf_hist_raw.groupby("Vendedor")["CPF_CNPJ"].nunique()
 
