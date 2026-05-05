@@ -4519,28 +4519,25 @@ elif menu == "Preço Médio":
     _pm_lookup = _pm_produtos[['CODPRODUTO','NOMEPRODUTO','GRAMAT']].drop_duplicates(subset='CODPRODUTO')
     _pm_lookup['CODPRODUTO'] = _pm_lookup['CODPRODUTO'].astype(str).str.strip()
 
-    # Garantir chave string na planilha de vendas
     if 'CODPRODUTO' not in _pm_vendas.columns:
         st.error("❌ Coluna CODPRODUTO não encontrada na planilha de vendas")
         st.stop()
     _pm_vendas['CODPRODUTO'] = _pm_vendas['CODPRODUTO'].astype(str).str.strip()
 
-    # Remover colunas que conflitem com o lookup
-    for _dc in ['NOMEPRODUTO','GRAMAT']:
-        if _dc in _pm_vendas.columns:
-            _pm_vendas = _pm_vendas.drop(columns=[_dc])
+    # PROCV: substituir NOMEPRODUTO e GRAMAT sem tocar nos valores numéricos
+    # Usar .map() sobre o CODPRODUTO — não faz merge, não duplica linhas
+    _pm_lookup_nome  = _pm_lookup.set_index('CODPRODUTO')['NOMEPRODUTO']
+    _pm_lookup_gramat = _pm_lookup.set_index('CODPRODUTO')['GRAMAT']
 
-    # Merge (PROCV)
-    _pm_result = pd.merge(_pm_vendas, _pm_lookup, on='CODPRODUTO', how='left')
-    _pm_result['NOMEPRODUTO'] = _pm_result['NOMEPRODUTO'].fillna(
-        'Não catalogado (' + _pm_result['CODPRODUTO'].astype(str) + ')'
+    _pm_vendas['NOMEPRODUTO'] = _pm_vendas['CODPRODUTO'].map(_pm_lookup_nome).fillna(
+        'Não catalogado (' + _pm_vendas['CODPRODUTO'].astype(str) + ')'
     )
-    _pm_result['GRAMAT'] = _pm_result['GRAMAT'].fillna('')
+    _pm_vendas['GRAMAT'] = _pm_vendas['CODPRODUTO'].map(_pm_lookup_gramat).fillna('')
 
-    # Selecionar apenas as colunas de saída solicitadas (na ordem correta)
+    # Selecionar apenas as colunas de saída na ordem correta — valores intactos da planilha
     _pm_cols_saida = [c for c in ['CODPRODUTO','NOMEPRODUTO','GRAMAT','TOTQTD','PRECOUNITMEDIO','TOTLIQUIDO']
-                      if c in _pm_result.columns]
-    _pm_result = _pm_result[_pm_cols_saida]
+                      if c in _pm_vendas.columns]
+    _pm_result = _pm_vendas[_pm_cols_saida].copy()
 
     # Métricas resumo
     st.markdown("---")
