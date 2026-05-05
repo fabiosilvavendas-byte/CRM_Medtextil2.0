@@ -4525,9 +4525,21 @@ elif menu == "Preço Médio":
         )
 
     produtos_nao_catalogados = 0
-    
-    
-    
+
+    # Debug: mostrar estrutura da planilha carregada para confirmar que está correta
+    with st.expander("🔍 Diagnóstico: estrutura da planilha carregada (clique para ver)"):
+        st.write(f"**Colunas:** {list(df_preco_medio.columns)}")
+        st.write(f"**Linhas:** {len(df_preco_medio)}")
+        if 'CODPRODUTO' in df_preco_medio.columns and 'PRECOUNITMEDIO' in df_preco_medio.columns:
+            # Mostrar produto código 3 como referência
+            _cod3 = df_preco_medio[df_preco_medio['CODPRODUTO'].astype(str).str.strip() == '3']
+            if len(_cod3) > 0:
+                st.write("**Produto código 3 (referência):**")
+                st.dataframe(_cod3[['CODPRODUTO','NOMEPRODUTO','TOTQTD','PRECOUNITMEDIO','TOTLIQUIDO']].head(5))
+            else:
+                st.write("Produto código 3 não encontrado")
+        st.dataframe(df_preco_medio.head(5))
+
     st.markdown("---")
     
     # ========== FILTROS ==========
@@ -5713,9 +5725,17 @@ elif menu == "Pedidos Pendentes":
                             return i
                     return None
 
-                _i_num2  = _ci2(['N°']) or _ci2(['PEDIDO']) or _ci2(['NUM'])
-                _i_cli2  = _ci2(['CLIENTE'])
-                _i_cod2  = _ci2(['CÓDIGO']) or _ci2(['CODIGO'])
+                # Usar função que retorna None sem falsy issue com índice 0
+                def _find2(*kwlist):
+                    for kw in kwlist:
+                        r = _ci2(kw if isinstance(kw, list) else [kw])
+                        if r is not None:
+                            return r
+                    return None
+
+                _i_num2  = _find2('N° PEDIDO', 'N°PEDIDO', 'NUMERO PEDIDO', 'N° ', 'PEDIDO', 'NUM')
+                _i_cli2  = _find2('CLIENTE')
+                _i_cod2  = _find2('CÓDIGO', 'CODIGO')
                 _i_desc2 = _ci2(['DESCRIÇÃO']) or _ci2(['DESCRICAO']) or _ci2(['DESCRI'])
                 _i_cont2 = _ci2(['CONTRAT'])
                 _i_ent2  = _ci2(['ENTREGUE'])
