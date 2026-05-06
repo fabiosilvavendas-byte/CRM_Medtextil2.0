@@ -2944,7 +2944,20 @@ elif menu == "Positivação":
     with tab4_prod:
         st.subheader("📦 Faturamento por Produto no Período")
 
-        _prod_fat = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].copy()
+        _prod_fat = df[df['TipoMov'] == 'NF Venda'].copy()
+        _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce')
+
+        # Filtro de período próprio deste módulo
+        _fp_col_d1, _fp_col_d2 = st.columns(2)
+        with _fp_col_d1:
+            _fp_dt_ini = st.date_input("Data inicial", value=None, key="fp_dt_ini_posit")
+        with _fp_col_d2:
+            _fp_dt_fim = st.date_input("Data final",   value=None, key="fp_dt_fim_posit")
+
+        if _fp_dt_ini:
+            _prod_fat = _prod_fat[_prod_fat['DataEmissao'] >= pd.to_datetime(_fp_dt_ini)]
+        if _fp_dt_fim:
+            _prod_fat = _prod_fat[_prod_fat['DataEmissao'] <= pd.to_datetime(_fp_dt_fim)]
 
         # Filtros
         _col_fp1, _col_fp2, _col_fp3, _col_fp4 = st.columns(4)
@@ -3529,6 +3542,8 @@ elif menu == "Histórico":
                 
                 # Verificar se PrazoHistorico e Comissao existem no dataframe
                 colunas_display = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
+                if 'Gramatura' in historico.columns:
+                    colunas_display.insert(colunas_display.index('NomeProduto') + 1, 'Gramatura')
                 if 'PrazoHistorico' in historico.columns:
                     colunas_display.append('PrazoHistorico')
                 if 'Comissao' in historico.columns:
@@ -3545,6 +3560,7 @@ elif menu == "Histórico":
                 colunas_rename = {
                     'DataEmissao': 'Data',
                     'TipoMov': 'Tipo',
+                    'Gramatura': 'Gramatura',
                     'Numero_NF': 'Nota Fiscal',
                     'CodigoProduto': 'Código',
                     'NomeProduto': 'Produto',
@@ -4456,188 +4472,154 @@ elif menu == "__historico_cliente__":
         st.info("👆 Digite pelo menos 3 caracteres para buscar um cliente")
 
 # ====================== PREÇO MÉDIO ======================
+# ====================== PREÇO MÉDIO ======================
 elif menu == "Preço Médio":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Preço Médio por Produto</h2>', unsafe_allow_html=True)
-    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:20px;">Conciliação da descrição dos produtos com a planilha consolidada</p>', unsafe_allow_html=True)
 
-    # Verificar planilhas necessárias
     if not planilhas_disponiveis.get('vendas_produto'):
-        st.error("❌ Planilha de vendas por produto não encontrada no GitHub")
-        st.info("💡 Adicione um arquivo com 'VENDAS POR PRODUTO' e 'GERAL' no nome")
+        st.error("❌ Planilha de vendas por produto não encontrada")
         st.stop()
-
     if not planilhas_disponiveis.get('produtos_agrupados'):
-        st.error("❌ Planilha de produtos agrupados não encontrada no GitHub")
-        st.info("💡 Adicione um arquivo com 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' no nome")
+        st.error("❌ Planilha de produtos agrupados não encontrada")
         st.stop()
 
-    # Carregar planilhas
-    with st.spinner("📥 Carregando planilha de vendas..."):
-        _pm_vendas = carregar_planilha_github(planilhas_disponiveis['vendas_produto']['url'])
-    with st.spinner("📥 Carregando planilha de produtos..."):
-        _pm_produtos = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+    with st.spinner("Carregando planilhas..."):
+        _pm_v = carregar_planilha_github(planilhas_disponiveis['vendas_produto']['url'])
+        _pm_p = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
 
-    if _pm_vendas is None or _pm_produtos is None:
+    if _pm_v is None or _pm_p is None:
         st.error("❌ Erro ao carregar planilhas")
         st.stop()
 
     # Padronizar colunas
-    _pm_vendas.columns   = _pm_vendas.columns.str.upper().str.strip()
-    _pm_produtos.columns = _pm_produtos.columns.str.upper().str.strip()
+    _pm_v.columns = _pm_v.columns.str.upper().str.strip()
+    _pm_p.columns = _pm_p.columns.str.upper().str.strip()
 
-    # ── PROCV: substituir NOMEPRODUTO pelo da planilha de produtos ──────────
-    # Detectar chave de código na planilha de produtos
-    _pm_cod_col = next((c for c in _pm_produtos.columns if c in ('ID_COD','CODPRODUTO','COD','CODIGO')), None)
-    if _pm_cod_col is None:
+    # Detectar coluna chave na planilha de produtos
+    _pm_k = next((c for c in _pm_p.columns if c in ('ID_COD','CODPRODUTO','COD','CODIGO')), None)
+    if _pm_k is None:
         st.error("❌ Coluna de código não encontrada na planilha de produtos")
         st.stop()
-    _pm_produtos = _pm_produtos.rename(columns={_pm_cod_col: 'CODPRODUTO'})
 
-    # Montar NOMEPRODUTO = GRUPO + DESCRIÇÃO + LINHA (mesma lógica do restante do sistema)
-    for _al in [('DESCRICAO','DESCRIÇÃO'),('LINHAS','LINHA'),('GRUPOS','GRUPO')]:
-        if _al[0] in _pm_produtos.columns and _al[1] not in _pm_produtos.columns:
-            _pm_produtos = _pm_produtos.rename(columns={_al[0]: _al[1]})
-
-    _pm_partes = [c for c in ['GRUPO','DESCRIÇÃO','LINHA'] if c in _pm_produtos.columns]
+    # Montar NOMEPRODUTO = GRUPO + DESCRIÇÃO + LINHA
+    for a, b in [('DESCRICAO','DESCRIÇÃO'),('LINHAS','LINHA'),('GRUPOS','GRUPO')]:
+        if a in _pm_p.columns and b not in _pm_p.columns:
+            _pm_p = _pm_p.rename(columns={a: b})
+    _pm_partes = [c for c in ['GRUPO','DESCRIÇÃO','LINHA'] if c in _pm_p.columns]
     if _pm_partes:
-        _pm_produtos['NOMEPRODUTO'] = _pm_produtos[_pm_partes].fillna('').astype(str).apply(
-            lambda r: ' '.join(p.strip() for p in r if p.strip()), axis=1
+        _pm_p['_NOME'] = _pm_p[_pm_partes].fillna('').astype(str).apply(
+            lambda r: ' '.join(x.strip() for x in r if x.strip()), axis=1
         ).str.strip()
-        _pm_vazio = _pm_produtos['NOMEPRODUTO'].str.strip() == ''
-        _pm_produtos.loc[_pm_vazio, 'NOMEPRODUTO'] = _pm_produtos.loc[_pm_vazio, 'CODPRODUTO'].astype(str)
-    elif 'NOMEPRODUTO' not in _pm_produtos.columns:
-        _pm_produtos['NOMEPRODUTO'] = _pm_produtos['CODPRODUTO'].astype(str)
+    else:
+        _pm_p['_NOME'] = _pm_p[_pm_k].astype(str)
 
-    # Detectar coluna GRAMATURA na planilha de produtos
-    _pm_gram_col = next((c for c in _pm_produtos.columns if 'GRAM' in c.upper()), None)
-    if _pm_gram_col and _pm_gram_col != 'GRAMAT':
-        _pm_produtos = _pm_produtos.rename(columns={_pm_gram_col: 'GRAMAT'})
-    if 'GRAMAT' not in _pm_produtos.columns:
-        _pm_produtos['GRAMAT'] = ''
+    # Detectar GRAMATURA na planilha de produtos
+    _pm_gcol = next((c for c in _pm_p.columns if 'GRAM' in c.upper()), None)
+    _pm_p['_GRAM'] = _pm_p[_pm_gcol].fillna('') if _pm_gcol else ''
 
-    # Lookup: CODPRODUTO → NOMEPRODUTO, GRAMAT (sem duplicatas)
-    _pm_lookup = _pm_produtos[['CODPRODUTO','NOMEPRODUTO','GRAMAT']].drop_duplicates(subset='CODPRODUTO')
-    _pm_lookup['CODPRODUTO'] = _pm_lookup['CODPRODUTO'].astype(str).str.strip()
+    # Lookup por código (sem duplicatas — pega o primeiro)
+    _pm_idx = _pm_p[[_pm_k, '_NOME', '_GRAM']].drop_duplicates(subset=_pm_k)
+    _pm_idx[_pm_k] = _pm_idx[_pm_k].astype(str).str.strip()
+    _pm_map_nome = _pm_idx.set_index(_pm_k)['_NOME']
+    _pm_map_gram = _pm_idx.set_index(_pm_k)['_GRAM']
 
-    if 'CODPRODUTO' not in _pm_vendas.columns:
+    # Garantir chave na planilha de vendas
+    if 'CODPRODUTO' not in _pm_v.columns:
         st.error("❌ Coluna CODPRODUTO não encontrada na planilha de vendas")
         st.stop()
-    _pm_vendas['CODPRODUTO'] = _pm_vendas['CODPRODUTO'].astype(str).str.strip()
+    _pm_v['CODPRODUTO'] = _pm_v['CODPRODUTO'].astype(str).str.strip()
 
-    # PROCV: substituir NOMEPRODUTO e GRAMAT sem tocar nos valores numéricos
-    # Usar .map() sobre o CODPRODUTO — não faz merge, não duplica linhas
-    _pm_lookup_nome  = _pm_lookup.set_index('CODPRODUTO')['NOMEPRODUTO']
-    _pm_lookup_gramat = _pm_lookup.set_index('CODPRODUTO')['GRAMAT']
-
-    _pm_vendas['NOMEPRODUTO'] = _pm_vendas['CODPRODUTO'].map(_pm_lookup_nome).fillna(
-        'Não catalogado (' + _pm_vendas['CODPRODUTO'].astype(str) + ')'
+    # PROCV: substituir NOMEPRODUTO e GRAMAT via .map() — sem alterar nenhum outro valor
+    _pm_v['NOMEPRODUTO'] = _pm_v['CODPRODUTO'].map(_pm_map_nome)
+    _pm_v['NOMEPRODUTO'] = _pm_v['NOMEPRODUTO'].fillna(
+        'Não catalogado (' + _pm_v['CODPRODUTO'] + ')'
     )
-    _pm_vendas['GRAMAT'] = _pm_vendas['CODPRODUTO'].map(_pm_lookup_gramat).fillna('')
+    _pm_v['GRAMAT'] = _pm_v['CODPRODUTO'].map(_pm_map_gram).fillna('')
 
-    # Selecionar apenas as colunas de saída na ordem correta — valores intactos da planilha
-    _pm_cols_saida = [c for c in ['CODPRODUTO','NOMEPRODUTO','GRAMAT','TOTQTD','PRECOUNITMEDIO','TOTLIQUIDO']
-                      if c in _pm_vendas.columns]
-    _pm_result = _pm_vendas[_pm_cols_saida].copy()
+    # Selecionar colunas de saída — exatamente como na planilha, sem recalcular
+    _pm_cols = [c for c in ['CODPRODUTO','NOMEPRODUTO','GRAMAT','TOTQTD','PRECOUNITMEDIO','TOTLIQUIDO']
+                if c in _pm_v.columns]
+    _pm_out = _pm_v[_pm_cols].copy()
 
-    # Métricas resumo
-    st.markdown("---")
+    # Métricas
     _pm_c1, _pm_c2, _pm_c3 = st.columns(3)
     with _pm_c1:
-        st.metric("Produtos", _pm_result['CODPRODUTO'].nunique())
+        st.metric("Produtos", _pm_out['CODPRODUTO'].nunique())
     with _pm_c2:
-        _pm_nc = int(_pm_result['NOMEPRODUTO'].str.startswith('Não catalogado').sum())
-        st.metric("Não catalogados", _pm_nc)
+        st.metric("Não catalogados", int(_pm_out['NOMEPRODUTO'].str.startswith('Não catalogado').sum()))
     with _pm_c3:
-        if 'TOTLIQUIDO' in _pm_result.columns:
-            st.metric("Total Líquido", f"R$ {_pm_result['TOTLIQUIDO'].sum():,.2f}")
+        if 'TOTLIQUIDO' in _pm_out.columns:
+            st.metric("Total Líquido", f"R$ {pd.to_numeric(_pm_out['TOTLIQUIDO'], errors='coerce').sum():,.2f}")
 
     st.markdown("---")
 
-    # Filtros simples
-    _pm_col_f1, _pm_col_f2 = st.columns(2)
-    with _pm_col_f1:
-        _pm_busca_cod  = st.text_input("🔍 Buscar por Código", key="pm_cod_f")
-    with _pm_col_f2:
-        _pm_busca_nome = st.text_input("🔍 Buscar por Produto", key="pm_nome_f")
+    # Filtros
+    _pmc1, _pmc2 = st.columns(2)
+    with _pmc1:
+        _pm_fc = st.text_input("🔍 Código", key="pm_fc")
+    with _pmc2:
+        _pm_fn = st.text_input("🔍 Produto", key="pm_fn")
 
-    _pm_view = _pm_result.copy()
-    if _pm_busca_cod:
-        _pm_view = _pm_view[_pm_view['CODPRODUTO'].str.contains(_pm_busca_cod, case=False, na=False)]
-    if _pm_busca_nome:
-        _pm_view = _pm_view[_pm_view['NOMEPRODUTO'].str.contains(_pm_busca_nome, case=False, na=False)]
+    _pm_view = _pm_out.copy()
+    if _pm_fc:
+        _pm_view = _pm_view[_pm_view['CODPRODUTO'].str.contains(_pm_fc, case=False, na=False)]
+    if _pm_fn:
+        _pm_view = _pm_view[_pm_view['NOMEPRODUTO'].str.contains(_pm_fn, case=False, na=False)]
 
     st.dataframe(_pm_view, use_container_width=True, height=480, hide_index=True)
 
-    # Download Excel com formatação de moeda
-    if st.button("📥 Exportar Excel", key="pm_export"):
-        import io as _pm_io, openpyxl as _pm_xl
-        from openpyxl.styles import PatternFill as _PM_PF, Font as _PM_Font, Alignment as _PM_Aln, Border as _PM_Brd, Side as _PM_Side
-        from openpyxl.utils import get_column_letter as _pm_gcl
+    # Export Excel
+    if st.button("📥 Exportar Excel", key="pm_exp"):
+        import io as _pmio, openpyxl as _pmxl
+        from openpyxl.styles import PatternFill as _PMF, Font as _PMFt, Alignment as _PMA, Border as _PMB, Side as _PMS
+        from openpyxl.utils import get_column_letter as _pmgl
 
-        _pm_wb = _pm_xl.Workbook()
-        _pm_ws = _pm_wb.active
-        _pm_ws.title = "Preço Médio"
+        _pmwb = _pmxl.Workbook()
+        _pmws = _pmwb.active
+        _pmws.title = "Preço Médio"
 
-        _pm_hdr_fill = _PM_PF("solid", fgColor="1F4788")
-        _pm_hdr_font = _PM_Font(bold=True, color="FFFFFF", size=10)
-        _pm_hdr_aln  = _PM_Aln(horizontal="center", vertical="center", wrap_text=True)
-        _pm_brd      = _PM_Brd(left=_PM_Side(style='thin'), right=_PM_Side(style='thin'),
-                                top=_PM_Side(style='thin'),  bottom=_PM_Side(style='thin'))
-        _pm_alt      = _PM_PF("solid", fgColor="EEF3FC")
+        _pmhf = _PMF("solid", fgColor="1F4788")
+        _pmff = _PMFt(bold=True, color="FFFFFF", size=10)
+        _pmaf = _PMA(horizontal="center", vertical="center", wrap_text=True)
+        _pmbr = _PMB(left=_PMS(style='thin'), right=_PMS(style='thin'),
+                     top=_PMS(style='thin'), bottom=_PMS(style='thin'))
+        _pmal = _PMF("solid", fgColor="EEF3FC")
 
-        # Cabeçalho
-        _pm_col_labels = {
-            'CODPRODUTO':    'Código',
-            'NOMEPRODUTO':   'Nome do Produto',
-            'GRAMAT':        'Gramatura',
-            'TOTQTD':        'Qtd Vendida',
-            'PRECOUNITMEDIO':'Preço Médio Unit.',
-            'TOTLIQUIDO':    'Total Líquido'
-        }
-        _pm_hdrs = [_pm_col_labels.get(c, c) for c in _pm_cols_saida]
-        _pm_ws.append(_pm_hdrs)
-        for _ci in range(1, len(_pm_hdrs) + 1):
-            _c = _pm_ws.cell(1, _ci)
-            _c.fill = _pm_hdr_fill; _c.font = _pm_hdr_font
-            _c.alignment = _pm_hdr_aln; _c.border = _pm_brd
-        _pm_ws.row_dimensions[1].height = 28
+        _pm_labels = {'CODPRODUTO':'Código','NOMEPRODUTO':'Nome do Produto',
+                      'GRAMAT':'Gramatura','TOTQTD':'Qtd Vendida',
+                      'PRECOUNITMEDIO':'Preço Médio Unit.','TOTLIQUIDO':'Total Líquido'}
+        _pmws.append([_pm_labels.get(c,c) for c in _pm_cols])
+        for ci in range(1, len(_pm_cols)+1):
+            c = _pmws.cell(1, ci)
+            c.fill=_pmhf; c.font=_pmff; c.alignment=_pmaf; c.border=_pmbr
+        _pmws.row_dimensions[1].height = 28
 
-        # Índices de colunas de moeda e qtd
-        _pm_idx_preco  = _pm_cols_saida.index('PRECOUNITMEDIO') + 1 if 'PRECOUNITMEDIO' in _pm_cols_saida else None
-        _pm_idx_liq    = _pm_cols_saida.index('TOTLIQUIDO')     + 1 if 'TOTLIQUIDO'     in _pm_cols_saida else None
-        _pm_idx_qtd    = _pm_cols_saida.index('TOTQTD')         + 1 if 'TOTQTD'         in _pm_cols_saida else None
+        _pm_i_pr = _pm_cols.index('PRECOUNITMEDIO')+1 if 'PRECOUNITMEDIO' in _pm_cols else None
+        _pm_i_lq = _pm_cols.index('TOTLIQUIDO')+1     if 'TOTLIQUIDO'     in _pm_cols else None
+        _pm_i_qt = _pm_cols.index('TOTQTD')+1         if 'TOTQTD'         in _pm_cols else None
 
-        # Dados
-        for _ri, _row in enumerate(_pm_view.itertuples(index=False), 2):
-            _pm_ws.append(list(_row))
-            _fill = _pm_alt if _ri % 2 == 0 else _PM_PF()
-            for _ci in range(1, len(_pm_cols_saida) + 1):
-                _c = _pm_ws.cell(_ri, _ci)
-                _c.border = _pm_brd
-                _c.alignment = _PM_Aln(vertical="center")
-                if _fill.fill_type: _c.fill = _fill
-                if _ci == _pm_idx_preco: _c.number_format = 'R$ #,##0.00'
-                if _ci == _pm_idx_liq:   _c.number_format = 'R$ #,##0.00'
-                if _ci == _pm_idx_qtd:   _c.number_format = '#,##0'
+        for ri, row in enumerate(_pm_view.itertuples(index=False), 2):
+            _pmws.append(list(row))
+            fl = _pmal if ri%2==0 else _PMF()
+            for ci in range(1, len(_pm_cols)+1):
+                c = _pmws.cell(ri, ci)
+                c.border=_pmbr; c.alignment=_PMA(vertical="center")
+                if fl.fill_type: c.fill=fl
+                if ci==_pm_i_pr: c.number_format='R$ #,##0.00'
+                if ci==_pm_i_lq: c.number_format='R$ #,##0.00'
+                if ci==_pm_i_qt: c.number_format='#,##0'
 
-        # Larguras
-        _pm_largs = [12, 45, 12, 14, 18, 18]
-        for _ci, _lg in enumerate(_pm_largs[:len(_pm_cols_saida)], 1):
-            _pm_ws.column_dimensions[_pm_gcl(_ci)].width = _lg
+        for ci, w in enumerate([12,45,12,14,18,18][:len(_pm_cols)], 1):
+            _pmws.column_dimensions[_pmgl(ci)].width = w
 
-        _pm_buf = _pm_io.BytesIO()
-        _pm_wb.save(_pm_buf)
-        _pm_buf.seek(0)
-        st.download_button(
-            "⬇️ Baixar Excel",
-            data=_pm_buf.getvalue(),
-            file_name="preco_medio_conciliado.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="pm_dl"
-        )
-        st.success("✅ Arquivo gerado!")
+        _pmbuf = _pmio.BytesIO()
+        _pmwb.save(_pmbuf); _pmbuf.seek(0)
+        st.download_button("⬇️ Baixar Excel", data=_pmbuf.getvalue(),
+                           file_name="preco_medio.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           key="pm_dl")
+        st.success("✅ Gerado!")
 
-# ====================== PEDIDOS PENDENTES ======================
 elif menu == "Pedidos Pendentes":
     st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">Pedidos Pendentes de Faturamento</h2>', unsafe_allow_html=True)
     
