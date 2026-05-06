@@ -2944,21 +2944,26 @@ elif menu == "Positivação":
     with tab4_prod:
         st.subheader("📦 Faturamento por Produto no Período")
 
-        # Base: df_filtrado já aplica os filtros da sidebar (período, vendedor)
-        _prod_fat = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].copy()
-        _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce')
+        # Base: apenas NF Venda do df completo
+        _prod_fat_base = df[df['TipoMov'] == 'NF Venda'].copy()
+        _prod_fat_base['DataEmissao'] = pd.to_datetime(_prod_fat_base['DataEmissao'], errors='coerce')
 
-        # Filtro de período adicional (refina dentro do período da sidebar)
+        # Filtro de período — obrigatório para evitar somar histórico completo
         _fp_col_d1, _fp_col_d2 = st.columns(2)
         with _fp_col_d1:
-            _fp_dt_ini = st.date_input("Data inicial", value=None, key="fp_dt_ini_posit")
+            _fp_dt_ini = st.date_input("Data inicial *", key="fp_dt_ini_posit",
+                                        help="Selecione o período para filtrar o faturamento")
         with _fp_col_d2:
-            _fp_dt_fim = st.date_input("Data final", value=None, key="fp_dt_fim_posit")
+            _fp_dt_fim = st.date_input("Data final *", key="fp_dt_fim_posit")
 
+        _prod_fat = _prod_fat_base.copy()
         if _fp_dt_ini:
             _prod_fat = _prod_fat[_prod_fat['DataEmissao'] >= pd.to_datetime(_fp_dt_ini)]
         if _fp_dt_fim:
             _prod_fat = _prod_fat[_prod_fat['DataEmissao'] <= pd.to_datetime(_fp_dt_fim)]
+
+        if not _fp_dt_ini and not _fp_dt_fim:
+            st.info("ℹ️ Selecione um período acima para filtrar o faturamento por produto.")
 
         # Filtros
         _col_fp1, _col_fp2, _col_fp3, _col_fp4 = st.columns(4)
@@ -3502,9 +3507,15 @@ elif menu == "Histórico":
                         _hgc = next((c for c in _hg_df.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
                         _hgg = next((c for c in _hg_df.columns if 'GRAMATUR' in c), None)
                         if _hgc and _hgg:
-                            _hg_df[_hgc] = _hg_df[_hgc].astype(str).str.strip()
-                            _hg_map = _hg_df.drop_duplicates(subset=_hgc).set_index(_hgc)[_hgg]
-                            historico['Gramatura'] = historico['CodigoProduto'].astype(str).map(_hg_map).fillna('')
+                            # Normalizar chave: remover .0 de floats
+                            def _norm_cod(v):
+                                try: return str(int(float(str(v).strip())))
+                                except: return str(v).strip()
+                            _hg_df['_KEY'] = _hg_df[_hgc].apply(_norm_cod)
+                            _hg_map = _hg_df.drop_duplicates(subset='_KEY').set_index('_KEY')[_hgg]
+                            historico['_COD_NORM'] = historico['CodigoProduto'].apply(_norm_cod)
+                            historico['Gramatura'] = historico['_COD_NORM'].map(_hg_map).fillna('')
+                            historico = historico.drop(columns=['_COD_NORM'])
                 except:
                     historico['Gramatura'] = ''
             
