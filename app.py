@@ -2944,15 +2944,16 @@ elif menu == "Positivação":
     with tab4_prod:
         st.subheader("📦 Faturamento por Produto no Período")
 
-        _prod_fat = df[df['TipoMov'] == 'NF Venda'].copy()
+        # Base: df_filtrado já aplica os filtros da sidebar (período, vendedor)
+        _prod_fat = df_filtrado[df_filtrado['TipoMov'] == 'NF Venda'].copy()
         _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce')
 
-        # Filtro de período próprio deste módulo
+        # Filtro de período adicional (refina dentro do período da sidebar)
         _fp_col_d1, _fp_col_d2 = st.columns(2)
         with _fp_col_d1:
             _fp_dt_ini = st.date_input("Data inicial", value=None, key="fp_dt_ini_posit")
         with _fp_col_d2:
-            _fp_dt_fim = st.date_input("Data final",   value=None, key="fp_dt_fim_posit")
+            _fp_dt_fim = st.date_input("Data final", value=None, key="fp_dt_fim_posit")
 
         if _fp_dt_ini:
             _prod_fat = _prod_fat[_prod_fat['DataEmissao'] >= pd.to_datetime(_fp_dt_ini)]
@@ -3491,7 +3492,21 @@ elif menu == "Histórico":
                 st.warning("❌ Nenhum cliente encontrado com esse critério")
         
         if cpf_cnpj:
-            historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False)
+            historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
+            # Adicionar Gramatura via lookup da planilha de produtos
+            if 'Gramatura' not in historico.columns and planilhas_disponiveis.get('produtos_agrupados'):
+                try:
+                    _hg_df = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                    if _hg_df is not None:
+                        _hg_df.columns = _hg_df.columns.str.upper().str.strip()
+                        _hgc = next((c for c in _hg_df.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
+                        _hgg = next((c for c in _hg_df.columns if 'GRAMATUR' in c), None)
+                        if _hgc and _hgg:
+                            _hg_df[_hgc] = _hg_df[_hgc].astype(str).str.strip()
+                            _hg_map = _hg_df.drop_duplicates(subset=_hgc).set_index(_hgc)[_hgg]
+                            historico['Gramatura'] = historico['CodigoProduto'].astype(str).map(_hg_map).fillna('')
+                except:
+                    historico['Gramatura'] = ''
             
             if len(historico) > 0:
                 cliente_info = historico.iloc[0]
@@ -5310,6 +5325,22 @@ elif menu == "Pedidos Pendentes":
                 SEP_FILL   = PatternFill("solid", fgColor="1F4788")
                 SEP_FONT   = Font(bold=True, color="FFFFFF", size=10)
 
+                # Subgrupos da aba Campo
+                CAMPO_GRUPOS = [
+                    ('CAMPO 45X50',   lambda d: '45X50' in d.upper() or '45 X 50' in d.upper()),
+                    ('CAMPO 25X28 C5', lambda d: ('25X28' in d.upper() or '25 X 28' in d.upper()) and ('PCT 5' in d.upper() or 'PCT5' in d.upper() or 'C5' in d.upper() or ' 5' in d.upper())),
+                    ('CAMPO 25X28 C2', lambda d: ('25X28' in d.upper() or '25 X 28' in d.upper()) and ('PCT 2' in d.upper() or 'PCT2' in d.upper() or 'C2' in d.upper() or ' 2' in d.upper())),
+                ]
+
+                def _campo_grupo(desc):
+                    d = str(desc)
+                    for label, fn in CAMPO_GRUPOS:
+                        if fn(d):
+                            return label
+                    return 'Outros Campo'
+
+                ABAS_COM_CAMPO_SUBGRUPOS = {'Campo'}
+
                 for nome_aba in ORDEM_ABAS:
                     linhas_base = abas_data.get(nome_aba, [])
                     ws = wb.create_sheet(title=nome_aba)
@@ -5352,7 +5383,52 @@ elif menu == "Pedidos Pendentes":
 
                     r_idx = 2
 
-                    if nome_aba in ABAS_COM_FIOS:
+                    if nome_aba in ABAS_COM_CAMPO_SUBGRUPOS:
+                        # Agrupar por subgrupo Campo
+                        _campo_ordem = [g[0] for g in CAMPO_GRUPOS] + ['Outros Campo']
+                        _campo_grps  = {g: [] for g in _campo_ordem}
+                        for lb in linhas_base:
+                            _campo_grps[_campo_grupo(lb[IDX_DESC_B])].append(lb)
+
+                        dados_escritos = []
+                        for _cg_label in _campo_ordem:
+                            _cg_linhas = _campo_grps[_cg_label]
+                            if not _cg_linhas:
+                                continue
+                            # Linha separadora
+                            ws.cell(r_idx, 1, _cg_label)
+                            ws.merge_cells(start_row=r_idx, start_column=1,
+                                           end_row=r_idx, end_column=len(COLUNAS))
+                            for ci in range(1, len(COLUNAS) + 1):
+                                c = ws.cell(r_idx, ci)
+                                c.fill = SEP_FILL; c.font = SEP_FONT
+                                c.alignment = Alignment(horizontal="center", vertical="center")
+                                c.border = BORDER
+                            ws.row_dimensions[r_idx].height = 18
+                            r_idx += 1
+                            for lb in _cg_linhas:
+                                ws.append(_linha_aba(lb))
+                                _estilizar(r_idx, ALT_FILL if r_idx % 2 == 0 else PatternFill())
+                                dados_escritos.append(lb)
+                                r_idx += 1
+
+                        if dados_escritos:
+                            ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
+                            for i_b, ci in col_map.items():
+                                if i_b in (IDX_CONT_B, IDX_ENT_B, IDX_PEND_B, IDX_VPEND_B):
+                                    if i_b == IDX_VPEND_B:
+                                        tot = sum(
+                                            float(lb[IDX_PEND_B]) * float(lb[IDX_VUNIT_B])
+                                            if isinstance(lb[IDX_PEND_B], (int,float)) and isinstance(lb[IDX_VUNIT_B], (int,float)) else 0
+                                            for lb in dados_escritos
+                                        )
+                                    else:
+                                        tot = sum(float(lb[i_b]) if isinstance(lb[i_b], (int,float)) else 0 for lb in dados_escritos)
+                                    c = ws.cell(r_idx, ci, tot)
+                                    c.font = Font(bold=True)
+                                    c.number_format = 'R$ #,##0.00' if i_b == IDX_VPEND_B else '#,##0'
+
+                    elif nome_aba in ABAS_COM_FIOS:
                         # Agrupar por fios
                         grupos_f = {f: [] for f in ORDEM_FIOS_REL}
                         for lb in linhas_base:
