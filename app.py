@@ -3523,27 +3523,24 @@ elif menu == "Histórico":
         
         if cpf_cnpj:
             historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
-            # Gramatura — usa df_ref_preco já carregado no início do app
-            _hg_gram_lk = {}
-            if 'df_ref_preco' in dir() and df_ref_preco is not None:
-                _hg_ref = df_ref_preco.copy()
-                _hg_ref.columns = _hg_ref.columns.str.upper().str.strip()
-                _hg_gc = next((c for c in _hg_ref.columns if 'GRAMATUR' in c), None)
-                _hg_id = 'ID_COD' if 'ID_COD' in _hg_ref.columns else next((c for c in _hg_ref.columns if 'COD' in c), None)
-                if _hg_gc and _hg_id:
-                    for _, _r in _hg_ref.iterrows():
-                        try:
-                            _k = str(int(float(str(_r[_hg_id])))).strip()
-                            _v = str(_r.get(_hg_gc, '')).strip()
-                            if _v and _v.lower() not in ('nan','0','0.0',''):
-                                _hg_gram_lk[_k] = _v
-                        except:
-                            pass
-            if _hg_gram_lk:
-                def _hg_get(cod):
-                    try: return _hg_gram_lk.get(str(int(float(str(cod).strip()))), '')
-                    except: return _hg_gram_lk.get(str(cod).strip(), '')
-                historico['Gramatura'] = historico['CodigoProduto'].apply(_hg_get)
+            # Gramatura: buscar na planilha produtos_agrupados pela coluna GRAMATURA/GRAMAT pelo ID_COD
+            if planilhas_disponiveis.get('produtos_agrupados'):
+                _hg_plan = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                if _hg_plan is not None:
+                    _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
+                    _hg_gcol = next((c for c in _hg_plan.columns if c in ('GRAMATURA','GRAMAT')), None)
+                    if _hg_gcol and 'ID_COD' in _hg_plan.columns:
+                        _hg_map = (
+                            _hg_plan[['ID_COD', _hg_gcol]]
+                            .drop_duplicates(subset='ID_COD')
+                            .assign(ID_COD=lambda d: d['ID_COD'].apply(
+                                lambda v: str(int(float(str(v)))) if str(v).replace('.','',1).isdigit() else str(v)
+                            ))
+                            .set_index('ID_COD')[_hg_gcol]
+                        )
+                        historico['Gramatura'] = historico['CodigoProduto'].apply(
+                            lambda v: str(int(float(str(v)))) if str(v).replace('.','',1).isdigit() else str(v)
+                        ).map(_hg_map).fillna('')
             
             if len(historico) > 0:
                 cliente_info = historico.iloc[0]
