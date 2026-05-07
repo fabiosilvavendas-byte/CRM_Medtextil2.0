@@ -2967,16 +2967,15 @@ elif menu == "Positivação":
                 ["Faturamento (Maior)", "Quantidade (Maior)", "Nome (A-Z)"],
                 key="fp_ordem_posit")
 
-        # Base: todas as linhas de NF Venda (valor por item — correto para soma por produto)
-        # Igual à lógica de consulta de vendedores: ignora NF Dev, soma TotalProduto por item
+        # Base: todas as linhas de NF Venda
         _prod_fat = df[df['TipoMov'] == 'NF Venda'].copy()
-        _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce')
+        _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce').dt.normalize()
 
-        # Aplicar filtros
+        # Aplicar filtros de data
         if _fp_dt_ini:
-            _prod_fat = _prod_fat[_prod_fat['DataEmissao'] >= pd.to_datetime(_fp_dt_ini)]
+            _prod_fat = _prod_fat[_prod_fat['DataEmissao'] >= pd.Timestamp(_fp_dt_ini)]
         if _fp_dt_fim:
-            _prod_fat = _prod_fat[_prod_fat['DataEmissao'] <= pd.to_datetime(_fp_dt_fim)]
+            _prod_fat = _prod_fat[_prod_fat['DataEmissao'] <= pd.Timestamp(_fp_dt_fim)]
         if _fp_vend != 'Todos':
             _prod_fat = _prod_fat[_prod_fat['Vendedor'] == _fp_vend]
         if _fp_cod:
@@ -3522,8 +3521,8 @@ elif menu == "Histórico":
         
         if cpf_cnpj:
             historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
-            # Gramatura via lookup da planilha de produtos (normaliza código removendo .0)
-            if 'Gramatura' not in historico.columns and planilhas_disponiveis.get('produtos_agrupados'):
+            # Gramatura via lookup — mesma lógica do módulo faturamento por produto
+            if planilhas_disponiveis.get('produtos_agrupados'):
                 try:
                     _hg_df = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
                     if _hg_df is not None:
@@ -3531,16 +3530,15 @@ elif menu == "Histórico":
                         _hgc = next((c for c in _hg_df.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
                         _hgg = next((c for c in _hg_df.columns if 'GRAMATUR' in c), None)
                         if _hgc and _hgg:
-                            def _norm_cod(v):
+                            def _hg_norm(v):
                                 try: return str(int(float(str(v).strip())))
                                 except: return str(v).strip()
-                            _hg_df['_KEY'] = _hg_df[_hgc].apply(_norm_cod)
-                            _hg_map = _hg_df.drop_duplicates(subset='_KEY').set_index('_KEY')[_hgg]
+                            _hg_df['_K'] = _hg_df[_hgc].apply(_hg_norm)
+                            _hg_map = _hg_df.drop_duplicates(subset='_K').set_index('_K')[_hgg]
                             historico = historico.copy()
-                            historico['Gramatura'] = historico['CodigoProduto'].apply(_norm_cod).map(_hg_map).fillna('')
-                except Exception as _eg:
-                    historico = historico.copy()
-                    historico['Gramatura'] = ''
+                            historico['Gramatura'] = historico['CodigoProduto'].apply(_hg_norm).map(_hg_map).fillna('')
+                except:
+                    pass
             
             if len(historico) > 0:
                 cliente_info = historico.iloc[0]
