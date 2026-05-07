@@ -673,7 +673,7 @@ def listar_planilhas_github():
                     planilhas['vendas_produto'] = info
                 
                 # Identificar planilha de produtos agrupados
-                if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in content.name.upper():
+                if 'PRODUTOS_AGRUPADOS_COMPLETOS' in content.name.upper():
                     planilhas['produtos_agrupados'] = info
                 
                 # Identificar planilha de pedidos pendentes
