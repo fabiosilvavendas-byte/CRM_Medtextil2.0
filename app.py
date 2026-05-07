@@ -2967,7 +2967,7 @@ elif menu == "Positivação":
                 ["Faturamento (Maior)", "Quantidade (Maior)", "Nome (A-Z)"],
                 key="fp_ordem_posit")
 
-        # Base: todas as linhas de NF Venda
+        # Base: apenas NF Venda — NF Dev.Venda excluída
         _prod_fat = df[df['TipoMov'] == 'NF Venda'].copy()
         _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce').dt.normalize()
 
@@ -3523,30 +3523,27 @@ elif menu == "Histórico":
         
         if cpf_cnpj:
             historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
-            # Gramatura — mesma lógica do módulo pedidos pendentes (gram_lookup dict)
-            if planilhas_disponiveis.get('produtos_agrupados'):
-                try:
-                    _hg_df2 = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-                    if _hg_df2 is not None:
-                        _hg_df2.columns = _hg_df2.columns.str.upper().str.strip()
-                        _hg_gc2 = next((c for c in _hg_df2.columns if 'GRAMATUR' in c), None)
-                        _hg_lk2 = {}
-                        if _hg_gc2 and 'ID_COD' in _hg_df2.columns:
-                            for _, _hgr in _hg_df2.iterrows():
-                                try:
-                                    _hgk = str(int(float(str(_hgr['ID_COD'])))).strip()
-                                    _hgv = str(_hgr.get(_hg_gc2, '')).strip()
-                                    if _hgv and _hgv.lower() not in ('nan','0','0.0',''):
-                                        _hg_lk2[_hgk] = _hgv
-                                except:
-                                    pass
-                        if _hg_lk2:
-                            historico = historico.copy()
-                            historico['Gramatura'] = historico['CodigoProduto'].apply(
-                                lambda v: _hg_lk2.get(str(int(float(str(v).strip()))) if str(v).strip().replace('.','',1).isdigit() else str(v).strip(), '')
-                            )
-                except:
-                    pass
+            # Gramatura — usa df_ref_preco já carregado no início do app
+            _hg_gram_lk = {}
+            if 'df_ref_preco' in dir() and df_ref_preco is not None:
+                _hg_ref = df_ref_preco.copy()
+                _hg_ref.columns = _hg_ref.columns.str.upper().str.strip()
+                _hg_gc = next((c for c in _hg_ref.columns if 'GRAMATUR' in c), None)
+                _hg_id = 'ID_COD' if 'ID_COD' in _hg_ref.columns else next((c for c in _hg_ref.columns if 'COD' in c), None)
+                if _hg_gc and _hg_id:
+                    for _, _r in _hg_ref.iterrows():
+                        try:
+                            _k = str(int(float(str(_r[_hg_id])))).strip()
+                            _v = str(_r.get(_hg_gc, '')).strip()
+                            if _v and _v.lower() not in ('nan','0','0.0',''):
+                                _hg_gram_lk[_k] = _v
+                        except:
+                            pass
+            if _hg_gram_lk:
+                def _hg_get(cod):
+                    try: return _hg_gram_lk.get(str(int(float(str(cod).strip()))), '')
+                    except: return _hg_gram_lk.get(str(cod).strip(), '')
+                historico['Gramatura'] = historico['CodigoProduto'].apply(_hg_get)
             
             if len(historico) > 0:
                 cliente_info = historico.iloc[0]
@@ -6643,17 +6640,33 @@ elif menu == "Performance de Vendedores":
     st.markdown("---")
     st.markdown("### 🏅 Resultado por Vendedor")
 
-    # Mês de referência = mês ANTERIOR ao vigente
-    _pv_now2     = pd.Timestamp.now()
-    _mes_card    = (_pv_now2.month - 1) if _pv_now2.month > 1 else 12
-    _ano_card    = _pv_now2.year if _pv_now2.month > 1 else _pv_now2.year - 1
-    # Mesmo mês, ano anterior (para cálculo de meta)
-    _mes_meta    = _mes_card
-    _ano_meta    = _ano_card - 1
-
     _meses_pt = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",
                  7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
+
+    # Filtros: período e vendedor
+    _cd_c1, _cd_c2, _cd_c3 = st.columns(3)
+    _pv_now2 = pd.Timestamp.now()
+    with _cd_c1:
+        _cd_mes = st.selectbox("Mês de referência",
+                               options=list(range(1,13)),
+                               index=(_pv_now2.month - 2) % 12,
+                               format_func=lambda m: _meses_pt[m],
+                               key="cd_mes_sel")
+    with _cd_c2:
+        _cd_ano = st.number_input("Ano", min_value=2020,
+                                  max_value=_pv_now2.year,
+                                  value=_pv_now2.year if _pv_now2.month > 1 else _pv_now2.year - 1,
+                                  step=1, key="cd_ano_sel")
+    with _cd_c3:
+        _cd_vend_opts = ['Todos'] + sorted(notas_unicas['Vendedor'].dropna().unique().tolist())
+        _cd_vend_sel  = st.selectbox("Vendedor", _cd_vend_opts, key="cd_vend_sel")
+
+    _mes_card = int(_cd_mes)
+    _ano_card = int(_cd_ano)
+    _mes_meta = _mes_card
+    _ano_meta = _ano_card - 1
     _label_mes_card = f"{_meses_pt[_mes_card]}/{_ano_card}"
+
 
     # Base para faturamento: notas_unicas com Valor_Real (igual ao dashboard)
     _nu_hist = notas_unicas.copy()
@@ -6679,8 +6692,9 @@ elif menu == "Performance de Vendedores":
     # Vendedores ativos = quem tem NF Venda no mês de referência
     _vends_ativos = sorted(_df_mes_card["Vendedor"].dropna().unique().tolist())
 
-    if _pv_vendedor != "Todos":
-        _vends_ativos = [v for v in _vends_ativos if v == _pv_vendedor]
+    # Filtro do card (substituí _pv_vendedor pelo seletor próprio dos cards)
+    if _cd_vend_sel != "Todos":
+        _vends_ativos = [v for v in _vends_ativos if v == _cd_vend_sel]
 
     if not _vends_ativos:
         st.info(f"Nenhum vendedor com vendas em {_label_mes_card}.")
