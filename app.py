@@ -4479,28 +4479,6 @@ elif menu == "__historico_cliente__":
             cliente_sel = st.selectbox("Selecione o cliente:", sorted(clientes_encontrados), key="cli_sel_hc")
             historico_cli = df[df['RazaoSocial'] == cliente_sel].copy()
             cliente_info = historico_cli.iloc[0].to_dict() if len(historico_cli) > 0 else {}
-            # Gramatura: buscar na planilha produtos_agrupados
-            _hg_url = None
-            if planilhas_disponiveis.get('produtos_agrupados'):
-                _hg_url = planilhas_disponiveis['produtos_agrupados']['url']
-            else:
-                _hg_url = next((p['url'] for p in planilhas_disponiveis.get('todas', []) if 'PRODUTO' in p['nome'].upper()), None)
-            if _hg_url:
-                try:
-                    _hg_plan = carregar_planilha_github(_hg_url)
-                    if _hg_plan is not None:
-                        _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
-                        _hg_kcol = next((c for c in _hg_plan.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
-                        _hg_gcol = next((c for c in _hg_plan.columns if 'GRAMATUR' in c), None)
-                        if _hg_kcol and _hg_gcol:
-                            def _hg_norm2(v):
-                                try: return str(int(float(str(v).strip())))
-                                except: return str(v).strip()
-                            _hg_plan['_K'] = _hg_plan[_hg_kcol].apply(_hg_norm2)
-                            _hg_map = _hg_plan.drop_duplicates(subset='_K').set_index('_K')[_hg_gcol]
-                            historico_cli['Gramatura'] = historico_cli['CodigoProduto'].apply(_hg_norm2).map(_hg_map).fillna('')
-                except:
-                    pass
 
             _hc1, _hc2, _hc3, _hc4 = st.columns(4)
             with _hc1:
@@ -4516,8 +4494,6 @@ elif menu == "__historico_cliente__":
             vendas_cli = historico_cli[historico_cli['TipoMov'] == 'NF Venda']
             devolucoes_cli = historico_cli[historico_cli['TipoMov'] == 'NF Dev.Venda']
             colunas_display_hc = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
-            if 'Gramatura' in historico_cli.columns:
-                colunas_display_hc.insert(colunas_display_hc.index('CodigoProduto') + 1, 'Gramatura')
             if 'PrazoHistorico' in historico_cli.columns:
                 colunas_display_hc.append('PrazoHistorico')
             if 'Comissao' in historico_cli.columns:
@@ -4564,17 +4540,22 @@ elif menu == "Preço Médio":
         st.error("❌ Erro ao carregar planilhas")
         st.stop()
 
-    # Padronizar colunas
+    # Padronizar nomes de colunas
     _pm_v.columns = _pm_v.columns.str.upper().str.strip()
     _pm_p.columns = _pm_p.columns.str.upper().str.strip()
 
-    # Detectar coluna chave na planilha de produtos
+    # Garantir chave na planilha de vendas
+    if 'CODPRODUTO' not in _pm_v.columns:
+        st.error("❌ Coluna CODPRODUTO não encontrada na planilha de vendas")
+        st.stop()
+
+    # Detectar coluna chave na planilha de produtos (ID_COD)
     _pm_k = next((c for c in _pm_p.columns if c in ('ID_COD','CODPRODUTO','COD','CODIGO')), None)
     if _pm_k is None:
         st.error("❌ Coluna de código não encontrada na planilha de produtos")
         st.stop()
 
-    # Montar NOMEPRODUTO = GRUPO + DESCRIÇÃO + LINHA
+    # Montar nome do produto = GRUPO + DESCRIÇÃO + LINHA (composição)
     for a, b in [('DESCRICAO','DESCRIÇÃO'),('LINHAS','LINHA'),('GRUPOS','GRUPO')]:
         if a in _pm_p.columns and b not in _pm_p.columns:
             _pm_p = _pm_p.rename(columns={a: b})
@@ -4590,26 +4571,23 @@ elif menu == "Preço Médio":
     _pm_gcol = next((c for c in _pm_p.columns if 'GRAM' in c.upper()), None)
     _pm_p['_GRAM'] = _pm_p[_pm_gcol].fillna('') if _pm_gcol else ''
 
-    # Lookup por código (sem duplicatas — pega o primeiro)
-    _pm_idx = _pm_p[[_pm_k, '_NOME', '_GRAM']].drop_duplicates(subset=_pm_k)
+    # Lookup por código — sem duplicatas, pega o primeiro
+    _pm_idx = _pm_p[[_pm_k, '_NOME', '_GRAM']].drop_duplicates(subset=_pm_k).copy()
     _pm_idx[_pm_k] = _pm_idx[_pm_k].astype(str).str.strip()
     _pm_map_nome = _pm_idx.set_index(_pm_k)['_NOME']
     _pm_map_gram = _pm_idx.set_index(_pm_k)['_GRAM']
 
-    # Garantir chave na planilha de vendas
-    if 'CODPRODUTO' not in _pm_v.columns:
-        st.error("❌ Coluna CODPRODUTO não encontrada na planilha de vendas")
-        st.stop()
-    _pm_v['CODPRODUTO'] = _pm_v['CODPRODUTO'].astype(str).str.strip()
+    # Normalizar chave de vendas para string (sem alterar os valores numéricos)
+    _pm_v['_COD_KEY'] = _pm_v['CODPRODUTO'].astype(str).str.strip()
 
-    # PROCV: substituir NOMEPRODUTO e GRAMAT via .map() — sem alterar nenhum outro valor
-    _pm_v['NOMEPRODUTO'] = _pm_v['CODPRODUTO'].map(_pm_map_nome)
-    _pm_v['NOMEPRODUTO'] = _pm_v['NOMEPRODUTO'].fillna(
-        'Não catalogado (' + _pm_v['CODPRODUTO'] + ')'
+    # Substituir APENAS o nome e a gramatura — todos os outros valores permanecem intactos
+    _pm_v['NOMEPRODUTO'] = _pm_v['_COD_KEY'].map(_pm_map_nome).fillna(
+        'Não catalogado (' + _pm_v['_COD_KEY'] + ')'
     )
-    _pm_v['GRAMAT'] = _pm_v['CODPRODUTO'].map(_pm_map_gram).fillna('')
+    _pm_v['GRAMAT'] = _pm_v['_COD_KEY'].map(_pm_map_gram).fillna('')
+    _pm_v = _pm_v.drop(columns=['_COD_KEY'])
 
-    # Selecionar colunas de saída — exatamente como na planilha, sem recalcular
+    # Selecionar apenas as 6 colunas de saída — valores numéricos intactos da planilha original
     _pm_cols = [c for c in ['CODPRODUTO','NOMEPRODUTO','GRAMAT','TOTQTD','PRECOUNITMEDIO','TOTLIQUIDO']
                 if c in _pm_v.columns]
     _pm_out = _pm_v[_pm_cols].copy()
@@ -4639,7 +4617,21 @@ elif menu == "Preço Médio":
     if _pm_fn:
         _pm_view = _pm_view[_pm_view['NOMEPRODUTO'].str.contains(_pm_fn, case=False, na=False)]
 
-    st.dataframe(_pm_view, use_container_width=True, height=480, hide_index=True)
+    # Exibir tabela com colunas de moeda formatadas
+    _pm_display = _pm_view.copy()
+    if 'PRECOUNITMEDIO' in _pm_display.columns:
+        _pm_display['PRECOUNITMEDIO'] = pd.to_numeric(_pm_display['PRECOUNITMEDIO'], errors='coerce').apply(
+            lambda x: f"R$ {x:,.2f}" if pd.notnull(x) else ""
+        )
+    if 'TOTLIQUIDO' in _pm_display.columns:
+        _pm_display['TOTLIQUIDO'] = pd.to_numeric(_pm_display['TOTLIQUIDO'], errors='coerce').apply(
+            lambda x: f"R$ {x:,.2f}" if pd.notnull(x) else ""
+        )
+    _pm_display = _pm_display.rename(columns={
+        'CODPRODUTO':'Código', 'NOMEPRODUTO':'Nome do Produto', 'GRAMAT':'Gramatura',
+        'TOTQTD':'Qtd Vendida', 'PRECOUNITMEDIO':'Preço Médio Unit.', 'TOTLIQUIDO':'Total Líquido'
+    })
+    st.dataframe(_pm_display, use_container_width=True, height=480, hide_index=True)
 
     # Export Excel
     if st.button("📥 Exportar Excel", key="pm_exp"):
