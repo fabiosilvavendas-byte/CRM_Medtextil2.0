@@ -2944,84 +2944,108 @@ elif menu == "Positivação":
     with tab4_prod:
         st.subheader("📦 Faturamento por Produto no Período")
 
-        # Base: apenas NF Venda do df completo
-        _prod_fat_base = df[df['TipoMov'] == 'NF Venda'].copy()
-        _prod_fat_base['DataEmissao'] = pd.to_datetime(_prod_fat_base['DataEmissao'], errors='coerce')
-
-        # Filtro de período — obrigatório para evitar somar histórico completo
+        # Filtros de período — value=None para não pré-selecionar data
         _fp_col_d1, _fp_col_d2 = st.columns(2)
         with _fp_col_d1:
-            _fp_dt_ini = st.date_input("Data inicial *", key="fp_dt_ini_posit",
-                                        help="Selecione o período para filtrar o faturamento")
+            _fp_dt_ini = st.date_input("Data inicial", value=None, key="fp_dt_ini_posit")
         with _fp_col_d2:
-            _fp_dt_fim = st.date_input("Data final *", key="fp_dt_fim_posit")
+            _fp_dt_fim = st.date_input("Data final",   value=None, key="fp_dt_fim_posit")
 
-        _prod_fat = _prod_fat_base.copy()
+        # Filtros de produto e vendedor
+        _col_fp1, _col_fp2, _col_fp3, _col_fp4 = st.columns(4)
+        with _col_fp1:
+            _fp_vend = st.selectbox(
+                "Vendedor", ['Todos'] + sorted(df['Vendedor'].dropna().unique().tolist()),
+                key="fp_vend_posit"
+            )
+        with _col_fp2:
+            _fp_cod = st.text_input("🔍 Código", placeholder="Ex: 85", key="fp_cod_posit")
+        with _col_fp3:
+            _fp_busca = st.text_input("🔍 Produto", placeholder="Ex: Atadura", key="fp_busca_posit")
+        with _col_fp4:
+            _fp_ordem = st.selectbox("Ordenar por",
+                ["Faturamento (Maior)", "Quantidade (Maior)", "Nome (A-Z)"],
+                key="fp_ordem_posit")
+
+        # Base: todas as linhas de NF Venda (valor por item — correto para soma por produto)
+        # Igual à lógica de consulta de vendedores: ignora NF Dev, soma TotalProduto por item
+        _prod_fat = df[df['TipoMov'] == 'NF Venda'].copy()
+        _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce')
+
+        # Aplicar filtros
         if _fp_dt_ini:
             _prod_fat = _prod_fat[_prod_fat['DataEmissao'] >= pd.to_datetime(_fp_dt_ini)]
         if _fp_dt_fim:
             _prod_fat = _prod_fat[_prod_fat['DataEmissao'] <= pd.to_datetime(_fp_dt_fim)]
-
-        if not _fp_dt_ini and not _fp_dt_fim:
-            st.info("ℹ️ Selecione um período acima para filtrar o faturamento por produto.")
-
-        # Filtros
-        _col_fp1, _col_fp2, _col_fp3, _col_fp4 = st.columns(4)
-        with _col_fp1:
-            _fp_vend = st.selectbox(
-                "Vendedor", ['Todos'] + sorted(_prod_fat['Vendedor'].dropna().unique().tolist()),
-                key="fp_vend_posit"
-            )
-        with _col_fp2:
-            _fp_cod = st.text_input("🔍 Código do produto", placeholder="Ex: 3", key="fp_cod_posit")
-        with _col_fp3:
-            _fp_busca = st.text_input("🔍 Nome do produto", placeholder="Digite o nome...", key="fp_busca_posit")
-        with _col_fp4:
-            _fp_ordem = st.selectbox("Ordenar por", ["Faturamento (Maior)", "Quantidade (Maior)", "Nome (A-Z)"], key="fp_ordem_posit")
-
         if _fp_vend != 'Todos':
             _prod_fat = _prod_fat[_prod_fat['Vendedor'] == _fp_vend]
-        if _fp_cod and len(_fp_cod) >= 1:
+        if _fp_cod:
             _prod_fat = _prod_fat[_prod_fat['CodigoProduto'].astype(str).str.strip() == str(_fp_cod).strip()]
         if _fp_busca and len(_fp_busca) >= 2:
             _prod_fat = _prod_fat[_prod_fat['NomeProduto'].str.contains(_fp_busca, case=False, na=False)]
 
-        _prod_agrup = _prod_fat.groupby(['CodigoProduto', 'NomeProduto']).agg(
-            Quantidade=('Quantidade', 'sum'),
-            TotalProduto=('TotalProduto', 'sum')
-        ).reset_index()
-
-        if _fp_ordem == "Faturamento (Maior)":
-            _prod_agrup = _prod_agrup.sort_values('TotalProduto', ascending=False)
-        elif _fp_ordem == "Quantidade (Maior)":
-            _prod_agrup = _prod_agrup.sort_values('Quantidade', ascending=False)
+        if len(_prod_fat) == 0:
+            st.info("ℹ️ Nenhum produto encontrado. Ajuste os filtros acima.")
         else:
-            _prod_agrup = _prod_agrup.sort_values('NomeProduto')
+            _prod_agrup = _prod_fat.groupby(['CodigoProduto', 'NomeProduto']).agg(
+                Quantidade=('Quantidade', 'sum'),
+                TotalProduto=('TotalProduto', 'sum')
+            ).reset_index()
 
-        _col_fp_m1, _col_fp_m2, _col_fp_m3 = st.columns(3)
-        with _col_fp_m1:
-            st.metric("Total Produtos", len(_prod_agrup))
-        with _col_fp_m2:
-            st.metric("Faturamento Total", f"R$ {_prod_agrup['TotalProduto'].sum():,.2f}")
-        with _col_fp_m3:
-            st.metric("Qtd Total", f"{_prod_agrup['Quantidade'].sum():,.0f}")
+            if _fp_ordem == "Faturamento (Maior)":
+                _prod_agrup = _prod_agrup.sort_values('TotalProduto', ascending=False)
+            elif _fp_ordem == "Quantidade (Maior)":
+                _prod_agrup = _prod_agrup.sort_values('Quantidade', ascending=False)
+            else:
+                _prod_agrup = _prod_agrup.sort_values('NomeProduto')
 
-        _prod_display = _prod_agrup.copy()
-        _prod_display['TotalProduto'] = _prod_display['TotalProduto'].apply(lambda x: f"R$ {x:,.2f}")
-        _prod_display['Quantidade']   = _prod_display['Quantidade'].apply(lambda x: f"{x:,.0f}")
-        _prod_display = _prod_display.rename(columns={
-            'CodigoProduto': 'Código', 'NomeProduto': 'Produto',
-            'Quantidade': 'Qtd', 'TotalProduto': 'Faturamento'
-        })
-        st.dataframe(_prod_display, use_container_width=True, height=420, hide_index=True)
+            # Adicionar Gramatura via lookup da planilha de produtos
+            if planilhas_disponiveis.get('produtos_agrupados'):
+                try:
+                    _fp_gram_df = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                    if _fp_gram_df is not None:
+                        _fp_gram_df.columns = _fp_gram_df.columns.str.upper().str.strip()
+                        _fp_kc = next((c for c in _fp_gram_df.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
+                        _fp_gc = next((c for c in _fp_gram_df.columns if 'GRAMATUR' in c), None)
+                        if _fp_kc and _fp_gc:
+                            def _fp_norm(v):
+                                try: return str(int(float(str(v).strip())))
+                                except: return str(v).strip()
+                            _fp_gram_df['_K'] = _fp_gram_df[_fp_kc].apply(_fp_norm)
+                            _fp_gmap = _fp_gram_df.drop_duplicates(subset='_K').set_index('_K')[_fp_gc]
+                            _prod_agrup['Gramatura'] = _prod_agrup['CodigoProduto'].apply(_fp_norm).map(_fp_gmap).fillna('')
+                except:
+                    _prod_agrup['Gramatura'] = ''
 
-        st.download_button(
-            "📥 Exportar Faturamento por Produto",
-            to_excel(_prod_agrup),
-            "faturamento_por_produto.xlsx",
-            "application/vnd.ms-excel",
-            key="dl_fat_produto_posit"
-        )
+            _col_fp_m1, _col_fp_m2, _col_fp_m3 = st.columns(3)
+            with _col_fp_m1:
+                st.metric("Total Produtos", len(_prod_agrup))
+            with _col_fp_m2:
+                st.metric("Faturamento Total", f"R$ {_prod_agrup['TotalProduto'].sum():,.2f}")
+            with _col_fp_m3:
+                st.metric("Qtd Total", f"{_prod_agrup['Quantidade'].sum():,.0f}")
+
+            _prod_display = _prod_agrup.copy()
+            _prod_display['TotalProduto'] = _prod_display['TotalProduto'].apply(lambda x: f"R$ {x:,.2f}")
+            _prod_display['Quantidade']   = _prod_display['Quantidade'].apply(lambda x: f"{x:,.0f}")
+            _col_order = ['CodigoProduto', 'NomeProduto']
+            if 'Gramatura' in _prod_display.columns:
+                _col_order.append('Gramatura')
+            _col_order += ['Quantidade', 'TotalProduto']
+            _prod_display = _prod_display[_col_order].rename(columns={
+                'CodigoProduto': 'Código', 'NomeProduto': 'Produto',
+                'Gramatura': 'Gramatura', 'Quantidade': 'Qtd',
+                'TotalProduto': 'Faturamento'
+            })
+            st.dataframe(_prod_display, use_container_width=True, height=420, hide_index=True)
+
+            st.download_button(
+                "📥 Exportar Faturamento por Produto",
+                to_excel(_prod_agrup),
+                "faturamento_por_produto.xlsx",
+                "application/vnd.ms-excel",
+                key="dl_fat_produto_posit"
+            )
 
 # ====================== INADIMPLÊNCIA ======================
 elif menu == "Inadimplência":
@@ -3498,7 +3522,7 @@ elif menu == "Histórico":
         
         if cpf_cnpj:
             historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
-            # Adicionar Gramatura via lookup da planilha de produtos
+            # Gramatura via lookup da planilha de produtos (normaliza código removendo .0)
             if 'Gramatura' not in historico.columns and planilhas_disponiveis.get('produtos_agrupados'):
                 try:
                     _hg_df = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
@@ -3507,16 +3531,15 @@ elif menu == "Histórico":
                         _hgc = next((c for c in _hg_df.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
                         _hgg = next((c for c in _hg_df.columns if 'GRAMATUR' in c), None)
                         if _hgc and _hgg:
-                            # Normalizar chave: remover .0 de floats
                             def _norm_cod(v):
                                 try: return str(int(float(str(v).strip())))
                                 except: return str(v).strip()
                             _hg_df['_KEY'] = _hg_df[_hgc].apply(_norm_cod)
                             _hg_map = _hg_df.drop_duplicates(subset='_KEY').set_index('_KEY')[_hgg]
-                            historico['_COD_NORM'] = historico['CodigoProduto'].apply(_norm_cod)
-                            historico['Gramatura'] = historico['_COD_NORM'].map(_hg_map).fillna('')
-                            historico = historico.drop(columns=['_COD_NORM'])
-                except:
+                            historico = historico.copy()
+                            historico['Gramatura'] = historico['CodigoProduto'].apply(_norm_cod).map(_hg_map).fillna('')
+                except Exception as _eg:
+                    historico = historico.copy()
                     historico['Gramatura'] = ''
             
             if len(historico) > 0:
