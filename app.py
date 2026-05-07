@@ -2986,9 +2986,11 @@ elif menu == "Positivação":
         if len(_prod_fat) == 0:
             st.info("ℹ️ Nenhum produto encontrado. Ajuste os filtros acima.")
         else:
+            # Valor correto para este módulo: soma da coluna PrecoQtdXItem da planilha CONSULTA_VENDEDORES
+            _val_col = 'PrecoQtdXItem' if 'PrecoQtdXItem' in _prod_fat.columns else 'TotalProduto'
             _prod_agrup = _prod_fat.groupby(['CodigoProduto', 'NomeProduto']).agg(
                 Quantidade=('Quantidade', 'sum'),
-                TotalProduto=('TotalProduto', 'sum')
+                TotalProduto=(_val_col, 'sum')
             ).reset_index()
 
             if _fp_ordem == "Faturamento (Maior)":
@@ -3521,22 +3523,28 @@ elif menu == "Histórico":
         
         if cpf_cnpj:
             historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
-            # Gramatura via lookup — mesma lógica do módulo faturamento por produto
+            # Gramatura — mesma lógica do módulo pedidos pendentes (gram_lookup dict)
             if planilhas_disponiveis.get('produtos_agrupados'):
                 try:
-                    _hg_df = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-                    if _hg_df is not None:
-                        _hg_df.columns = _hg_df.columns.str.upper().str.strip()
-                        _hgc = next((c for c in _hg_df.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
-                        _hgg = next((c for c in _hg_df.columns if 'GRAMATUR' in c), None)
-                        if _hgc and _hgg:
-                            def _hg_norm(v):
-                                try: return str(int(float(str(v).strip())))
-                                except: return str(v).strip()
-                            _hg_df['_K'] = _hg_df[_hgc].apply(_hg_norm)
-                            _hg_map = _hg_df.drop_duplicates(subset='_K').set_index('_K')[_hgg]
+                    _hg_df2 = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                    if _hg_df2 is not None:
+                        _hg_df2.columns = _hg_df2.columns.str.upper().str.strip()
+                        _hg_gc2 = next((c for c in _hg_df2.columns if 'GRAMATUR' in c), None)
+                        _hg_lk2 = {}
+                        if _hg_gc2 and 'ID_COD' in _hg_df2.columns:
+                            for _, _hgr in _hg_df2.iterrows():
+                                try:
+                                    _hgk = str(int(float(str(_hgr['ID_COD'])))).strip()
+                                    _hgv = str(_hgr.get(_hg_gc2, '')).strip()
+                                    if _hgv and _hgv.lower() not in ('nan','0','0.0',''):
+                                        _hg_lk2[_hgk] = _hgv
+                                except:
+                                    pass
+                        if _hg_lk2:
                             historico = historico.copy()
-                            historico['Gramatura'] = historico['CodigoProduto'].apply(_hg_norm).map(_hg_map).fillna('')
+                            historico['Gramatura'] = historico['CodigoProduto'].apply(
+                                lambda v: _hg_lk2.get(str(int(float(str(v).strip()))) if str(v).strip().replace('.','',1).isdigit() else str(v).strip(), '')
+                            )
                 except:
                     pass
             
