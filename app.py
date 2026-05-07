@@ -4540,22 +4540,32 @@ elif menu == "Preço Médio":
         st.error("❌ Erro ao carregar planilhas")
         st.stop()
 
-    # Padronizar nomes de colunas
+    # Padronizar colunas
     _pm_v.columns = _pm_v.columns.str.upper().str.strip()
     _pm_p.columns = _pm_p.columns.str.upper().str.strip()
 
-    # Garantir chave na planilha de vendas
-    if 'CODPRODUTO' not in _pm_v.columns:
-        st.error("❌ Coluna CODPRODUTO não encontrada na planilha de vendas")
-        st.stop()
-
     # Detectar coluna chave na planilha de produtos (ID_COD)
-    _pm_k = next((c for c in _pm_p.columns if c in ('ID_COD','CODPRODUTO','COD','CODIGO')), None)
+    _pm_k = next((c for c in _pm_p.columns if c in ('ID_COD','CODPRODUTO','CODPROD','COD','CODIGO')), None)
     if _pm_k is None:
         st.error("❌ Coluna de código não encontrada na planilha de produtos")
         st.stop()
 
-    # Montar nome do produto = GRUPO + DESCRIÇÃO + LINHA (composição)
+    # Detectar coluna chave na planilha de vendas (CODPROD ou CODPRODUTO)
+    _pm_vk = next((c for c in _pm_v.columns if c in ('CODPROD','CODPRODUTO','COD','CODIGO')), None)
+    if _pm_vk is None:
+        st.error("❌ Coluna de código não encontrada na planilha de vendas")
+        st.stop()
+
+    # Detectar coluna nome na planilha de vendas (NOMEPROD ou NOMEPRODUTO)
+    _pm_vn = next((c for c in _pm_v.columns if c in ('NOMEPRODUTO','NOMEPROD','NOME')), None)
+    if _pm_vn is None:
+        st.error("❌ Coluna de nome não encontrada na planilha de vendas")
+        st.stop()
+
+    # Detectar coluna gramatura na planilha de vendas
+    _pm_vg = next((c for c in _pm_v.columns if 'GRAM' in c.upper()), None)
+
+    # Montar nome do produto = GRUPO + DESCRIÇÃO + LINHA (composição da planilha de produtos)
     for a, b in [('DESCRICAO','DESCRIÇÃO'),('LINHAS','LINHA'),('GRUPOS','GRUPO')]:
         if a in _pm_p.columns and b not in _pm_p.columns:
             _pm_p = _pm_p.rename(columns={a: b})
@@ -4571,33 +4581,36 @@ elif menu == "Preço Médio":
     _pm_gcol = next((c for c in _pm_p.columns if 'GRAM' in c.upper()), None)
     _pm_p['_GRAM'] = _pm_p[_pm_gcol].fillna('') if _pm_gcol else ''
 
-    # Lookup por código — sem duplicatas, pega o primeiro
+    # Lookup por código — sem decimais, sem duplicatas
     _pm_idx = _pm_p[[_pm_k, '_NOME', '_GRAM']].drop_duplicates(subset=_pm_k).copy()
-    _pm_idx[_pm_k] = _pm_idx[_pm_k].astype(str).str.strip()
+    _pm_idx[_pm_k] = _pm_idx[_pm_k].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
     _pm_map_nome = _pm_idx.set_index(_pm_k)['_NOME']
     _pm_map_gram = _pm_idx.set_index(_pm_k)['_GRAM']
 
-    # Normalizar chave de vendas para string (sem alterar os valores numéricos)
-    _pm_v['_COD_KEY'] = _pm_v['CODPRODUTO'].astype(str).str.strip()
+    # Chave de vendas normalizada para string sem decimais (não altera valores numéricos)
+    _pm_v['_COD_KEY'] = _pm_v[_pm_vk].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
 
-    # Substituir APENAS o nome e a gramatura — todos os outros valores permanecem intactos
-    _pm_v['NOMEPRODUTO'] = _pm_v['_COD_KEY'].map(_pm_map_nome).fillna(
+    # Substituir APENAS nome e gramatura — todos os outros valores permanecem intactos
+    _pm_v[_pm_vn] = _pm_v['_COD_KEY'].map(_pm_map_nome).fillna(
         'Não catalogado (' + _pm_v['_COD_KEY'] + ')'
     )
-    _pm_v['GRAMAT'] = _pm_v['_COD_KEY'].map(_pm_map_gram).fillna('')
+    if _pm_vg:
+        _pm_v[_pm_vg] = _pm_v['_COD_KEY'].map(_pm_map_gram).fillna('')
     _pm_v = _pm_v.drop(columns=['_COD_KEY'])
 
-    # Selecionar apenas as 6 colunas de saída — valores numéricos intactos da planilha original
-    _pm_cols = [c for c in ['CODPRODUTO','NOMEPRODUTO','GRAMAT','TOTQTD','PRECOUNITMEDIO','TOTLIQUIDO']
-                if c in _pm_v.columns]
+    # Selecionar apenas as 6 colunas de saída usando os nomes reais detectados
+    _pm_cols = []
+    for _c in [_pm_vk, _pm_vn, _pm_vg, 'TOTQTD', 'PRECOUNITMEDIO', 'TOTLIQUIDO']:
+        if _c and _c in _pm_v.columns and _c not in _pm_cols:
+            _pm_cols.append(_c)
     _pm_out = _pm_v[_pm_cols].copy()
 
     # Métricas
     _pm_c1, _pm_c2, _pm_c3 = st.columns(3)
     with _pm_c1:
-        st.metric("Produtos", _pm_out['CODPRODUTO'].nunique())
+        st.metric("Produtos", _pm_out[_pm_vk].nunique())
     with _pm_c2:
-        st.metric("Não catalogados", int(_pm_out['NOMEPRODUTO'].str.startswith('Não catalogado').sum()))
+        st.metric("Não catalogados", int(_pm_out[_pm_vn].str.startswith('Não catalogado').sum()))
     with _pm_c3:
         if 'TOTLIQUIDO' in _pm_out.columns:
             st.metric("Total Líquido", f"R$ {pd.to_numeric(_pm_out['TOTLIQUIDO'], errors='coerce').sum():,.2f}")
@@ -4613,9 +4626,9 @@ elif menu == "Preço Médio":
 
     _pm_view = _pm_out.copy()
     if _pm_fc:
-        _pm_view = _pm_view[_pm_view['CODPRODUTO'].str.contains(_pm_fc, case=False, na=False)]
+        _pm_view = _pm_view[_pm_view[_pm_vk].astype(str).str.contains(_pm_fc, case=False, na=False)]
     if _pm_fn:
-        _pm_view = _pm_view[_pm_view['NOMEPRODUTO'].str.contains(_pm_fn, case=False, na=False)]
+        _pm_view = _pm_view[_pm_view[_pm_vn].str.contains(_pm_fn, case=False, na=False)]
 
     # Exibir tabela com colunas de moeda formatadas
     _pm_display = _pm_view.copy()
@@ -4627,10 +4640,12 @@ elif menu == "Preço Médio":
         _pm_display['TOTLIQUIDO'] = pd.to_numeric(_pm_display['TOTLIQUIDO'], errors='coerce').apply(
             lambda x: f"R$ {x:,.2f}" if pd.notnull(x) else ""
         )
-    _pm_display = _pm_display.rename(columns={
-        'CODPRODUTO':'Código', 'NOMEPRODUTO':'Nome do Produto', 'GRAMAT':'Gramatura',
-        'TOTQTD':'Qtd Vendida', 'PRECOUNITMEDIO':'Preço Médio Unit.', 'TOTLIQUIDO':'Total Líquido'
-    })
+    _pm_rename = {
+        _pm_vk: 'Código', _pm_vn: 'Nome do Produto',
+        'TOTQTD': 'Qtd Vendida', 'PRECOUNITMEDIO': 'Preço Médio Unit.', 'TOTLIQUIDO': 'Total Líquido'
+    }
+    if _pm_vg: _pm_rename[_pm_vg] = 'Gramatura'
+    _pm_display = _pm_display.rename(columns=_pm_rename)
     st.dataframe(_pm_display, use_container_width=True, height=480, hide_index=True)
 
     # Export Excel
@@ -4650,9 +4665,10 @@ elif menu == "Preço Médio":
                      top=_PMS(style='thin'), bottom=_PMS(style='thin'))
         _pmal = _PMF("solid", fgColor="EEF3FC")
 
-        _pm_labels = {'CODPRODUTO':'Código','NOMEPRODUTO':'Nome do Produto',
-                      'GRAMAT':'Gramatura','TOTQTD':'Qtd Vendida',
+        _pm_labels = {_pm_vk:'Código', _pm_vn:'Nome do Produto',
+                      'TOTQTD':'Qtd Vendida',
                       'PRECOUNITMEDIO':'Preço Médio Unit.','TOTLIQUIDO':'Total Líquido'}
+        if _pm_vg: _pm_labels[_pm_vg] = 'Gramatura'
         _pmws.append([_pm_labels.get(c,c) for c in _pm_cols])
         for ci in range(1, len(_pm_cols)+1):
             c = _pmws.cell(1, ci)
