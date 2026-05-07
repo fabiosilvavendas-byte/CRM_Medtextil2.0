@@ -673,7 +673,7 @@ def listar_planilhas_github():
                     planilhas['vendas_produto'] = info
                 
                 # Identificar planilha de produtos agrupados
-                if 'PRODUTOS_AGRUPADOS_COMPLETOS' in content.name.upper():
+                if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in content.name.upper():
                     planilhas['produtos_agrupados'] = info
                 
                 # Identificar planilha de pedidos pendentes
@@ -3525,22 +3525,21 @@ elif menu == "Histórico":
             historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
             # Gramatura: buscar na planilha produtos_agrupados pela coluna GRAMATURA/GRAMAT pelo ID_COD
             if planilhas_disponiveis.get('produtos_agrupados'):
-                _hg_plan = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-                if _hg_plan is not None:
-                    _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
-                    _hg_gcol = next((c for c in _hg_plan.columns if c in ('GRAMATURA','GRAMAT')), None)
-                    if _hg_gcol and 'ID_COD' in _hg_plan.columns:
-                        _hg_map = (
-                            _hg_plan[['ID_COD', _hg_gcol]]
-                            .drop_duplicates(subset='ID_COD')
-                            .assign(ID_COD=lambda d: d['ID_COD'].apply(
-                                lambda v: str(int(float(str(v)))) if str(v).replace('.','',1).isdigit() else str(v)
-                            ))
-                            .set_index('ID_COD')[_hg_gcol]
-                        )
-                        historico['Gramatura'] = historico['CodigoProduto'].apply(
-                            lambda v: str(int(float(str(v)))) if str(v).replace('.','',1).isdigit() else str(v)
-                        ).map(_hg_map).fillna('')
+                try:
+                    _hg_plan = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                    if _hg_plan is not None:
+                        _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
+                        _hg_kcol = next((c for c in _hg_plan.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
+                        _hg_gcol = next((c for c in _hg_plan.columns if 'GRAMATUR' in c), None)
+                        if _hg_kcol and _hg_gcol:
+                            def _hg_norm(v):
+                                try: return str(int(float(str(v).strip())))
+                                except: return str(v).strip()
+                            _hg_plan['_K'] = _hg_plan[_hg_kcol].apply(_hg_norm)
+                            _hg_map = _hg_plan.drop_duplicates(subset='_K').set_index('_K')[_hg_gcol]
+                            historico['Gramatura'] = historico['CodigoProduto'].apply(_hg_norm).map(_hg_map).fillna('')
+                except:
+                    historico['Gramatura'] = ''
             
             if len(historico) > 0:
                 cliente_info = historico.iloc[0]
