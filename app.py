@@ -7598,31 +7598,31 @@ elif menu == "Consulta Clientes":
 
     # ── Percentuais adicionais por estado ────────────────────────────────
     _PERC_ESTADO = {
-        'AC': 6, 'RR': 6, 'RO': 6, 'AP': 6,
+        'AC': 10, 'RR': 10, 'RO': 10, 'AP': 10,
         'DF': 5, 'GO': 5,
         'MT': 5, 'MS': 5, 'TO': 5, 'AM': 5,
         'PA': 8,
         'RJ': 6, 'SP': 6, 'PR': 6,
-        'RONDONIA': 20,
+        'RONDONIA': 10,
         'PR_DIRETA': 35,
     }
     _ESTADOS_OPCOES = [
         'Selecione o Estado',
-        'AC (6%)', 'RR (6%)', 'RO (6%)', 'AP (6%)',
+        'AC (10%)', 'RR (10%)', 'RO (10%)', 'AP (10%)',
         'DF (5%)', 'GO (5%)',
         'MT (5%)', 'MS (5%)', 'TO (5%)', 'AM (5%)',
         'PA (8%)',
         'RJ (6%)', 'SP (6%)', 'PR (6%)',
-        'RONDONIA (20%)',
+        'RONDONIA (10%)',
         'PR - Venda Direta (35%)',
     ]
     _ESTADO_KEY_MAP = {
-        'AC (6%)': ('AC', 6), 'RR (6%)': ('RR', 6), 'RO (6%)': ('RO', 6), 'AP (6%)': ('AP', 6),
+        'AC (10%)': ('AC', 10), 'RR (10%)': ('RR', 10), 'RO (10%)': ('RO', 10), 'AP (10%)': ('AP', 10),
         'DF (5%)': ('DF', 5), 'GO (5%)': ('GO', 5),
         'MT (5%)': ('MT', 5), 'MS (5%)': ('MS', 5), 'TO (5%)': ('TO', 5), 'AM (5%)': ('AM', 5),
         'PA (8%)': ('PA', 8),
         'RJ (6%)': ('RJ', 6), 'SP (6%)': ('SP', 6), 'PR (6%)': ('PR', 6),
-        'RONDONIA (20%)': ('RONDONIA', 20),
+        'RONDONIA (10%)': ('RONDONIA', 10),
         'PR - Venda Direta (35%)': ('PR_DIRETA', 35),
     }
 
