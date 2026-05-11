@@ -693,7 +693,6 @@ def listar_planilhas_github():
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
         return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
-@st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
     """Carrega planilha diretamente do GitHub"""
     try:
@@ -1701,6 +1700,11 @@ with st.sidebar:
 
         if planilhas_disponiveis.get('produtos_agrupados'):
             st.success(f"✅ Produtos: {planilhas_disponiveis['produtos_agrupados']['nome']}")
+
+        if planilhas_disponiveis.get('tabela_ne'):
+            st.success(f"✅ Tabela NE: {planilhas_disponiveis['tabela_ne']['nome']}")
+        else:
+            st.warning("⚠️ Tabela NE não encontrada (módulo Consulta Clientes desabilitado)")
 
         if st.button("🔄 Recarregar Dados", use_container_width=True, key="btn_reload"):
             st.cache_data.clear()
