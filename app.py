@@ -628,6 +628,7 @@ GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
+@st.cache_data(ttl=3600)
 def listar_planilhas_github():
     """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
@@ -692,6 +693,7 @@ def listar_planilhas_github():
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
         return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
+@st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
     """Carrega planilha diretamente do GitHub"""
     try:
@@ -4477,6 +4479,28 @@ elif menu == "__historico_cliente__":
             cliente_sel = st.selectbox("Selecione o cliente:", sorted(clientes_encontrados), key="cli_sel_hc")
             historico_cli = df[df['RazaoSocial'] == cliente_sel].copy()
             cliente_info = historico_cli.iloc[0].to_dict() if len(historico_cli) > 0 else {}
+            # Gramatura: buscar na planilha produtos_agrupados
+            _hg_url = None
+            if planilhas_disponiveis.get('produtos_agrupados'):
+                _hg_url = planilhas_disponiveis['produtos_agrupados']['url']
+            else:
+                _hg_url = next((p['url'] for p in planilhas_disponiveis.get('todas', []) if 'PRODUTO' in p['nome'].upper()), None)
+            if _hg_url:
+                try:
+                    _hg_plan = carregar_planilha_github(_hg_url)
+                    if _hg_plan is not None:
+                        _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
+                        _hg_kcol = next((c for c in _hg_plan.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
+                        _hg_gcol = next((c for c in _hg_plan.columns if 'GRAMATUR' in c), None)
+                        if _hg_kcol and _hg_gcol:
+                            def _hg_norm2(v):
+                                try: return str(int(float(str(v).strip())))
+                                except: return str(v).strip()
+                            _hg_plan['_K'] = _hg_plan[_hg_kcol].apply(_hg_norm2)
+                            _hg_map = _hg_plan.drop_duplicates(subset='_K').set_index('_K')[_hg_gcol]
+                            historico_cli['Gramatura'] = historico_cli['CodigoProduto'].apply(_hg_norm2).map(_hg_map).fillna('')
+                except:
+                    pass
 
             _hc1, _hc2, _hc3, _hc4 = st.columns(4)
             with _hc1:
@@ -4492,6 +4516,8 @@ elif menu == "__historico_cliente__":
             vendas_cli = historico_cli[historico_cli['TipoMov'] == 'NF Venda']
             devolucoes_cli = historico_cli[historico_cli['TipoMov'] == 'NF Dev.Venda']
             colunas_display_hc = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
+            if 'Gramatura' in historico_cli.columns:
+                colunas_display_hc.insert(colunas_display_hc.index('CodigoProduto') + 1, 'Gramatura')
             if 'PrazoHistorico' in historico_cli.columns:
                 colunas_display_hc.append('PrazoHistorico')
             if 'Comissao' in historico_cli.columns:
@@ -7606,21 +7632,10 @@ elif menu == "Consulta Clientes":
     # Tentar carregar produtos_agrupados primeiro (mais confiável)
     if planilhas_disponiveis.get('produtos_agrupados'):
         with st.spinner("Carregando catálogo de produtos..."):
-            try:
-                import requests as _req, io as _io2
-                _resp = _req.get(planilhas_disponiveis['produtos_agrupados']['url'], timeout=15)
-                _buf  = _io2.BytesIO(_resp.content)
-                _xl   = pd.ExcelFile(_buf)
-                # Usar aba 'Tabela de preços' se existir, senão primeira aba
-                _aba  = 'Tabela de preços' if 'Tabela de preços' in _xl.sheet_names else _xl.sheet_names[0]
-                _df_tabela = pd.read_excel(_buf, sheet_name=_aba)
-                if _df_tabela is not None:
-                    _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
-                    st.success(f"✅ Usando: Produtos Agrupados (aba: {_aba})")
-            except:
-                _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-                if _df_tabela is not None:
-                    _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+            _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+            if _df_tabela is not None:
+                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+                st.success("✅ Usando: Produtos Agrupados")
     
     # Se não conseguiu, tentar tabela_ne
     if _df_tabela is None and planilhas_disponiveis.get('tabela_ne'):
