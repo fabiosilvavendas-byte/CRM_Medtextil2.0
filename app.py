@@ -5551,6 +5551,27 @@ elif menu == "Pedidos Pendentes":
                                 _estilizar(r_idx, ALT_FILL if r_idx % 2 == 0 else PatternFill())
                                 dados_escritos.append(lb)
                                 r_idx += 1
+                            # Subtotal por grupo de fio
+                            _sub_label = f"TOTAL {label.upper()}"
+                            _sub_fill  = PatternFill("solid", fgColor="D9E1F2")
+                            _sub_font  = Font(bold=True, size=10)
+                            ws.cell(r_idx, 1, _sub_label).font = _sub_font
+                            ws.cell(r_idx, 1).fill = _sub_fill
+                            for i_b, ci in col_map.items():
+                                if i_b in (IDX_CONT_B, IDX_ENT_B, IDX_PEND_B, IDX_VPEND_B):
+                                    if i_b == IDX_VPEND_B:
+                                        _stot = sum(
+                                            float(lb[IDX_PEND_B]) * float(lb[IDX_VUNIT_B])
+                                            if isinstance(lb[IDX_PEND_B], (int,float)) and isinstance(lb[IDX_VUNIT_B], (int,float)) else 0
+                                            for lb in grp
+                                        )
+                                    else:
+                                        _stot = sum(float(lb[i_b]) if isinstance(lb[i_b], (int,float)) else 0 for lb in grp)
+                                    _sc = ws.cell(r_idx, ci, _stot)
+                                    _sc.font = _sub_font
+                                    _sc.fill = _sub_fill
+                                    _sc.number_format = 'R$ #,##0.00' if i_b == IDX_VPEND_B else '#,##0'
+                            r_idx += 1
 
                         # Total — r_idx aponta para linha após último dado
                         if dados_escritos:
