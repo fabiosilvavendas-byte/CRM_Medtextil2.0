@@ -7606,10 +7606,21 @@ elif menu == "Consulta Clientes":
     # Tentar carregar produtos_agrupados primeiro (mais confiável)
     if planilhas_disponiveis.get('produtos_agrupados'):
         with st.spinner("Carregando catálogo de produtos..."):
-            _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
-            if _df_tabela is not None:
-                _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
-                st.success("✅ Usando: Produtos Agrupados")
+            try:
+                import requests as _req, io as _io2
+                _resp = _req.get(planilhas_disponiveis['produtos_agrupados']['url'], timeout=15)
+                _buf  = _io2.BytesIO(_resp.content)
+                _xl   = pd.ExcelFile(_buf)
+                # Usar aba 'Tabela de preços' se existir, senão primeira aba
+                _aba  = 'Tabela de preços' if 'Tabela de preços' in _xl.sheet_names else _xl.sheet_names[0]
+                _df_tabela = pd.read_excel(_buf, sheet_name=_aba)
+                if _df_tabela is not None:
+                    _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
+                    st.success(f"✅ Usando: Produtos Agrupados (aba: {_aba})")
+            except:
+                _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+                if _df_tabela is not None:
+                    _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
     
     # Se não conseguiu, tentar tabela_ne
     if _df_tabela is None and planilhas_disponiveis.get('tabela_ne'):
