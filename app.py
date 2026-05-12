@@ -2170,10 +2170,15 @@ with st.sidebar:
                 ].copy()
 
                 # ── Lista de vendedores ativos ──
-                _vendedores_ativos = sorted(df[
+                _vends_fat = set(df[
                     (df['TipoMov'] == 'NF Venda') &
                     (df['DataEmissao'] >= _inicio_mes)
                 ]['Vendedor'].dropna().unique().tolist())
+                _vends_inad = set(_df_inad_sem['Vendedor'].dropna().unique().tolist()) \
+                    if _df_inad_sem is not None and len(_df_inad_sem) > 0 else set()
+                _vends_pend = set(_df_pend_sem['Vendedor'].dropna().unique().tolist()) \
+                    if _df_pend_sem is not None and len(_df_pend_sem) > 0 else set()
+                _vendedores_ativos = sorted(_vends_fat | _vends_inad | _vends_pend)
 
                 with zipfile.ZipFile(_zip_buf, 'w', zipfile.ZIP_DEFLATED) as _zout:
                     for _vend in _vendedores_ativos:
