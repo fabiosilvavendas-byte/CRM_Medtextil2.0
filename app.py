@@ -628,7 +628,6 @@ GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
-@st.cache_data(ttl=3600)
 def listar_planilhas_github():
     """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
@@ -1700,11 +1699,6 @@ with st.sidebar:
 
         if planilhas_disponiveis.get('produtos_agrupados'):
             st.success(f"✅ Produtos: {planilhas_disponiveis['produtos_agrupados']['nome']}")
-
-        if planilhas_disponiveis.get('tabela_ne'):
-            st.success(f"✅ Tabela NE: {planilhas_disponiveis['tabela_ne']['nome']}")
-        else:
-            st.warning("⚠️ Tabela NE não encontrada (módulo Consulta Clientes desabilitado)")
 
         if st.button("🔄 Recarregar Dados", use_container_width=True, key="btn_reload"):
             st.cache_data.clear()
@@ -4483,28 +4477,6 @@ elif menu == "__historico_cliente__":
             cliente_sel = st.selectbox("Selecione o cliente:", sorted(clientes_encontrados), key="cli_sel_hc")
             historico_cli = df[df['RazaoSocial'] == cliente_sel].copy()
             cliente_info = historico_cli.iloc[0].to_dict() if len(historico_cli) > 0 else {}
-            # Gramatura: buscar na planilha produtos_agrupados
-            _hg_url = None
-            if planilhas_disponiveis.get('produtos_agrupados'):
-                _hg_url = planilhas_disponiveis['produtos_agrupados']['url']
-            else:
-                _hg_url = next((p['url'] for p in planilhas_disponiveis.get('todas', []) if 'PRODUTO' in p['nome'].upper()), None)
-            if _hg_url:
-                try:
-                    _hg_plan = carregar_planilha_github(_hg_url)
-                    if _hg_plan is not None:
-                        _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
-                        _hg_kcol = next((c for c in _hg_plan.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
-                        _hg_gcol = next((c for c in _hg_plan.columns if 'GRAMATUR' in c), None)
-                        if _hg_kcol and _hg_gcol:
-                            def _hg_norm2(v):
-                                try: return str(int(float(str(v).strip())))
-                                except: return str(v).strip()
-                            _hg_plan['_K'] = _hg_plan[_hg_kcol].apply(_hg_norm2)
-                            _hg_map = _hg_plan.drop_duplicates(subset='_K').set_index('_K')[_hg_gcol]
-                            historico_cli['Gramatura'] = historico_cli['CodigoProduto'].apply(_hg_norm2).map(_hg_map).fillna('')
-                except:
-                    pass
 
             _hc1, _hc2, _hc3, _hc4 = st.columns(4)
             with _hc1:
@@ -4520,8 +4492,6 @@ elif menu == "__historico_cliente__":
             vendas_cli = historico_cli[historico_cli['TipoMov'] == 'NF Venda']
             devolucoes_cli = historico_cli[historico_cli['TipoMov'] == 'NF Dev.Venda']
             colunas_display_hc = ['DataEmissao', 'TipoMov', 'Numero_NF', 'CodigoProduto', 'NomeProduto', 'Quantidade', 'PrecoUnit', 'TotalProduto']
-            if 'Gramatura' in historico_cli.columns:
-                colunas_display_hc.insert(colunas_display_hc.index('CodigoProduto') + 1, 'Gramatura')
             if 'PrazoHistorico' in historico_cli.columns:
                 colunas_display_hc.append('PrazoHistorico')
             if 'Comissao' in historico_cli.columns:
@@ -7602,31 +7572,31 @@ elif menu == "Consulta Clientes":
 
     # ── Percentuais adicionais por estado ────────────────────────────────
     _PERC_ESTADO = {
-        'AC': 10, 'RR': 10, 'RO': 10, 'AP': 10,
+        'AC': 6, 'RR': 6, 'RO': 6, 'AP': 6,
         'DF': 5, 'GO': 5,
         'MT': 5, 'MS': 5, 'TO': 5, 'AM': 5,
         'PA': 8,
         'RJ': 6, 'SP': 6, 'PR': 6,
-        'RONDONIA': 10,
+        'RONDONIA': 20,
         'PR_DIRETA': 35,
     }
     _ESTADOS_OPCOES = [
         'Selecione o Estado',
-        'AC (10%)', 'RR (10%)', 'RO (10%)', 'AP (10%)',
+        'AC (6%)', 'RR (6%)', 'RO (6%)', 'AP (6%)',
         'DF (5%)', 'GO (5%)',
         'MT (5%)', 'MS (5%)', 'TO (5%)', 'AM (5%)',
         'PA (8%)',
         'RJ (6%)', 'SP (6%)', 'PR (6%)',
-        'RONDONIA (10%)',
+        'RONDONIA (20%)',
         'PR - Venda Direta (35%)',
     ]
     _ESTADO_KEY_MAP = {
-        'AC (10%)': ('AC', 10), 'RR (10%)': ('RR', 10), 'RO (10%)': ('RO', 10), 'AP (10%)': ('AP', 10),
+        'AC (6%)': ('AC', 6), 'RR (6%)': ('RR', 6), 'RO (6%)': ('RO', 6), 'AP (6%)': ('AP', 6),
         'DF (5%)': ('DF', 5), 'GO (5%)': ('GO', 5),
         'MT (5%)': ('MT', 5), 'MS (5%)': ('MS', 5), 'TO (5%)': ('TO', 5), 'AM (5%)': ('AM', 5),
         'PA (8%)': ('PA', 8),
         'RJ (6%)': ('RJ', 6), 'SP (6%)': ('SP', 6), 'PR (6%)': ('PR', 6),
-        'RONDONIA (10%)': ('RONDONIA', 10),
+        'RONDONIA (20%)': ('RONDONIA', 20),
         'PR - Venda Direta (35%)': ('PR_DIRETA', 35),
     }
 
