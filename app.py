@@ -7729,6 +7729,11 @@ elif menu == "Consulta Clientes":
     with _cc1:
         _cod_sel = st.selectbox("Código do Produto", _codigos_lista,
                                 key="cc_codigo", label_visibility="visible")
+        _val_neg = st.number_input("Valor Negociado (R$)",
+                                   min_value=0.0,
+                                   value=0.0,
+                                   format="%.2f",
+                                   key="cc_val_neg")
 
     # ── Buscar produto e calcular preços ──────────────────────────────────
     _prod_row = None
@@ -7776,7 +7781,7 @@ elif menu == "Consulta Clientes":
         _tab_4pct = _tab_3pct * 1.06
 
         # Exibir preços calculados
-        _pc1, _pc2, _pc3, _pc4 = st.columns(4)
+        _pc1, _pc2, _pc3 = st.columns(3)
         with _pc1:
             st.metric("Tabela Base", f"R$ {_preco_base:,.2f}",
                       help="Preço da tabela padrão sem adicional de estado")
@@ -7787,13 +7792,6 @@ elif menu == "Consulta Clientes":
         with _pc3:
             st.metric("Tabela 4%", f"R$ {_tab_4pct:,.2f}",
                       help="Tabela 3% + 6% = tabela comissão 4%")
-
-        with _pc4:
-            _val_neg = st.number_input("Valor Negociado (R$)",
-                                       min_value=0.0,
-                                       value=float(_tab_3pct),
-                                       format="%.2f",
-                                       key="cc_val_neg")
 
     # ── Calcular comissão sobre o valor negociado ─────────────────────
         # SOLUÇÃO FINAL: Comparação direta com margem de tolerância de 1 centavo
