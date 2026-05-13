@@ -2152,6 +2152,8 @@ with st.sidebar:
                                             except:
                                                 continue
                         _df_pend_sem = pd.DataFrame(_data_p)
+                        if len(_df_pend_sem) > 0:
+                            _df_pend_sem = _df_pend_sem.drop_duplicates(subset=['NumeroPedido', 'CodigoProduto'])
                         # Filtrar: primeiro dia do mês até hoje
                         if len(_df_pend_sem) > 0 and 'DataEmissao' in _df_pend_sem.columns:
                             _df_pend_sem = _df_pend_sem[_df_pend_sem['QtdPendente'] > 0]
@@ -4840,6 +4842,8 @@ elif menu == "Pedidos Pendentes":
                                     continue
             
             df_pendentes = pd.DataFrame(data)
+            if len(df_pendentes) > 0:
+                df_pendentes = df_pendentes.drop_duplicates(subset=['NumeroPedido', 'CodigoProduto'])
             
             if len(df_pendentes) == 0:
                 st.warning("⚠️ Nenhum pedido pendente encontrado na planilha")
@@ -5506,6 +5510,27 @@ elif menu == "Pedidos Pendentes":
                                 _estilizar(r_idx, ALT_FILL if r_idx % 2 == 0 else PatternFill())
                                 dados_escritos.append(lb)
                                 r_idx += 1
+                            # Subtotal por subgrupo Campo
+                            _sub_label = f"TOTAL {_cg_label.upper()}"
+                            _sub_fill  = PatternFill("solid", fgColor="D9E1F2")
+                            _sub_font  = Font(bold=True, size=10)
+                            ws.cell(r_idx, 1, _sub_label).font = _sub_font
+                            ws.cell(r_idx, 1).fill = _sub_fill
+                            for i_b, ci in col_map.items():
+                                if i_b in (IDX_CONT_B, IDX_ENT_B, IDX_PEND_B, IDX_VPEND_B):
+                                    if i_b == IDX_VPEND_B:
+                                        _stot = sum(
+                                            float(lb[IDX_PEND_B]) * float(lb[IDX_VUNIT_B])
+                                            if isinstance(lb[IDX_PEND_B], (int,float)) and isinstance(lb[IDX_VUNIT_B], (int,float)) else 0
+                                            for lb in _cg_linhas
+                                        )
+                                    else:
+                                        _stot = sum(float(lb[i_b]) if isinstance(lb[i_b], (int,float)) else 0 for lb in _cg_linhas)
+                                    _sc = ws.cell(r_idx, ci, _stot)
+                                    _sc.font = _sub_font
+                                    _sc.fill = _sub_fill
+                                    _sc.number_format = 'R$ #,##0.00' if i_b == IDX_VPEND_B else '#,##0'
+                            r_idx += 1
 
                         if dados_escritos:
                             ws.cell(r_idx, 1, 'TOTAL').font = Font(bold=True)
@@ -5819,8 +5844,8 @@ elif menu == "Pedidos Pendentes":
 
                 for _row2 in _src2[1:]:
                     _first2 = str(_row2[0]).strip().upper() if _row2[0] is not None else ''
-                    # Pular TOTAL, cabeçalhos e separadores de fios
-                    if _first2 in ('TOTAL', '') or any(f in _first2 for f in ['FIOS', 'OUTROS']):
+                    # Pular TOTAL, cabeçalhos e separadores de fios/campo
+                    if _first2 in ('', ) or _first2.startswith('TOTAL') or any(f in _first2 for f in ['FIOS', 'OUTROS']):
                         continue
 
                     def _gv(idx):
