@@ -5082,8 +5082,10 @@ elif menu == "Pedidos Pendentes":
             _df_base['COD_N'] = _df_base['CodigoProduto'].apply(_norm_cod)
 
             # Merge com produtos
+            _cols_merge = ['ID_COD_N', _cx_col, _preco_col] + ([_desc_col] if _desc_col else [])
+            _df_prod_merge = _df_prod_prev[_cols_merge].drop_duplicates(subset=['ID_COD_N'])
             _df_merge = _df_base.merge(
-                _df_prod_prev[['ID_COD_N', _cx_col, _preco_col] + ([_desc_col] if _desc_col else [])],
+                _df_prod_merge,
                 left_on='COD_N',
                 right_on='ID_COD_N',
                 how='left'
