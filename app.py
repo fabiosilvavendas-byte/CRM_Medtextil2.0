@@ -2553,7 +2553,7 @@ if menu == "Dashboard":
         render_kpi_card("Faturamento Bruto", f"R$ {vendas_brutas:,.0f}", icon="💰", color="#1F4788")
     
     with col2:
-        faturamento_liquido = notas_unicas['Valor_Real'].sum()
+        faturamento_liquido = notas_unicas[notas_unicas['TipoMov'] == 'NF Venda']['Valor_Real'].sum()
         render_kpi_card("Faturamento Líquido", f"R$ {faturamento_liquido:,.0f}", icon="💵", color="#10B981")
     
     with col3:
