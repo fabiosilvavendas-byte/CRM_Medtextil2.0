@@ -2715,18 +2715,8 @@ if st.session_state.menu_option == '__home__':
     except ImportError:
         _USE_CARD_LIB = False
 
-    # ── Detectar mobile via streamlit-js-eval ───────────────────────────
-    try:
-        from streamlit_js_eval import streamlit_js_eval
-        _screen_width = streamlit_js_eval(
-            js_expressions="window.innerWidth",
-            key="screen_width"
-        )
-        _is_mobile = bool(_screen_width and int(_screen_width) <= 768)
-    except Exception:
-        _is_mobile = False
-
-    _n_cols = 2 if _is_mobile else 4
+    # Grid 2 colunas — funciona em mobile e desktop sem dependências externas
+    _n_cols = 2
 
     for row_start in range(0, len(cards_visiveis), _n_cols):
         row = cards_visiveis[row_start:row_start+_n_cols]
