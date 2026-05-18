@@ -9,7 +9,7 @@ from github import Github
 
 # ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
 def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
-    """Renderiza card KPI profissional com HTML/CSS - substitui st.metric()"""
+    """Renderiza card KPI profissional com HTML/CSS — mobile-first, sem height fixo"""
     delta_html = ""
     if delta:
         delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
@@ -17,21 +17,443 @@ def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
             delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
         except:
             delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
-        delta_html = f'<div style="color:{delta_color};font-size:0.875rem;font-weight:600;margin-top:0.5rem;">{delta}</div>'
-    
+        delta_html = f'<div style="color:{delta_color};font-size:0.78rem;font-weight:600;margin-top:6px;">{delta}</div>'
     st.markdown(f"""
-    <div style="background:white;padding:1.5rem;border-radius:15px;
-                box-shadow:0 4px 12px rgba(0,0,0,0.05);border-left:4px solid {color};
-                height:140px;display:flex;flex-direction:column;justify-content:space-between;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <div style="font-size:0.8rem;color:#6B7280;font-weight:600;
-                        text-transform:uppercase;letter-spacing:0.05em;">{label}</div>
-            <div style="font-size:1.75rem;">{icon}</div>
+    <div class="kpi-card" style="border-left:4px solid {color};">
+        <div class="kpi-top">
+            <span class="kpi-label">{label}</span>
+            <span class="kpi-icon">{icon}</span>
         </div>
-        <div>
-            <div style="font-size:1.75rem;font-weight:700;color:#1F2937;">{value}</div>
-            {delta_html}
+        <div class="kpi-value">{value}</div>
+        {delta_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+# Configuração da página
+st.set_page_config(
+    page_title="Dashboard BI Medtextil", 
+    layout="wide", 
+    initial_sidebar_state="expanded",
+    page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
+)
+
+# ====================== CONFIGURAÇÃO DO ÍCONE ======================
+# O Streamlit gerencia automaticamente o ícone via page_icon
+# Nenhuma configuração adicional é necessária
+
+# ====================== CSS CUSTOMIZADO - UX/UI PROFISSIONAL ======================
+st.markdown("""
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   MEDTEXTIL BI — CSS UNIFICADO MOBILE-FIRST
+   Um único bloco, sem duplicatas, responsivo por design.
+   ═══════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ── Base ─────────────────────────────────────────────────────── */
+html, body, [class*="css"] {
+    font-family: 'Inter','Segoe UI',Roboto,sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+}
+.stApp { background-color: var(--background-color) !important; }
+
+/* ── Remove padding desnecessário das colunas ─────────────────── */
+div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
+div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"],
+div[data-testid="column"] { padding: 0 !important; margin: 0 !important; min-width: 0 !important; }
+
+/* ── Sidebar ──────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: var(--secondary-background-color) !important;
+    border-right: 1px solid rgba(128,128,128,0.15) !important;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.04) !important;
+}
+section[data-testid="stSidebar"] .stMarkdown h1,
+section[data-testid="stSidebar"] .stMarkdown h2,
+section[data-testid="stSidebar"] .stMarkdown h3 { color: #4A7BC8 !important; }
+
+/* Navegação sidebar */
+[data-testid="stSidebar"] [data-testid="stRadio"] { gap: 4px !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    background: #F8F9FA !important; border: 1px solid #E9ECEF !important;
+    border-radius: 9px !important; padding: 10px 14px !important;
+    margin: 0 !important; cursor: pointer !important;
+    transition: all 0.18s ease !important; font-size: 0.875rem !important;
+    font-weight: 500 !important; display: block !important; width: 100% !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: #EEF2F7 !important; border-color: #4A7BC8 !important;
+    transform: translateX(2px) !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
+    background: linear-gradient(135deg,#1F4788 0%,#2D5AA0 100%) !important;
+    border-color: #4A7BC8 !important; color: white !important;
+    font-weight: 600 !important; box-shadow: 0 2px 8px rgba(31,71,136,0.2) !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] { display: none !important; }
+
+/* Sidebar logo e badge */
+.sidebar-logo-container {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 14px 8px 8px; border-bottom: 1px solid #E9ECEF; margin-bottom: 10px;
+}
+.sidebar-user-badge {
+    background: #F0F4FF; border: 1px solid #C5D5F0; border-radius: 8px;
+    padding: 7px 10px; font-size: 0.82rem; color: #4A7BC8;
+    font-weight: 600; width: 100%; text-align: center; margin-top: 6px;
+}
+section[data-testid="stSidebar"] .sidebar-cat-label {
+    font-size: 0.60rem !important; font-weight: 700 !important;
+    color: #8A96A8 !important; letter-spacing: 0.09em !important;
+    text-transform: uppercase !important; margin: 8px 0 3px 4px !important;
+}
+
+/* ── KPI cards customizados (render_kpi_card) ─────────────────── */
+.kpi-card {
+    background: var(--secondary-background-color);
+    border-radius: 12px;
+    padding: clamp(12px, 2vw, 18px) clamp(12px, 2vw, 16px);
+    box-shadow: 0 2px 8px rgba(31,71,136,0.07);
+    transition: box-shadow 0.18s, transform 0.18s;
+    box-sizing: border-box;
+    width: 100%;
+}
+.kpi-card:hover {
+    box-shadow: 0 6px 20px rgba(31,71,136,0.13) !important;
+    transform: translateY(-2px);
+}
+.kpi-top {
+    display: flex; justify-content: space-between;
+    align-items: flex-start; margin-bottom: 8px;
+}
+.kpi-label {
+    font-size: clamp(0.65rem, 1.2vw, 0.75rem);
+    color: #6B7280; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    line-height: 1.3;
+}
+.kpi-icon { font-size: clamp(1.2rem, 2.5vw, 1.6rem); line-height: 1; }
+.kpi-value {
+    font-size: clamp(1.1rem, 2.8vw, 1.65rem);
+    font-weight: 700; color: #1F2937; line-height: 1.2;
+    word-break: break-word;
+}
+
+/* ── st.metric ────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+    background: var(--secondary-background-color) !important;
+    border-radius: 12px !important;
+    padding: clamp(12px,2vw,18px) clamp(12px,2vw,20px) !important;
+    border-left: 4px solid #1F4788 !important;
+    box-shadow: 0 1px 6px rgba(31,71,136,0.07) !important;
+    transition: box-shadow 0.18s,transform 0.18s !important;
+}
+[data-testid="stMetric"]:hover {
+    box-shadow: 0 5px 18px rgba(31,71,136,0.13) !important;
+    transform: translateY(-2px) !important;
+}
+[data-testid="stMetricLabel"] p {
+    font-size: 0.71rem !important; font-weight: 700 !important;
+    text-transform: uppercase !important; letter-spacing: 0.06em !important;
+    color: #8A96A8 !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: clamp(1.1rem,2.5vw,1.45rem) !important;
+    font-weight: 700 !important; color: #2C5AA0 !important;
+}
+div[data-testid="column"]:nth-child(2) [data-testid="stMetric"] { border-left-color: #2E86AB !important; }
+div[data-testid="column"]:nth-child(3) [data-testid="stMetric"] { border-left-color: #28A745 !important; }
+div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] { border-left-color: #F4A261 !important; }
+
+/* ── Botões ───────────────────────────────────────────────────── */
+.stButton > button {
+    border-radius: 8px !important; font-weight: 600 !important;
+    font-size: 0.875rem !important; padding: 0.45rem 1.1rem !important;
+    border: 1.5px solid #1F4788 !important; color: #4A7BC8 !important;
+    background: var(--secondary-background-color) !important;
+    transition: all 0.18s ease !important;
+    box-shadow: 0 1px 4px rgba(31,71,136,0.08) !important;
+}
+.stButton > button:hover {
+    background: #1F4788 !important; color: #FFFFFF !important;
+    box-shadow: 0 4px 12px rgba(31,71,136,0.22) !important;
+    transform: translateY(-1px) !important;
+}
+.stButton > button[kind="primary"] {
+    background: #1F4788 !important; color: #FFFFFF !important; border-color: #4A7BC8 !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: #163561 !important; border-color: #163561 !important;
+}
+[data-testid="stDownloadButton"] > button {
+    border-radius: 8px !important; font-weight: 600 !important;
+    background: var(--secondary-background-color) !important;
+    color: #4A7BC8 !important; border: 1.5px solid #1F4788 !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    background: #1F4788 !important; color: #FFFFFF !important;
+}
+
+/* ── Títulos ──────────────────────────────────────────────────── */
+.stApp h1 {
+    color: #2C5AA0 !important; font-weight: 700 !important;
+    font-size: clamp(1.3rem,3vw,1.75rem) !important; letter-spacing: -0.02em !important;
+}
+.stApp h2 { color: #4A7BC8 !important; font-weight: 600 !important; font-size: clamp(1.05rem,2.5vw,1.3rem) !important; }
+.stApp h3 { color: #2E4A7A !important; font-weight: 600 !important; }
+h2, h3 { font-weight: 600 !important; letter-spacing: -0.01em !important; }
+
+/* ── Inputs e selects ─────────────────────────────────────────── */
+.stSelectbox > div > div,
+.stTextInput > div > div > input,
+.stDateInput > div > div > input,
+.stNumberInput > div > div > input {
+    border-radius: 8px !important; border-color: #DEE2E6 !important; font-size: 0.875rem !important;
+}
+.stSelectbox > div > div:focus-within,
+.stTextInput > div > div:focus-within {
+    border-color: #4A7BC8 !important; box-shadow: 0 0 0 2px rgba(31,71,136,0.13) !important;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────── */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: var(--secondary-background-color) !important;
+    border-radius: 10px !important; padding: 4px !important;
+    border-bottom: none !important; gap: 4px !important;
+    flex-wrap: wrap !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    border-radius: 8px !important; font-weight: 500 !important;
+    font-size: clamp(0.75rem,1.5vw,0.875rem) !important;
+    color: #6C757D !important; padding: 5px 12px !important;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    background: #1F4788 !important; color: #FFFFFF !important; font-weight: 600 !important;
+}
+
+/* ── Dataframes ───────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border-radius: 10px !important; overflow: hidden !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+    max-width: 100% !important;
+}
+
+/* ── Alertas, divisores, expanders ───────────────────────────── */
+[data-testid="stAlert"] { border-radius: 10px !important; }
+hr { border-color: #E9ECEF !important; margin: 0.75rem 0 !important; }
+div[data-testid="stExpander"] details {
+    border: 1px solid rgba(128,128,128,0.15) !important;
+    border-radius: 8px !important; background: transparent !important;
+    margin-bottom: 6px !important;
+}
+div[data-testid="stExpander"] details summary {
+    font-size: 0.78rem !important; font-weight: 600 !important;
+    color: #8A96A8 !important; padding: 6px 12px !important;
+}
+div[data-testid="stExpander"] details summary:hover { color: #4A7BC8 !important; }
+[data-testid="stExpander"] summary {
+    font-size: 0.82rem !important; font-weight: 600 !important; color: #6C757D !important;
+}
+
+/* ── Barra de filtros ─────────────────────────────────────────── */
+.filter-bar {
+    background: #FFFFFF; border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05); border: 1px solid #E9ECEF;
+}
+
+/* ── Captions ─────────────────────────────────────────────────── */
+.stCaption p {
+    font-size: 0.7rem !important; color: #8A96A8 !important;
+    margin-top: -4px !important; font-weight: 500 !important; letter-spacing: 0.03em !important;
+}
+
+/* ── HOME: cards med-card ─────────────────────────────────────── */
+div.med-card {
+    background: var(--secondary-background-color);
+    border: 1px solid #E4E9F0; border-radius: 14px;
+    padding: clamp(14px,2.5vw,20px) clamp(12px,2vw,18px) clamp(12px,2vw,16px);
+    min-height: clamp(110px,15vw,138px);
+    box-shadow: 0 1px 5px rgba(31,71,136,0.06);
+    transition: box-shadow 0.18s,transform 0.18s,border-color 0.18s;
+    cursor: pointer; position: relative; box-sizing: border-box;
+}
+div.med-card:hover {
+    border-color: #B8CDF0 !important;
+    box-shadow: 0 7px 22px rgba(31,71,136,0.14) !important;
+    transform: translateY(-3px);
+}
+div.med-card-col div[data-testid="stButton"] > button {
+    position: relative !important; display: block !important;
+    width: 100% !important; height: clamp(110px,15vw,138px) !important;
+    margin-top: calc(-1 * clamp(110px,15vw,138px) - 10px) !important;
+    opacity: 0 !important; cursor: pointer !important;
+    border: none !important; background: transparent !important;
+    z-index: 99 !important; padding: 0 !important;
+}
+div.med-card .mc-icon {
+    width: 36px; height: 36px; background: #EEF3FC; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 9px; color: #4A7BC8; font-size: 15px;
+}
+div.med-card .mc-title {
+    font-size: clamp(0.82rem,1.8vw,0.94rem); font-weight: 700;
+    color: #2C5AA0; margin-bottom: 3px; letter-spacing: -0.01em;
+}
+div.med-card .mc-desc { font-size: 0.72rem; color: #6C757D; line-height: 1.4; margin-bottom: 7px; }
+div.med-card .mc-info {
+    font-size: 0.68rem; color: #ADB5BD;
+    border-top: 1px solid #F0F2F5; padding-top: 6px;
+}
+
+/* ── Gráficos Plotly: scroll horizontal no mobile ─────────────── */
+div[data-testid="stPlotlyChart"] {
+    overflow-x: auto !important; max-width: 100% !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE
+   ═══════════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+    .stApp { background-color: #0E1117 !important; }
+    .stApp h1,.stApp h2,.stApp h3 { color: #7EB3F7 !important; }
+    .stMarkdown h2 { color: #7EB3F7 !important; }
+    .stMarkdown p  { color: #C4CDD9 !important; }
+    [data-testid="stMetric"] { background: #1A1D24 !important; box-shadow: 0 1px 6px rgba(0,0,0,0.3) !important; }
+    [data-testid="stMetricLabel"] p { color: #8A96A8 !important; }
+    [data-testid="stMetricValue"]   { color: #E8EDF5 !important; }
+    [data-testid="stTabs"] [data-baseweb="tab-list"] { background: #1A1D24 !important; }
+    [data-testid="stTabs"] [data-baseweb="tab"]      { color: #8A96A8 !important; }
+    [data-testid="stDataFrame"]  { background: #1A1D24 !important; }
+    [data-testid="stExpander"]   { background: #1A1D24 !important; border-color: #2D3139 !important; }
+    section[data-testid="stSidebar"]             { background: #1A1D24 !important; border-right-color: #2D3139 !important; }
+    .stButton > button           { background: #1A1D24 !important; color: #A8C4E8 !important; border-color: #2D5AA0 !important; }
+    .stButton > button:hover     { background: #1F4788 !important; color: #FFFFFF !important; }
+    [data-testid="stDownloadButton"] > button        { background: #1A2A45 !important; color: #7EB3F7 !important; border-color: #2D5AA0 !important; }
+    [data-testid="stDownloadButton"] > button:hover  { background: #1F4788 !important; color: #FFFFFF !important; }
+    .stSelectbox > div > div,
+    .stTextInput > div > div > input,
+    .stDateInput > div > div > input { background: #1A1D24 !important; border-color: #2D3139 !important; color: #E0E6EF !important; }
+    div[data-testid="stHorizontalBlock"].filter-bar { background: #1A1D24 !important; border-color: #2D3139 !important; }
+    div.med-card { background: #1A1D24 !important; border-color: #2D3139 !important; }
+    div.med-card .mc-title { color: #A8C4E8 !important; }
+    div.med-card .mc-desc  { color: #8A96A8 !important; }
+    div.med-card .mc-info  { color: #5A6375 !important; border-top-color: #2D3139 !important; }
+    .kpi-card { background: #1A1D24 !important; }
+    .kpi-value { color: #E8EDF5 !important; }
+    .kpi-label { color: #8A96A8 !important; }
+    [data-testid="stSidebar"] .stRadio label[aria-checked="true"] p { color: #7EB3F7 !important; }
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div { background-color: #1A1D24 !important; }
+}
+[data-theme="dark"] .stApp                         { background-color: #0E1117 !important; }
+[data-theme="dark"] section[data-testid="stSidebar"]{ background: #1A1D24 !important; border-right-color: #2D3139 !important; }
+[data-theme="dark"] [data-testid="stMetric"]        { background: #1A1D24 !important; }
+[data-theme="dark"] [data-testid="stMetricValue"]   { color: #E8EDF5 !important; }
+[data-theme="dark"] .kpi-card                       { background: #1A1D24 !important; }
+[data-theme="dark"] .kpi-value                      { color: #E8EDF5 !important; }
+[data-theme="dark"] div.med-card                    { background: #1A1D24 !important; border-color: #2D3139 !important; }
+[data-theme="dark"] .stApp h1,[data-theme="dark"] .stApp h2,[data-theme="dark"] .stApp h3 { color: #E8EDF5 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE-FIRST  ≤ 768px
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+    /* Sidebar sólida no mobile */
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div { background-color: #FFFFFF !important; background: #FFFFFF !important; }
+
+    /* Home grid: 2 cards por linha */
+    div.home-grid > div[data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important; display: flex !important; gap: 6px !important;
+    }
+    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        width: calc(50% - 3px) !important; min-width: calc(50% - 3px) !important;
+        max-width: calc(50% - 3px) !important; flex: 0 0 calc(50% - 3px) !important;
+        box-sizing: border-box !important;
+    }
+
+    /* KPI row: 2 por linha */
+    div[data-testid="stHorizontalBlock"]:has(.kpi-card) {
+        flex-wrap: wrap !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.kpi-card) > div[data-testid="column"] {
+        width: calc(50% - 5px) !important; min-width: calc(50% - 5px) !important;
+        flex: 0 0 calc(50% - 5px) !important;
+    }
+
+    /* Filtros: 2 por linha */
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"]) { flex-wrap: wrap !important; }
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"]) > div[data-testid="stVerticalBlock"] {
+        width: calc(50% - 4px) !important; min-width: calc(50% - 4px) !important;
+        flex: 0 0 calc(50% - 4px) !important;
+    }
+
+    /* Esconder captions de filtro no mobile */
+    .filter-header-bar { display: none !important; }
+
+    /* Tabs: scroll horizontal */
+    [data-testid="stTabs"] [data-baseweb="tab-list"] {
+        overflow-x: auto !important; flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    /* Gráficos: scroll horizontal */
+    div[data-testid="stPlotlyChart"] { overflow-x: auto !important; }
+
+    /* Reduzir padding da área principal */
+    .main .block-container { padding: 0.75rem 0.75rem 2rem !important; }
+
+    /* Títulos menores no mobile */
+    .stApp h1 { font-size: 1.25rem !important; }
+    .stApp h2 { font-size: 1.05rem !important; }
+}
+
+@media (max-width: 480px) {
+
+    /* KPI cards: 1 por linha em telas muito pequenas */
+    div[data-testid="stHorizontalBlock"]:has(.kpi-card) > div[data-testid="column"] {
+        width: 100% !important; min-width: 100% !important; flex: 0 0 100% !important;
+    }
+
+    /* Home cards: 1 por linha */
+    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        width: 100% !important; min-width: 100% !important;
+        max-width: 100% !important; flex: 0 0 100% !important;
+    }
+
+    /* Tabs: fonte menor */
+    [data-testid="stTabs"] [data-baseweb="tab"] { font-size: 0.72rem !important; padding: 4px 8px !important; }
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ====================== CONFIGURAÇÕES GITHUB ======================om datetime import datetime
+import io
+import requests
+from github import Github
+
+# ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
+def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
+    """Renderiza card KPI profissional com HTML/CSS — mobile-first, sem height fixo"""
+    delta_html = ""
+    if delta:
+        delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
+        try:
+            delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
+        except:
+            delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
+        delta_html = f'<div style="color:{delta_color};font-size:0.78rem;font-weight:600;margin-top:6px;">{delta}</div>'
+    st.markdown(f"""
+    <div class="kpi-card" style="border-left:4px solid {color};">
+        <div class="kpi-top">
+            <span class="kpi-label">{label}</span>
+            <span class="kpi-icon">{icon}</span>
         </div>
+        <div class="kpi-value">{value}</div>
+        {delta_html}
     </div>
     """, unsafe_allow_html=True)
 
@@ -1859,140 +2281,9 @@ modulos_visiveis = modulos_permitidos if modulos_permitidos else [
 
 # ══════════════════════════════════════════════════════════════════
 # CSS GLOBAL — injetado uma única vez no topo do fluxo de página
-# Cobre: sidebar radio, cards home (overlay + visual), métricas,
-# gráficos, botões, filtros — tudo em um único bloco.
 # ══════════════════════════════════════════════════════════════════
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-/* ── Base ── */
-html, body, [class*="css"] { font-family: 'Inter','Segoe UI',sans-serif !important; }
-.stApp { background-color: var(--background-color) !important; }
-
-/* ── Remove padding padrão das colunas (alinha cards) ── */
-div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
-div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"] {
-    padding: 0 !important;
-    margin: 0 !important;
-    min-width: 0 !important;
-}
-div[data-testid="column"] { padding: 0 !important; }
-
-/* ── Sidebar ── */
-section[data-testid="stSidebar"] {
-    background: var(--secondary-background-color) !important;
-    border-right: 1px solid rgba(128,128,128,0.2) !important;
-}
-
-/* Category labels in sidebar */
-section[data-testid="stSidebar"] .sidebar-cat-label {
-    font-size: 0.60rem !important; font-weight: 700 !important;
-    color: #8A96A8 !important; letter-spacing: 0.09em !important;
-    text-transform: uppercase !important;
-    margin: 10px 0 3px 4px !important;
-}
-
-/* ── HOME: card visual (div.med-card) ── */
-div.med-card {
-    background: #FFFFFF;
-    border: 1px solid #E4E9F0;
-    border-radius: 14px;
-    padding: 20px 18px 16px;
-    min-height: 138px;
-    box-shadow: 0 1px 5px rgba(31,71,136,0.06);
-    transition: box-shadow 0.18s, transform 0.18s, border-color 0.18s;
-    cursor: pointer;
-    position: relative;
-    box-sizing: border-box;
-}
-div.med-card:hover {
-    border-color: #B8CDF0 !important;
-    box-shadow: 0 7px 22px rgba(31,71,136,0.14) !important;
-    transform: translateY(-3px);
-}
-
-/* ── HOME: botão overlay invisível sobre o card ── */
-div.med-card-col div[data-testid="stButton"] > button {
-    position: relative !important;
-    display: block !important;
-    width: 100% !important;
-    height: 138px !important;
-    margin-top: -148px !important;
-    opacity: 0 !important;
-    cursor: pointer !important;
-    border: none !important;
-    background: transparent !important;
-    z-index: 99 !important;
-    padding: 0 !important;
-}
-
-div.med-card .mc-icon {
-    width: 38px; height: 38px;
-    background: #EEF3FC; border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    margin-bottom: 11px; color: #4A7BC8; font-size: 16px;
-}
-div.med-card .mc-title {
-    font-size: 0.94rem; font-weight: 700;
-    color: #2C5AA0; margin-bottom: 4px; letter-spacing: -0.01em;
-}
-div.med-card .mc-desc {
-    font-size: 0.75rem; color: #6C757D; line-height: 1.4; margin-bottom: 9px;
-}
-div.med-card .mc-info {
-    font-size: 0.70rem; color: #ADB5BD;
-    border-top: 1px solid #F0F2F5; padding-top: 7px;
-}
-
-/* ── HOME: botão overlay invisível sobre o card ──
-   O Streamlit renderiza o st.button logo após o st.markdown na mesma coluna.
-   Usamos margin-top negativo para "subir" o botão sobre o card,
-   e deixamos opacity:0 para ser invisível mas clicável. ── */
-div.med-card-col div[data-testid="stButton"] > button {
-    position: relative !important;
-    display: block !important;
-    width: 100% !important;
-    height: 138px !important;
-    margin-top: -148px !important;
-    opacity: 0 !important;
-    cursor: pointer !important;
-    border: none !important;
-    background: transparent !important;
-    z-index: 99 !important;
-    padding: 0 !important;
-}
-
-/* ── Métricas ── */
-[data-testid="stMetric"] {
-    background: var(--secondary-background-color) !important; border-radius: 12px !important;
-    padding: 16px 18px !important; border-left: 4px solid #1F4788 !important;
-    box-shadow: 0 1px 6px rgba(31,71,136,0.07) !important;
-}
-[data-testid="stMetricLabel"] p {
-    font-size: 0.71rem !important; font-weight: 700 !important;
-    text-transform: uppercase !important; letter-spacing: 0.06em !important;
-    color: #8A96A8 !important;
-}
-[data-testid="stMetricValue"] {
-    font-size: 1.4rem !important; font-weight: 700 !important; color: #2C5AA0 !important;
-}
-
-/* ── Botões gerais ── */
-.stButton > button {
-    border-radius: 8px !important; font-weight: 600 !important;
-    font-size: 0.875rem !important;
-}
-
-/* ── Filtros ── */
-div[data-testid="stHorizontalBlock"].filter-bar { background: #F2F5FA !important; }
-
-/* ── Tabs ── */
-[data-testid="stTabs"] [aria-selected="true"] {
-    background: #1F4788 !important; color: #FFFFFF !important; font-weight: 600 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+# CSS unificado já injetado acima — bloco secundário removido.
+# ══════════════════════════════════════════════════════════════════
 
 # ── Sidebar: st.radio com labels com ícone Unicode ────────────────────────
 _ICONES_NAV = {
@@ -5339,7 +5630,11 @@ elif menu == "Pedidos Pendentes":
                 abas_data = {}
                 for _, row in df_merge.iterrows():
                     desc_raw = str(row.get('Descricao', '') or '')
-                    aba = identificar_aba(desc_raw)
+                    # Preferir descrição da planilha base para classificar a aba
+                    # pois é a fonte de verdade do produto (evita classificação errada
+                    # quando a descrição do PEDIDOSPENDENTES contém termos genéricos)
+                    _desc_base = str(row.get(desc_col, '') or '') if desc_col else ''
+                    aba = identificar_aba(_desc_base if _desc_base else desc_raw)
                     if aba not in abas_data:
                         abas_data[aba] = []
 
