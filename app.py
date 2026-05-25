@@ -5509,13 +5509,19 @@ elif menu == "Pedidos Pendentes":
 
                 # Mapeamento de grupos → abas
                 # Grupos: palavras-chave em ordem de prioridade
-                # Regras por palavras-chave — ORDEM CRÍTICA: mais específico primeiro
-                # NAO ESTERIL deve vir ANTES de ESTERIL para evitar falso match
+                # ORDEM CRÍTICA:
+                #   1. Campo  — sempre primeiro
+                #   2. Tipo Queijo — CIRCULAR deve ser verificado ANTES de NAO ESTERIL
+                #      porque "GAZE CIRCULAR NAO ESTERIL" contém ambos os termos.
+                #      A presença de CIRCULAR indica Tipo Queijo, independentemente
+                #      de conter também NAO ESTERIL.
+                #   3. Pacote — Gaze não estéril em pacote (sem CIRCULAR)
+                #   4. Esteril — após Pacote para não capturar NAO ESTERIL
                 GRUPOS_REGRAS = [
                     ('Campo',       ['CAMPO OPERATORIO', 'CAMPO OPERATÓRIO', 'CAMPO OP']),
-                    ('Tipo Queijo', ['GAZE CIRCULAR', 'QUEIJO', 'TIPO QUEIJO']),
-                    ('Pacote',      ['NAO ESTERIL', 'NÃO ESTERIL', 'PACOTE']),  # ANTES de Esteril
-                    ('Esteril',     ['GAZE ESTERIL', 'ESTERIL']),               # DEPOIS de Pacote
+                    ('Tipo Queijo', ['GAZE CIRCULAR', 'QUEIJO', 'TIPO QUEIJO', 'CIRCULAR']),
+                    ('Pacote',      ['NAO ESTERIL', 'NÃO ESTERIL', 'PACOTE']),
+                    ('Esteril',     ['GAZE ESTERIL', 'ESTERIL']),
                 ]
 
                 def _norm(s):
@@ -5532,11 +5538,22 @@ elif menu == "Pedidos Pendentes":
                     if 'ATADURA' in d:
                         return 'Atadura Hospitalar' if 'HOSPITALAR' in d else 'Atadura Farma'
 
-                    # Demais grupos — chaves também normalizadas
-                    for aba, chaves in GRUPOS_REGRAS:
-                        for chave in chaves:
-                            if _norm(chave) in d:
-                                return aba
+                    # Campo — antes de qualquer gaze
+                    if any(x in d for x in ['CAMPO OPERATORIO', 'CAMPO OPERATORIO', 'CAMPO OP']):
+                        return 'Campo'
+
+                    # Tipo Queijo — CIRCULAR tem prioridade sobre NAO ESTERIL.
+                    # "GAZE CIRCULAR NAO ESTERIL" deve ir para Tipo Queijo, não Pacote.
+                    if 'CIRCULAR' in d or 'QUEIJO' in d or 'TIPO QUEIJO' in d:
+                        return 'Tipo Queijo'
+
+                    # Pacote — Gaze não estéril sem CIRCULAR
+                    if 'NAO ESTERIL' in d or 'PACOTE' in d:
+                        return 'Pacote'
+
+                    # Estéril — após todos os não estéril/circular
+                    if 'ESTERIL' in d:
+                        return 'Esteril'
 
                     return 'Outros'
 
