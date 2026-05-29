@@ -2868,7 +2868,70 @@ if menu == "Dashboard":
     with col4b:
         taxa_devolucao = (total_devolucoes / vendas_brutas * 100) if vendas_brutas > 0 else 0
         render_kpi_card("Taxa Devolução", f"{taxa_devolucao:.1f}%", icon="📊", color="#E5E7EB")
-    
+
+    # Linha 3 — Mês atual vs mesmo mês ano anterior
+    st.markdown("<br>", unsafe_allow_html=True)
+    _dash_now      = pd.Timestamp.now()
+    _dash_mes_at   = _dash_now.month
+    _dash_ano_at   = _dash_now.year
+    _dash_ano_ant  = _dash_ano_at - 1
+    _meses_pt_dash = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",
+                      7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
+    _label_mes_dash = _meses_pt_dash.get(_dash_mes_at, "")
+
+    _nu_all = notas_unicas.copy()
+    _nu_all["DataEmissao"] = pd.to_datetime(_nu_all["DataEmissao"], errors="coerce")
+
+    # Faturamento mês atual (até hoje)
+    _fat_mes_at = float(_nu_all[
+        (_nu_all["TipoMov"] == "NF Venda") &
+        (_nu_all["DataEmissao"].dt.month == _dash_mes_at) &
+        (_nu_all["DataEmissao"].dt.year  == _dash_ano_at)
+    ]["TotalProduto"].sum())
+
+    # Faturamento mesmo mês ano anterior (mês completo)
+    _fat_mes_ant_ano = float(_nu_all[
+        (_nu_all["TipoMov"] == "NF Venda") &
+        (_nu_all["DataEmissao"].dt.month == _dash_mes_at) &
+        (_nu_all["DataEmissao"].dt.year  == _dash_ano_ant)
+    ]["TotalProduto"].sum())
+
+    _var_ano = ((_fat_mes_at - _fat_mes_ant_ano) / _fat_mes_ant_ano * 100) if _fat_mes_ant_ano > 0 else None
+    _var_ano_str = f"{_var_ano:+.1f}%" if _var_ano is not None else "—"
+    _var_cor_dash = "#28A745" if (_var_ano or 0) >= 0 else "#EF4444"
+    _var_ico_dash = "📈" if (_var_ano or 0) >= 0 else "📉"
+
+    _col_d1, _col_d2, _col_d3, _col_d4 = st.columns(4)
+    with _col_d1:
+        render_kpi_card(
+            f"{_label_mes_dash}/{_dash_ano_at} (até hoje)",
+            f"R$ {_fat_mes_at:,.0f}",
+            icon="📅", color="#2E86AB"
+        )
+    with _col_d2:
+        render_kpi_card(
+            f"{_label_mes_dash}/{_dash_ano_ant} (mesmo mês)",
+            f"R$ {_fat_mes_ant_ano:,.0f}",
+            icon="🗓️", color="#6C757D"
+        )
+    with _col_d3:
+        render_kpi_card(
+            f"Variação Anual ({_label_mes_dash})",
+            f"{_var_ico_dash} {_var_ano_str}",
+            icon="📊", color=_var_cor_dash
+        )
+    with _col_d4:
+        _clientes_mes_at = df[
+            (df["TipoMov"] == "NF Venda") &
+            (pd.to_datetime(df["DataEmissao"], errors="coerce").dt.month == _dash_mes_at) &
+            (pd.to_datetime(df["DataEmissao"], errors="coerce").dt.year  == _dash_ano_at)
+        ]["CPF_CNPJ"].nunique()
+        render_kpi_card(
+            f"Clientes em {_label_mes_dash}/{_dash_ano_at}",
+            f"{_clientes_mes_at:,}",
+            icon="👥", color="#F4A261"
+        )
+
     st.markdown("---")
 
     # Linha 1: 3 gráficos
@@ -6424,8 +6487,9 @@ elif menu == "Performance de Vendedores":
     st.markdown("---")
 
     # ── Tabs de análise ───────────────────────────────────────────────────────
-    _pv_tab1, _pv_tab2, _pv_tab3, _pv_tab4 = st.tabs([
-        "📊 Comparativo", "📈 Evolução Temporal", "🌐 Capilaridade", "🛒 Mix de Produtos"
+    _pv_tab1, _pv_tab2, _pv_tab3, _pv_tab4, _pv_tab5, _pv_tab6 = st.tabs([
+        "📊 Comparativo", "📈 Evolução Temporal", "🌐 Capilaridade", "🛒 Mix de Produtos",
+        "📅 Mês a Mês", "📦 Resultado por Produto"
     ])
 
     # ─── Tab 1: Comparativo de Vendedores ────────────────────────────────────
@@ -6799,6 +6863,245 @@ elif menu == "Performance de Vendedores":
             "application/vnd.ms-excel",
             key="pv_dl_mix"
         )
+
+    # ─── Tab 5: Mês a Mês ────────────────────────────────────────────────────
+    with _pv_tab5:
+        st.markdown("#### Consolidado Mês a Mês — Faturamento e Participação na Empresa")
+        st.caption("Este painel ignora o filtro de período e exibe todos os meses com vendas. O mês atual mostra resultado até hoje.")
+
+        # Usar base completa (sem filtro de período)
+        _mm_base = df.copy()
+        _mm_base["DataEmissao"] = pd.to_datetime(_mm_base["DataEmissao"], errors="coerce")
+
+        # Notas únicas de vendas (sem devolução) — base completa
+        _mm_notas_all = obter_notas_unicas(_mm_base)
+        _mm_notas_v   = _mm_notas_all[_mm_notas_all["TipoMov"] == "NF Venda"].copy()
+        _mm_notas_v["Ano"]  = _mm_notas_v["DataEmissao"].dt.year
+        _mm_notas_v["Mes"]  = _mm_notas_v["DataEmissao"].dt.month
+        _mm_notas_v["AnoMes"] = _mm_notas_v["DataEmissao"].dt.to_period("M")
+
+        # Faturamento total da empresa por mês
+        _mm_fat_empresa = _mm_notas_v.groupby("AnoMes")["TotalProduto"].sum()
+
+        # Vendedores para filtrar (respeita filtro de vendedor mas não de período)
+        _mm_vendedores = sorted(_mm_notas_v["Vendedor"].dropna().unique().tolist())
+        if _pv_vendedor != "Todos":
+            _mm_vendedores = [_pv_vendedor]
+
+        # Faturamento por vendedor × mês
+        _mm_fat_vend = (
+            _mm_notas_v.groupby(["AnoMes", "Vendedor"])["TotalProduto"]
+            .sum()
+            .reset_index()
+        )
+
+        # Construir tabela pivot: linhas = vendedor, colunas = meses
+        _mm_periodos = sorted(_mm_fat_vend["AnoMes"].unique())
+        _mm_now_period = pd.Timestamp.now().to_period("M")
+
+        _mm_rows = []
+        for _mv in _mm_vendedores:
+            _row = {"Vendedor": _mv}
+            for _per in _mm_periodos:
+                _fat_v = float(_mm_fat_vend[
+                    (_mm_fat_vend["Vendedor"] == _mv) &
+                    (_mm_fat_vend["AnoMes"] == _per)
+                ]["TotalProduto"].sum())
+                _fat_tot = float(_mm_fat_empresa.get(_per, 0))
+                _perc = (_fat_v / _fat_tot * 100) if _fat_tot > 0 else 0.0
+                _label = str(_per)
+                _row[f"{_label} (R$)"] = _fat_v if _fat_v > 0 else None
+                _row[f"{_label} (%)"]  = round(_perc, 2) if _fat_v > 0 else None
+            _mm_rows.append(_row)
+
+        _mm_df = pd.DataFrame(_mm_rows)
+
+        # Exibir — formatar colunas de valor
+        _mm_df_disp = _mm_df.copy()
+        for _col in _mm_df_disp.columns:
+            if "(R$)" in _col:
+                _mm_df_disp[_col] = _mm_df_disp[_col].apply(
+                    lambda x: f"R$ {x:,.0f}" if pd.notnull(x) and x > 0 else "—"
+                )
+            elif "(%)" in _col:
+                _mm_df_disp[_col] = _mm_df_disp[_col].apply(
+                    lambda x: f"{x:.2f}%" if pd.notnull(x) and x > 0 else "—"
+                )
+
+        st.dataframe(_mm_df_disp, use_container_width=True)
+
+        # Totais por mês (linha de rodapé)
+        st.markdown("##### Totais da Empresa por Mês")
+        _mm_tot_rows = []
+        for _per in _mm_periodos:
+            _fat_tot = float(_mm_fat_empresa.get(_per, 0))
+            _label_per = str(_per)
+            _is_atual = (_per == _mm_now_period)
+            _mm_tot_rows.append({
+                "Período": _label_per + (" ⬅ mês atual" if _is_atual else ""),
+                "Faturamento Total (R$)": f"R$ {_fat_tot:,.0f}" if _fat_tot > 0 else "—",
+            })
+        st.dataframe(pd.DataFrame(_mm_tot_rows), use_container_width=True)
+
+        # Export Excel Mês a Mês
+        _mm_export = _mm_df.copy()
+        _mm_buf = io.BytesIO()
+        with pd.ExcelWriter(_mm_buf, engine="xlsxwriter") as _mm_wr:
+            _mm_export.to_excel(_mm_wr, index=False, sheet_name="Mês a Mês")
+            _mm_ws = _mm_wr.sheets["Mês a Mês"]
+            _mm_wb = _mm_wr.book
+            _fmt_moeda = _mm_wb.add_format({"num_format": "R$ #,##0.00", "bg_color": "#EEF3FC"})
+            _fmt_perc  = _mm_wb.add_format({"num_format": "0.00%", "bg_color": "#F0FFF4"})
+            _fmt_hdr   = _mm_wb.add_format({"bold": True, "bg_color": "#1F4788", "font_color": "white", "align": "center"})
+            for _ci5, _cn5 in enumerate(_mm_export.columns):
+                _mm_ws.write(0, _ci5, _cn5, _fmt_hdr)
+                if "(R$)" in _cn5:
+                    _mm_ws.set_column(_ci5, _ci5, 18, _fmt_moeda)
+                elif "(%)" in _cn5:
+                    _mm_ws.set_column(_ci5, _ci5, 12, _fmt_perc)
+                else:
+                    _mm_ws.set_column(_ci5, _ci5, 22)
+        _mm_buf.seek(0)
+        st.download_button(
+            "📥 Exportar Mês a Mês (Excel)",
+            _mm_buf.getvalue(),
+            "mes_a_mes_performance.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="pv_dl_mes_a_mes"
+        )
+
+    # ─── Tab 6: Resultado por Produto ────────────────────────────────────────
+    with _pv_tab6:
+        st.markdown("#### Resultado por Produto")
+        st.caption("Consolidado de vendas por produto no período selecionado. Filtro de data independente do filtro global.")
+
+        # Filtro de data próprio (data início / data fim)
+        _rp_c1, _rp_c2 = st.columns(2)
+        _pv_now_rp = pd.Timestamp.now()
+        with _rp_c1:
+            _rp_data_ini = st.date_input(
+                "📅 Data início",
+                value=_pv_now_rp.replace(day=1).date(),
+                key="pv_rp_data_ini",
+                format="DD/MM/YYYY"
+            )
+        with _rp_c2:
+            _rp_data_fim = st.date_input(
+                "📅 Data fim",
+                value=_pv_now_rp.date(),
+                key="pv_rp_data_fim",
+                format="DD/MM/YYYY"
+            )
+
+        # Base filtrada por data e por vendedor (se selecionado)
+        _rp_base = df[df["TipoMov"] == "NF Venda"].copy()
+        _rp_base["DataEmissao"] = pd.to_datetime(_rp_base["DataEmissao"], errors="coerce")
+        _rp_base = _rp_base[
+            (_rp_base["DataEmissao"] >= pd.to_datetime(_rp_data_ini)) &
+            (_rp_base["DataEmissao"] <= pd.to_datetime(_rp_data_fim))
+        ]
+        if _pv_vendedor != "Todos":
+            _rp_base = _rp_base[_rp_base["Vendedor"] == _pv_vendedor]
+        if _pv_regiao != "Todas":
+            _rp_base = _rp_base[_rp_base["Estado"] == _pv_regiao]
+
+        if len(_rp_base) == 0:
+            st.info("Nenhuma venda encontrada para o período e filtros selecionados.")
+        else:
+            _rp_fat_total = float(_rp_base["TotalProduto"].sum())
+
+            _rp_prod = _rp_base.groupby("NomeProduto").agg(
+                FaturamentoTotal=("TotalProduto", "sum"),
+                QuantidadeTotal=("Quantidade",   "sum") if "Quantidade" in _rp_base.columns else ("TotalProduto", "count"),
+                ClientesUnicos=("CPF_CNPJ",       "nunique"),
+                QtdNotas=("Numero_NF",             "nunique") if "Numero_NF" in _rp_base.columns else ("TotalProduto", "count"),
+            ).reset_index().sort_values("FaturamentoTotal", ascending=False)
+
+            _rp_prod["% do Período"] = (_rp_prod["FaturamentoTotal"] / _rp_fat_total * 100).round(2)
+            _rp_prod["% Acumulado"]  = _rp_prod["% do Período"].cumsum().round(2)
+
+            # Classificação ABC
+            def _abc(x):
+                if x <= 80:   return "A"
+                elif x <= 95: return "B"
+                else:          return "C"
+            _rp_prod["Curva ABC"] = _rp_prod["% Acumulado"].apply(_abc)
+
+            # Gráfico top 15
+            _rp_top15 = _rp_prod.head(15)
+            _fig_rp = px.bar(
+                _rp_top15,
+                x="NomeProduto", y="FaturamentoTotal",
+                color="Curva ABC",
+                color_discrete_map={"A": "#1F4788", "B": "#2E86AB", "C": "#A8C4E8"},
+                title=f"Top 15 Produtos — {_rp_data_ini.strftime('%d/%m/%Y')} a {_rp_data_fim.strftime('%d/%m/%Y')}",
+                labels={"NomeProduto": "Produto", "FaturamentoTotal": "Faturamento (R$)", "Curva ABC": "Curva"},
+                text=_rp_top15["% do Período"].apply(lambda x: f"{x:.1f}%")
+            )
+            _fig_rp.update_traces(textposition="outside")
+            _fig_rp = aplicar_layout_grafico(_fig_rp, height=420)
+            st.plotly_chart(_fig_rp, use_container_width=True)
+
+            # KPIs do período
+            _rp_k1, _rp_k2, _rp_k3, _rp_k4 = st.columns(4)
+            with _rp_k1:
+                render_kpi_card("Faturamento Total", f"R$ {_rp_fat_total:,.0f}", icon="💰", color="#1F4788")
+            with _rp_k2:
+                render_kpi_card("Produtos Diferentes", f"{len(_rp_prod):,}", icon="📦", color="#2E86AB")
+            with _rp_k3:
+                render_kpi_card("Clientes Únicos", f"{_rp_base['CPF_CNPJ'].nunique():,}", icon="👥", color="#28A745")
+            with _rp_k4:
+                _prod_a = len(_rp_prod[_rp_prod["Curva ABC"] == "A"])
+                render_kpi_card("Produtos Curva A", f"{_prod_a}", icon="🏆", color="#F4A261")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Tabela detalhada
+            _rp_disp = _rp_prod.copy()
+            _rp_disp["FaturamentoTotal"] = _rp_disp["FaturamentoTotal"].apply(formatar_moeda)
+            _rp_disp["% do Período"]     = _rp_disp["% do Período"].apply(lambda x: f"{x:.2f}%")
+            _rp_disp["% Acumulado"]      = _rp_disp["% Acumulado"].apply(lambda x: f"{x:.2f}%")
+            _rp_disp["QuantidadeTotal"]  = _rp_disp["QuantidadeTotal"].apply(lambda x: f"{x:,.0f} un")
+            _rp_disp = _rp_disp.rename(columns={
+                "NomeProduto":     "Produto",
+                "FaturamentoTotal":"Faturamento",
+                "QuantidadeTotal": "Qtd Vendida",
+                "ClientesUnicos":  "Clientes",
+                "QtdNotas":        "Nº Notas",
+            })
+            _rp_disp.insert(0, "Pos.", range(1, len(_rp_disp) + 1))
+            st.dataframe(_rp_disp, use_container_width=True)
+
+            # Export Excel
+            _rp_exp = _rp_prod.copy()
+            _rp_buf = io.BytesIO()
+            with pd.ExcelWriter(_rp_buf, engine="xlsxwriter") as _rp_wr:
+                _rp_exp.to_excel(_rp_wr, index=False, sheet_name="Resultado por Produto")
+                _rp_ws2 = _rp_wr.sheets["Resultado por Produto"]
+                _rp_wb2 = _rp_wr.book
+                _rp_fmt_h   = _rp_wb2.add_format({"bold": True, "bg_color": "#1F4788", "font_color": "white", "align": "center"})
+                _rp_fmt_mon = _rp_wb2.add_format({"num_format": "R$ #,##0.00"})
+                _rp_fmt_pct = _rp_wb2.add_format({"num_format": "0.00%"})
+                _rp_fmt_alt = _rp_wb2.add_format({"bg_color": "#EEF3FC"})
+                for _ci6, _cn6 in enumerate(_rp_exp.columns):
+                    _rp_ws2.write(0, _ci6, _cn6, _rp_fmt_h)
+                _rp_ws2.set_column(0, 0, 45)
+                _rp_ws2.set_column(1, 1, 18, _rp_fmt_mon)
+                _rp_ws2.set_column(2, 3, 14)
+                _rp_ws2.set_column(4, 5, 14, _rp_fmt_pct)
+                _rp_ws2.set_column(6, 6, 10)
+                for _ri6 in range(1, len(_rp_exp) + 1):
+                    if _ri6 % 2 == 0:
+                        for _ci6 in range(len(_rp_exp.columns)):
+                            _rp_ws2.write(_ri6, _ci6, _rp_exp.iloc[_ri6-1, _ci6], _rp_fmt_alt)
+            _rp_buf.seek(0)
+            st.download_button(
+                "📥 Exportar Resultado por Produto (Excel)",
+                _rp_buf.getvalue(),
+                f"resultado_produto_{_rp_data_ini.strftime('%Y%m%d')}_{_rp_data_fim.strftime('%Y%m%d')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="pv_dl_rp"
+            )
 
     # ── Geração de PDF ────────────────────────────────────────────────────────
     st.markdown("---")
@@ -7860,9 +8163,114 @@ elif menu == "Performance de Vendedores":
             _buf3 = _io_det.BytesIO()
             _wb_det.save(_buf3)
             _buf3.seek(0)
+
+            # ── Adicionar aba "Mês a Mês" ao relatório detalhado ───────────
+            import openpyxl as _opxl2
+            from openpyxl.styles import PatternFill as _PF2, Font as _FT2, Alignment as _AL2, Border as _BD2, Side as _SD2
+            from openpyxl.utils import get_column_letter as _gcl2
+            _buf3.seek(0)
+            _wb_extra = _opxl2.load_workbook(_buf3)
+
+            _H2 = _PF2("solid", fgColor="1F4788")
+            _HF2 = _FT2(bold=True, color="FFFFFF", size=10)
+            _HA2 = _AL2(horizontal="center", vertical="center", wrap_text=True)
+            _BR2 = _BD2(left=_SD2(style="thin"), right=_SD2(style="thin"),
+                        top=_SD2(style="thin"), bottom=_SD2(style="thin"))
+            _AT2 = _PF2("solid", fgColor="EEF3FC")
+
+            # ── Aba Mês a Mês ─────────────────────────────────────────────
+            _ws_mm = _wb_extra.create_sheet("Mês a Mês")
+
+            _mm2_base = df.copy()
+            _mm2_base["DataEmissao"] = pd.to_datetime(_mm2_base["DataEmissao"], errors="coerce")
+            _mm2_notas = obter_notas_unicas(_mm2_base)
+            _mm2_notas_v = _mm2_notas[_mm2_notas["TipoMov"] == "NF Venda"].copy()
+            _mm2_notas_v["AnoMes"] = _mm2_notas_v["DataEmissao"].dt.to_period("M")
+            _mm2_fat_empresa = _mm2_notas_v.groupby("AnoMes")["TotalProduto"].sum()
+            _mm2_fat_vend = _mm2_notas_v.groupby(["AnoMes", "Vendedor"])["TotalProduto"].sum().reset_index()
+            _mm2_periodos = sorted(_mm2_notas_v["AnoMes"].unique())
+            _mm2_vendedores = sorted(_mm2_notas_v["Vendedor"].dropna().unique().tolist())
+            if _pv_vendedor != "Todos":
+                _mm2_vendedores = [_pv_vendedor]
+
+            # Cabeçalho
+            _mm2_headers = ["Vendedor"]
+            for _p in _mm2_periodos:
+                _mm2_headers += [f"{_p} (R$)", f"{_p} (%)"]
+            for _ci_mm, _h_mm in enumerate(_mm2_headers, 1):
+                _c_mm = _ws_mm.cell(1, _ci_mm, _h_mm)
+                _c_mm.fill = _H2; _c_mm.font = _HF2; _c_mm.alignment = _HA2; _c_mm.border = _BR2
+                _ws_mm.column_dimensions[_gcl2(_ci_mm)].width = 18 if _ci_mm > 1 else 28
+
+            for _ri_mm, _mv2 in enumerate(_mm2_vendedores, 2):
+                _ws_mm.cell(_ri_mm, 1, _mv2).border = _BR2
+                if _ri_mm % 2 == 0:
+                    _ws_mm.cell(_ri_mm, 1).fill = _AT2
+                for _ci_mm, _p2 in enumerate(_mm2_periodos, 1):
+                    _fat_v2 = float(_mm2_fat_vend[
+                        (_mm2_fat_vend["Vendedor"] == _mv2) &
+                        (_mm2_fat_vend["AnoMes"] == _p2)
+                    ]["TotalProduto"].sum())
+                    _fat_t2 = float(_mm2_fat_empresa.get(_p2, 0))
+                    _perc2  = round(_fat_v2 / _fat_t2 * 100, 2) if _fat_t2 > 0 else 0.0
+                    _ci_rs = _ci_mm * 2
+                    _ci_pp = _ci_mm * 2 + 1
+                    _c_rs = _ws_mm.cell(_ri_mm, _ci_rs, _fat_v2 if _fat_v2 > 0 else None)
+                    _c_pp = _ws_mm.cell(_ri_mm, _ci_pp, _perc2 / 100 if _perc2 > 0 else None)
+                    _c_rs.number_format = "R$ #,##0.00"
+                    _c_pp.number_format = "0.00%"
+                    for _cx in (_c_rs, _c_pp):
+                        _cx.border = _BR2
+                        if _ri_mm % 2 == 0:
+                            _cx.fill = _AT2
+
+            # ── Aba Resultado por Produto ─────────────────────────────────
+            _ws_rp2 = _wb_extra.create_sheet("Resultado por Produto")
+
+            _rp2_base = df[df["TipoMov"] == "NF Venda"].copy()
+            _rp2_base["DataEmissao"] = pd.to_datetime(_rp2_base["DataEmissao"], errors="coerce")
+            # Usar período dos cards de referência (mês/ano selecionados)
+            _rp2_base = _rp2_base[
+                (_rp2_base["DataEmissao"].dt.month == _mes_card) &
+                (_rp2_base["DataEmissao"].dt.year  == _ano_card)
+            ]
+            if _pv_vendedor != "Todos":
+                _rp2_base = _rp2_base[_rp2_base["Vendedor"] == _pv_vendedor]
+
+            _rp2_fat_tot = float(_rp2_base["TotalProduto"].sum())
+            _rp2_prod = _rp2_base.groupby("NomeProduto").agg(
+                FaturamentoTotal=("TotalProduto", "sum"),
+                QuantidadeTotal=("Quantidade",   "sum") if "Quantidade" in _rp2_base.columns else ("TotalProduto", "count"),
+                ClientesUnicos=("CPF_CNPJ",       "nunique"),
+            ).reset_index().sort_values("FaturamentoTotal", ascending=False)
+            _rp2_prod["% do Período"] = (_rp2_prod["FaturamentoTotal"] / _rp2_fat_tot * 100).round(2) if _rp2_fat_tot > 0 else 0.0
+            _rp2_prod["% Acumulado"]  = _rp2_prod["% do Período"].cumsum().round(2)
+
+            _rp2_hdrs = ["Produto", "Faturamento (R$)", "Qtd Vendida", "Clientes", "% do Período", "% Acumulado"]
+            _rp2_widths = [45, 18, 14, 12, 14, 14]
+            for _ci_rp, (_h_rp, _w_rp) in enumerate(zip(_rp2_hdrs, _rp2_widths), 1):
+                _c_rp = _ws_rp2.cell(1, _ci_rp, _h_rp)
+                _c_rp.fill = _H2; _c_rp.font = _HF2; _c_rp.alignment = _HA2; _c_rp.border = _BR2
+                _ws_rp2.column_dimensions[_gcl2(_ci_rp)].width = _w_rp
+
+            for _ri_rp, _row_rp in enumerate(_rp2_prod.values.tolist(), 2):
+                _vals_rp = [_row_rp[0], _row_rp[1], _row_rp[2], _row_rp[3], _row_rp[4] / 100, _row_rp[5] / 100]
+                _fmts_rp = [None, "R$ #,##0.00", "#,##0", "#,##0", "0.00%", "0.00%"]
+                for _ci_rp, (_vl_rp, _fm_rp) in enumerate(zip(_vals_rp, _fmts_rp), 1):
+                    _c_rp2 = _ws_rp2.cell(_ri_rp, _ci_rp, _vl_rp)
+                    if _fm_rp:
+                        _c_rp2.number_format = _fm_rp
+                    _c_rp2.border = _BR2
+                    if _ri_rp % 2 == 0:
+                        _c_rp2.fill = _AT2
+
+            _buf3_final = _io_det.BytesIO()
+            _wb_extra.save(_buf3_final)
+            _buf3_final.seek(0)
+
             st.download_button(
                 label="⬇️ Baixar Relatório (Excel)",
-                data=_buf3.getvalue(),
+                data=_buf3_final.getvalue(),
                 file_name=f"performance_{_mes_card:02d}_{_ano_card}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_perf_det_xlsx"
