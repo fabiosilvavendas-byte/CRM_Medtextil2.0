@@ -6801,12 +6801,12 @@ elif menu == "Performance de Vendedores":
                     wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 8, 'font_name': 'Calibri'}))
 
                 # ══════════════════════════════════════════════════════════
-                # ABA 3 — Resultado por Produto
+                # ABA 3 — Resultado por Produto (separado por vendedor)
                 # ══════════════════════════════════════════════════════════
                 ws3 = wb.add_worksheet('Resultado por Produto')
                 writer.sheets['Resultado por Produto'] = ws3
 
-                # Classificar grupo de produto
+                # ── Classificador de grupo ────────────────────────────────
                 def _classificar_grupo(nome):
                     if pd.isna(nome):
                         return 'OUTROS'
@@ -6819,134 +6819,220 @@ elif menu == "Performance de Vendedores":
                         return 'GAZE CIRCULAR'
                     elif ('ESTERIL' in n or 'ESTÉRIL' in n) and 'NAO' not in n and 'NÃO' not in n:
                         return 'ESTÉRIL'
-                    elif 'NAO ESTERIL' in n or 'NÃO ESTERIL' in n or 'NÃO ESTÉRIL' in n or 'NAO ESTÉRIL' in n or 'NÃO ESTERIL' in n:
+                    elif 'NAO ESTERIL' in n or 'NÃO ESTERIL' in n or 'NÃO ESTÉRIL' in n or 'NAO ESTÉRIL' in n:
                         return 'NÃO ESTÉRIL (PACOTE)'
                     else:
                         return 'OUTROS'
 
-                # Usar _pv_vendas (filtrado por período/vendedor/região)
+                # ── Base de dados com grupo ───────────────────────────────
                 _rp_df = _pv_vendas.copy()
                 _rp_df['Grupo'] = _rp_df['NomeProduto'].apply(_classificar_grupo)
 
-                # Agregação por produto
-                _rp_prod = _rp_df.groupby(['NomeProduto', 'CodigoProduto', 'Grupo']).agg(
-                    Quantidade=('Quantidade', 'sum'),
-                    Faturamento=('TotalProduto', 'sum'),
-                    Clientes=('CPF_CNPJ', 'nunique')
-                ).reset_index().sort_values('Faturamento', ascending=False)
+                # Total geral de todos os vendedores no período (para % relativo)
+                _rp_total_empresa = _rp_df['TotalProduto'].sum()
 
-                _rp_total_geral = _rp_prod['Faturamento'].sum()
-                _rp_prod['Perc_Total'] = (_rp_prod['Faturamento'] / _rp_total_geral) if _rp_total_geral > 0 else 0
-
-                # % do grupo no total
-                _rp_grupo_total = _rp_df.groupby('Grupo')['TotalProduto'].sum().to_dict()
-                _rp_prod['Perc_Grupo'] = _rp_prod['Grupo'].map(
-                    lambda g: (_rp_grupo_total.get(g, 0) / _rp_total_geral) if _rp_total_geral > 0 else 0
-                )
-
-                # Identificar vendedor(es)
+                # Lista de vendedores a exibir
                 if _pv_vendedor != 'Todos':
-                    _rp_vendedor_nome = _pv_vendedor
+                    _rp_vendedores_lista = [_pv_vendedor]
                 else:
-                    _rp_vendedor_nome = 'Todos os Vendedores'
+                    _rp_vendedores_lista = sorted(_rp_df['Vendedor'].dropna().unique().tolist())
 
-                # Título
-                ws3.merge_range(0, 0, 0, 8,
-                    'RESULTADO POR PRODUTO',
-                    wb.add_format({'bold': True, 'font_color': '#1F4788', 'font_size': 13,
-                                   'font_name': 'Calibri', 'align': 'center'}))
-                ws3.write(1, 0, f'Vendedor: {_rp_vendedor_nome}  |  Região: {_pv_regiao}  |  Período: {_pv_periodo}  |  Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
-                    wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9, 'font_name': 'Calibri'}))
-
-                # Cabeçalho da tabela
-                _rp_cols = ['Código', 'Produto', 'Grupo', 'Quantidade', 'Faturamento (R$)',
-                            'Clientes', '% no Total', '% do Grupo no Total']
-                ws3.set_row(3, 25)
-                for c_idx, col in enumerate(_rp_cols):
-                    ws3.write(3, c_idx, col, fmt_header)
-
-                _rp_col_widths = [12, 42, 22, 12, 20, 10, 14, 22]
-                for i, w in enumerate(_rp_col_widths):
-                    ws3.set_column(i, i, w)
-
-                # Escrever dados por produto
-                _grupos_ordem = ['ATADURA', 'CAMPO OPERATÓRIO', 'GAZE CIRCULAR', 'ESTÉRIL', 'NÃO ESTÉRIL (PACOTE)', 'OUTROS']
-                _rp_prod_sorted = pd.concat([
-                    _rp_prod[_rp_prod['Grupo'] == g] for g in _grupos_ordem if g in _rp_prod['Grupo'].values
-                ] + [_rp_prod[~_rp_prod['Grupo'].isin(_grupos_ordem)]])
-
-                _rp_row = 4
-                _ultimo_grupo = None
+                # ── Formatos específicos da aba ───────────────────────────
+                fmt_vend_header = wb.add_format({
+                    'bold': True, 'bg_color': '#163561', 'font_color': '#FFFFFF',
+                    'border': 1, 'font_name': 'Calibri', 'font_size': 11,
+                    'valign': 'vcenter'
+                })
                 fmt_grupo_sep = wb.add_format({
                     'bold': True, 'bg_color': '#D0E4F7', 'font_color': '#1F4788',
                     'border': 1, 'font_name': 'Calibri', 'font_size': 9
                 })
+                fmt_grupo_perc = wb.add_format({
+                    'bold': True, 'bg_color': '#D0E4F7', 'font_color': '#1F4788',
+                    'border': 1, 'font_name': 'Calibri', 'font_size': 9,
+                    'num_format': '0.00%'
+                })
+                fmt_subtotal = wb.add_format({
+                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
+                    'font_name': 'Calibri', 'font_size': 9
+                })
+                fmt_subtotal_moeda = wb.add_format({
+                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
+                    'font_name': 'Calibri', 'font_size': 9, 'num_format': 'R$ #,##0.00'
+                })
+                fmt_subtotal_perc = wb.add_format({
+                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
+                    'font_name': 'Calibri', 'font_size': 9, 'num_format': '0.00%'
+                })
+                fmt_subtotal_num = wb.add_format({
+                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
+                    'font_name': 'Calibri', 'font_size': 9, 'num_format': '#,##0'
+                })
 
-                for _, row in _rp_prod_sorted.iterrows():
-                    # Separador de grupo
-                    if row['Grupo'] != _ultimo_grupo:
-                        _g = row['Grupo']
-                        _g_fat = _rp_grupo_total.get(_g, 0)
-                        _g_perc = (_g_fat / _rp_total_geral) if _rp_total_geral > 0 else 0
-                        ws3.write(_rp_row, 0, '', fmt_grupo_sep)
-                        ws3.merge_range(_rp_row, 1, _rp_row, 5,
-                            f'▶  {_g}  —  Total: R$ {_g_fat:,.2f}  ({_g_perc:.2%} do total)',
-                            fmt_grupo_sep)
-                        ws3.write(_rp_row, 6, _g_perc, wb.add_format({
-                            'bold': True, 'bg_color': '#D0E4F7', 'font_color': '#1F4788',
-                            'border': 1, 'font_name': 'Calibri', 'font_size': 9,
-                            'num_format': '0.00%'
-                        }))
-                        ws3.write(_rp_row, 7, '', fmt_grupo_sep)
-                        _rp_row += 1
-                        _ultimo_grupo = _g
+                # ── Configurar larguras de colunas ────────────────────────
+                _rp_col_widths = [12, 42, 22, 12, 20, 10, 18, 22]
+                for i, w in enumerate(_rp_col_widths):
+                    ws3.set_column(i, i, w)
 
-                    ws3.write(_rp_row, 0, str(row.get('CodigoProduto', '')), fmt_text)
-                    ws3.write(_rp_row, 1, str(row['NomeProduto']), fmt_text)
-                    ws3.write(_rp_row, 2, str(row['Grupo']), fmt_text)
-                    ws3.write(_rp_row, 3, row['Quantidade'], fmt_num)
-                    ws3.write(_rp_row, 4, row['Faturamento'], fmt_moeda)
-                    ws3.write(_rp_row, 5, row['Clientes'], fmt_num)
-                    ws3.write(_rp_row, 6, row['Perc_Total'], fmt_perc)
-                    ws3.write(_rp_row, 7, row['Perc_Grupo'], fmt_perc)
-                    _rp_row += 1
-
-                # Linha de total
-                _rp_row += 1
-                ws3.write(_rp_row, 0, '', fmt_text_bold)
-                ws3.write(_rp_row, 1, 'TOTAL GERAL', fmt_text_bold)
-                ws3.write(_rp_row, 2, '', fmt_text_bold)
-                ws3.write(_rp_row, 3, _rp_prod['Quantidade'].sum(), fmt_text_bold)
-                ws3.write(_rp_row, 4, _rp_total_geral, fmt_moeda_bold)
-                ws3.write(_rp_row, 5, _rp_prod['Clientes'].sum(), fmt_text_bold)
-                ws3.write(_rp_row, 6, 1.0 if _rp_total_geral > 0 else 0, fmt_perc_bold)
-                ws3.write(_rp_row, 7, '', fmt_text_bold)
-
-                # Resumo por grupo (bloco extra)
-                _rp_row += 3
-                ws3.write(_rp_row, 0, 'RESUMO POR GRUPO', wb.add_format({
-                    'bold': True, 'font_color': '#1F4788', 'font_size': 11,
+                # ── Título da aba ─────────────────────────────────────────
+                fmt_titulo = wb.add_format({
+                    'bold': True, 'font_color': '#1F4788', 'font_size': 13,
+                    'font_name': 'Calibri', 'align': 'center'
+                })
+                fmt_subtitulo = wb.add_format({
+                    'italic': True, 'font_color': '#6C757D', 'font_size': 9,
                     'font_name': 'Calibri'
-                }))
-                _rp_row += 1
-                _rg_cols = ['Grupo', 'Faturamento (R$)', '% no Total do Vendedor', 'Qtd Produtos']
-                for c_idx, col in enumerate(_rg_cols):
-                    ws3.write(_rp_row, c_idx, col, fmt_header)
-                _rp_row += 1
+                })
+                ws3.merge_range(0, 0, 0, 7, 'RESULTADO POR PRODUTO — POR VENDEDOR', fmt_titulo)
+                ws3.write(1, 0,
+                    f'Região: {_pv_regiao}  |  Período: {_pv_periodo}  |  '
+                    f'Total Empresa no Período: R$ {_rp_total_empresa:,.2f}  |  '
+                    f'Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
+                    fmt_subtitulo)
 
-                _rp_grupo_agg = _rp_prod.groupby('Grupo').agg(
-                    Faturamento=('Faturamento', 'sum'),
-                    QtdProdutos=('NomeProduto', 'count')
-                ).reset_index()
-                _rp_grupo_agg['Perc'] = (_rp_grupo_agg['Faturamento'] / _rp_total_geral) if _rp_total_geral > 0 else 0
-                _rp_grupo_agg = _rp_grupo_agg.sort_values('Faturamento', ascending=False)
+                _rp_row = 3
+                _grupos_ordem = ['ATADURA', 'CAMPO OPERATÓRIO', 'GAZE CIRCULAR',
+                                 'ESTÉRIL', 'NÃO ESTÉRIL (PACOTE)', 'OUTROS']
 
-                for _, grow in _rp_grupo_agg.iterrows():
-                    ws3.write(_rp_row, 0, grow['Grupo'], fmt_text)
-                    ws3.write(_rp_row, 1, grow['Faturamento'], fmt_moeda)
-                    ws3.write(_rp_row, 2, grow['Perc'], fmt_perc)
-                    ws3.write(_rp_row, 3, grow['QtdProdutos'], fmt_num)
+                # ── Iterar por vendedor ───────────────────────────────────
+                for _vend_nome in _rp_vendedores_lista:
+                    _vend_df = _rp_df[_rp_df['Vendedor'] == _vend_nome].copy()
+                    if len(_vend_df) == 0:
+                        continue
+
+                    # Total do vendedor no período
+                    _vend_total = _vend_df['TotalProduto'].sum()
+                    _vend_perc_empresa = (_vend_total / _rp_total_empresa) if _rp_total_empresa > 0 else 0
+
+                    # ── Cabeçalho do vendedor ─────────────────────────────
+                    ws3.set_row(_rp_row, 22)
+                    ws3.merge_range(_rp_row, 0, _rp_row, 7,
+                        f'👤  {_vend_nome}   —   Total: R$ {_vend_total:,.2f}   '
+                        f'({_vend_perc_empresa:.2%} do total da empresa no período)',
+                        fmt_vend_header)
                     _rp_row += 1
+
+                    # ── Cabeçalho das colunas ─────────────────────────────
+                    _rp_cols = ['Código', 'Produto', 'Grupo', 'Quantidade',
+                                'Faturamento (R$)', 'Clientes',
+                                '% no Total do Vendedor', '% do Grupo no Total']
+                    ws3.set_row(_rp_row, 20)
+                    for c_idx, col in enumerate(_rp_cols):
+                        ws3.write(_rp_row, c_idx, col, fmt_header)
+                    _rp_row += 1
+
+                    # ── Agregar por produto deste vendedor ────────────────
+                    _vp = _vend_df.groupby(['NomeProduto', 'CodigoProduto', 'Grupo']).agg(
+                        Quantidade=('Quantidade', 'sum'),
+                        Faturamento=('TotalProduto', 'sum'),
+                        Clientes=('CPF_CNPJ', 'nunique')
+                    ).reset_index().sort_values('Faturamento', ascending=False)
+
+                    _vp['Perc_Total'] = _vp['Faturamento'] / _vend_total if _vend_total > 0 else 0
+                    _vp_grupo_total = _vend_df.groupby('Grupo')['TotalProduto'].sum().to_dict()
+                    _vp['Perc_Grupo'] = _vp['Grupo'].map(
+                        lambda g: (_vp_grupo_total.get(g, 0) / _vend_total) if _vend_total > 0 else 0
+                    )
+
+                    # Ordenar por grupo e faturamento
+                    _vp_sorted_parts = [
+                        _vp[_vp['Grupo'] == g] for g in _grupos_ordem if g in _vp['Grupo'].values
+                    ]
+                    _vp_outros = _vp[~_vp['Grupo'].isin(_grupos_ordem)]
+                    _vp_sorted = pd.concat(_vp_sorted_parts + ([_vp_outros] if len(_vp_outros) > 0 else []))
+
+                    _ultimo_grupo = None
+                    for _, row in _vp_sorted.iterrows():
+                        # ── Separador de grupo ────────────────────────────
+                        if row['Grupo'] != _ultimo_grupo:
+                            _g = row['Grupo']
+                            _g_fat = _vp_grupo_total.get(_g, 0)
+                            _g_perc = (_g_fat / _vend_total) if _vend_total > 0 else 0
+                            ws3.write(_rp_row, 0, '', fmt_grupo_sep)
+                            ws3.merge_range(_rp_row, 1, _rp_row, 5,
+                                f'▶  {_g}  —  Total: R$ {_g_fat:,.2f}  ({_g_perc:.2%} do total do vendedor)',
+                                fmt_grupo_sep)
+                            ws3.write(_rp_row, 6, _g_perc, fmt_grupo_perc)
+                            ws3.write(_rp_row, 7, '', fmt_grupo_sep)
+                            _rp_row += 1
+                            _ultimo_grupo = _g
+
+                        # ── Linha do produto ──────────────────────────────
+                        ws3.write(_rp_row, 0, str(row.get('CodigoProduto', '')), fmt_text)
+                        ws3.write(_rp_row, 1, str(row['NomeProduto']), fmt_text)
+                        ws3.write(_rp_row, 2, str(row['Grupo']), fmt_text)
+                        ws3.write(_rp_row, 3, row['Quantidade'], fmt_num)
+                        ws3.write(_rp_row, 4, row['Faturamento'], fmt_moeda)
+                        ws3.write(_rp_row, 5, row['Clientes'], fmt_num)
+                        ws3.write(_rp_row, 6, row['Perc_Total'], fmt_perc)
+                        ws3.write(_rp_row, 7, row['Perc_Grupo'], fmt_perc)
+                        _rp_row += 1
+
+                    # ── Subtotal do vendedor ──────────────────────────────
+                    ws3.write(_rp_row, 0, '', fmt_subtotal)
+                    ws3.merge_range(_rp_row, 1, _rp_row, 2, f'SUBTOTAL — {_vend_nome}', fmt_subtotal)
+                    ws3.write(_rp_row, 3, _vp['Quantidade'].sum(), fmt_subtotal_num)
+                    ws3.write(_rp_row, 4, _vend_total, fmt_subtotal_moeda)
+                    ws3.write(_rp_row, 5, _vp['Clientes'].sum(), fmt_subtotal_num)
+                    ws3.write(_rp_row, 6, 1.0 if _vend_total > 0 else 0, fmt_subtotal_perc)
+                    ws3.write(_rp_row, 7, _vend_perc_empresa, fmt_subtotal_perc)
+                    _rp_row += 1
+
+                    # ── Resumo por grupo do vendedor ──────────────────────
+                    _rp_row += 1
+                    ws3.write(_rp_row, 0, f'Resumo por Grupo — {_vend_nome}', wb.add_format({
+                        'bold': True, 'font_color': '#163561', 'font_size': 9,
+                        'font_name': 'Calibri', 'italic': True
+                    }))
+                    _rp_row += 1
+                    _rg_cols_h = ['Grupo', 'Faturamento (R$)', '% no Total do Vendedor', 'Qtd Produtos Distintos']
+                    for c_idx, col in enumerate(_rg_cols_h):
+                        ws3.write(_rp_row, c_idx, col, fmt_mes_header)
+                    _rp_row += 1
+
+                    _vp_grupo_agg = _vp.groupby('Grupo').agg(
+                        Faturamento=('Faturamento', 'sum'),
+                        QtdProdutos=('NomeProduto', 'count')
+                    ).reset_index()
+                    _vp_grupo_agg['Perc'] = _vp_grupo_agg['Faturamento'] / _vend_total if _vend_total > 0 else 0
+                    _vp_grupo_agg = _vp_grupo_agg.sort_values('Faturamento', ascending=False)
+
+                    for _, grow in _vp_grupo_agg.iterrows():
+                        ws3.write(_rp_row, 0, grow['Grupo'], fmt_text)
+                        ws3.write(_rp_row, 1, grow['Faturamento'], fmt_moeda)
+                        ws3.write(_rp_row, 2, grow['Perc'], fmt_perc)
+                        ws3.write(_rp_row, 3, grow['QtdProdutos'], fmt_num)
+                        _rp_row += 1
+
+                    # Espaço entre vendedores
+                    _rp_row += 2
+
+                # ── Totalizador geral ao final ────────────────────────────
+                fmt_grand = wb.add_format({
+                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
+                    'border': 1, 'font_name': 'Calibri', 'font_size': 10
+                })
+                fmt_grand_moeda = wb.add_format({
+                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
+                    'border': 1, 'font_name': 'Calibri', 'font_size': 10,
+                    'num_format': 'R$ #,##0.00'
+                })
+                fmt_grand_num = wb.add_format({
+                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
+                    'border': 1, 'font_name': 'Calibri', 'font_size': 10,
+                    'num_format': '#,##0'
+                })
+                ws3.set_row(_rp_row, 20)
+                ws3.write(_rp_row, 0, '', fmt_grand)
+                ws3.merge_range(_rp_row, 1, _rp_row, 2, 'TOTAL GERAL — TODOS OS VENDEDORES', fmt_grand)
+                ws3.write(_rp_row, 3, _rp_df['Quantidade'].sum(), fmt_grand_num)
+                ws3.write(_rp_row, 4, _rp_total_empresa, fmt_grand_moeda)
+                ws3.write(_rp_row, 5, _rp_df['CPF_CNPJ'].nunique(), fmt_grand_num)
+                ws3.write(_rp_row, 6, 1.0, wb.add_format({
+                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
+                    'border': 1, 'font_name': 'Calibri', 'font_size': 10, 'num_format': '0.00%'
+                }))
+                ws3.write(_rp_row, 7, '', fmt_grand)
 
             output.seek(0)
             return output.getvalue()
