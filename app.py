@@ -6581,7 +6581,23 @@ elif menu == "Performance de Vendedores":
         st.dataframe(_pv_comp_disp, use_container_width=True)
 
         # ── Geração do Excel com 3 abas ──────────────────────────────────────
-        def _gerar_excel_performance():
+        def _gerar_excel_performance(
+            _vendas_periodo=None,
+            _comp_data=None,
+            _vendedor_sel=None,
+            _regiao_sel=None,
+            _periodo_sel=None,
+            _now_ts=None,
+            _df_full=None
+        ):
+            # Usar dados passados explicitamente para evitar problema de closure/cache
+            _pv_vendas   = _vendas_periodo
+            _pv_comp     = _comp_data
+            _pv_vendedor = _vendedor_sel
+            _pv_regiao   = _regiao_sel
+            _pv_periodo  = _periodo_sel
+            _pv_now      = _now_ts
+            df           = _df_full
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 wb = writer.book
@@ -7037,7 +7053,15 @@ elif menu == "Performance de Vendedores":
             output.seek(0)
             return output.getvalue()
 
-        _excel_bytes = _gerar_excel_performance()
+        _excel_bytes = _gerar_excel_performance(
+            _vendas_periodo=_pv_vendas,
+            _comp_data=_pv_comp,
+            _vendedor_sel=_pv_vendedor,
+            _regiao_sel=_pv_regiao,
+            _periodo_sel=_pv_periodo,
+            _now_ts=_pv_now,
+            _df_full=df
+        )
         st.download_button(
             "📥 Exportar Comparativo (Excel) — 3 abas",
             _excel_bytes,
