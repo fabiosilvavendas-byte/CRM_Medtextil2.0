@@ -6843,9 +6843,11 @@ elif menu == "Performance de Vendedores":
                 # ── Base de dados com grupo ───────────────────────────────
                 _rp_df = _pv_vendas.copy()
                 _rp_df['Grupo'] = _rp_df['NomeProduto'].apply(_classificar_grupo)
+                # ValorItem = PrecoUnit * Quantidade (TotalProduto é o total da nota, repetido em cada item)
+                _rp_df['ValorItem'] = _rp_df['PrecoUnit'] * _rp_df['Quantidade']
 
                 # Total geral de todos os vendedores no período (para % relativo)
-                _rp_total_empresa = _rp_df['TotalProduto'].sum()
+                _rp_total_empresa = _rp_df['ValorItem'].sum()
 
                 # Lista de vendedores a exibir
                 if _pv_vendedor != 'Todos':
@@ -6917,7 +6919,7 @@ elif menu == "Performance de Vendedores":
                         continue
 
                     # Total do vendedor no período
-                    _vend_total = _vend_df['TotalProduto'].sum()
+                    _vend_total = _vend_df['ValorItem'].sum()
                     _vend_perc_empresa = (_vend_total / _rp_total_empresa) if _rp_total_empresa > 0 else 0
 
                     # ── Cabeçalho do vendedor ─────────────────────────────
@@ -6940,12 +6942,12 @@ elif menu == "Performance de Vendedores":
                     # ── Agregar por produto deste vendedor ────────────────
                     _vp = _vend_df.groupby(['NomeProduto', 'CodigoProduto', 'Grupo']).agg(
                         Quantidade=('Quantidade', 'sum'),
-                        Faturamento=('TotalProduto', 'sum'),
+                        Faturamento=('ValorItem', 'sum'),
                         Clientes=('CPF_CNPJ', 'nunique')
                     ).reset_index().sort_values('Faturamento', ascending=False)
 
                     _vp['Perc_Total'] = _vp['Faturamento'] / _vend_total if _vend_total > 0 else 0
-                    _vp_grupo_total = _vend_df.groupby('Grupo')['TotalProduto'].sum().to_dict()
+                    _vp_grupo_total = _vend_df.groupby('Grupo')['ValorItem'].sum().to_dict()
                     _vp['Perc_Grupo'] = _vp['Grupo'].map(
                         lambda g: (_vp_grupo_total.get(g, 0) / _vend_total) if _vend_total > 0 else 0
                     )
