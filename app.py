@@ -2445,27 +2445,20 @@ with st.sidebar:
                         _df_pend_sem = pd.DataFrame(_data_p)
                         if len(_df_pend_sem) > 0:
                             _df_pend_sem = _df_pend_sem.drop_duplicates(subset=['NumeroPedido', 'CodigoProduto'])
-                        # Filtrar: primeiro dia do mês até hoje
-                        if len(_df_pend_sem) > 0 and 'DataEmissao' in _df_pend_sem.columns:
+                        # Filtrar: apenas com quantidade pendente (independente do mês)
+                        if len(_df_pend_sem) > 0 and 'QtdPendente' in _df_pend_sem.columns:
                             _df_pend_sem = _df_pend_sem[_df_pend_sem['QtdPendente'] > 0]
-                            _df_pend_sem = _df_pend_sem[
-                                (_df_pend_sem['DataEmissao'] >= _inicio_mes) &
-                                (_df_pend_sem['DataEmissao'] <= _hoje)
-                            ]
                     except:
                         _df_pend_sem = None
 
-                # ── Faturados: primeiro dia do mês até hoje ──
+                # ── Faturados: todos os dados disponíveis no df (independente do mês vigente) ──
                 _df_fat_sem = df[
-                    (df['TipoMov'] == 'NF Venda') &
-                    (df['DataEmissao'] >= _inicio_mes) &
-                    (df['DataEmissao'] <= _hoje)
+                    (df['TipoMov'] == 'NF Venda')
                 ].copy()
 
                 # ── Lista de vendedores ativos ──
                 _vends_fat = set(df[
-                    (df['TipoMov'] == 'NF Venda') &
-                    (df['DataEmissao'] >= _inicio_mes)
+                    (df['TipoMov'] == 'NF Venda')
                 ]['Vendedor'].dropna().unique().tolist())
                 _vends_inad = set(_df_inad_sem['Vendedor'].dropna().unique().tolist()) \
                     if _df_inad_sem is not None and len(_df_inad_sem) > 0 else set()
