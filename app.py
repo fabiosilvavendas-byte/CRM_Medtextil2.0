@@ -2451,17 +2451,24 @@ with st.sidebar:
                     except:
                         _df_pend_sem = None
 
-                # ── Faturados: todos os dados disponíveis no df (independente do mês vigente) ──
+                # ── Faturados: início do mês vigente até hoje ──
                 _df_fat_sem = df[
-                    (df['TipoMov'] == 'NF Venda')
+                    (df['TipoMov'] == 'NF Venda') &
+                    (df['DataEmissao'] >= _inicio_mes) &
+                    (df['DataEmissao'] <= _hoje)
                 ].copy()
 
-                # ── Lista de vendedores ativos ──
+                # ── Lista de vendedores por regra independente ──
+                # Faturados: apenas quem tem NF Venda do início do mês vigente até hoje
                 _vends_fat = set(df[
-                    (df['TipoMov'] == 'NF Venda')
+                    (df['TipoMov'] == 'NF Venda') &
+                    (df['DataEmissao'] >= _inicio_mes) &
+                    (df['DataEmissao'] <= _hoje)
                 ]['Vendedor'].dropna().unique().tolist())
+                # Inadimplência: todos com clientes na planilha de inadimplência
                 _vends_inad = set(_df_inad_sem['Vendedor'].dropna().unique().tolist()) \
                     if _df_inad_sem is not None and len(_df_inad_sem) > 0 else set()
+                # Pendentes: todos com clientes na planilha de pedidos pendentes
                 _vends_pend = set(_df_pend_sem['Vendedor'].dropna().unique().tolist()) \
                     if _df_pend_sem is not None and len(_df_pend_sem) > 0 else set()
                 _vendedores_ativos = sorted(_vends_fat | _vends_inad | _vends_pend)
