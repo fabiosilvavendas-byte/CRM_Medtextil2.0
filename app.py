@@ -2395,7 +2395,7 @@ with st.sidebar:
                             with _z.open('xl/sharedStrings.xml') as _f:
                                 _st = _ET.parse(_f)
                                 _ns_s = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                                _ss = [''.join(_si.itertext()) for _si in _st.findall('.//ss:si', _ns_s)]
+                                _ss = [si.text if si.text else '' for si in _st.findall('.//ss:t', _ns_s)]
                             with _z.open('xl/worksheets/sheet1.xml') as _f:
                                 _sh = _ET.parse(_f)
                                 _ns = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
@@ -2445,30 +2445,30 @@ with st.sidebar:
                         _df_pend_sem = pd.DataFrame(_data_p)
                         if len(_df_pend_sem) > 0:
                             _df_pend_sem = _df_pend_sem.drop_duplicates(subset=['NumeroPedido', 'CodigoProduto'])
-                        # Filtrar: apenas com quantidade pendente (independente do mês)
-                        if len(_df_pend_sem) > 0 and 'QtdPendente' in _df_pend_sem.columns:
+                        # Filtrar: primeiro dia do mês até hoje
+                        if len(_df_pend_sem) > 0 and 'DataEmissao' in _df_pend_sem.columns:
                             _df_pend_sem = _df_pend_sem[_df_pend_sem['QtdPendente'] > 0]
+                            _df_pend_sem = _df_pend_sem[
+                                (_df_pend_sem['DataEmissao'] >= _inicio_mes) &
+                                (_df_pend_sem['DataEmissao'] <= _hoje)
+                            ]
                     except:
                         _df_pend_sem = None
 
-                # ── Faturados: início do mês vigente até hoje ──
+                # ── Faturados: primeiro dia do mês até hoje ──
                 _df_fat_sem = df[
                     (df['TipoMov'] == 'NF Venda') &
                     (df['DataEmissao'] >= _inicio_mes) &
                     (df['DataEmissao'] <= _hoje)
                 ].copy()
 
-                # ── Lista de vendedores por regra independente ──
-                # Faturados: apenas quem tem NF Venda do início do mês vigente até hoje
+                # ── Lista de vendedores ativos ──
                 _vends_fat = set(df[
                     (df['TipoMov'] == 'NF Venda') &
-                    (df['DataEmissao'] >= _inicio_mes) &
-                    (df['DataEmissao'] <= _hoje)
+                    (df['DataEmissao'] >= _inicio_mes)
                 ]['Vendedor'].dropna().unique().tolist())
-                # Inadimplência: todos com clientes na planilha de inadimplência
                 _vends_inad = set(_df_inad_sem['Vendedor'].dropna().unique().tolist()) \
                     if _df_inad_sem is not None and len(_df_inad_sem) > 0 else set()
-                # Pendentes: todos com clientes na planilha de pedidos pendentes
                 _vends_pend = set(_df_pend_sem['Vendedor'].dropna().unique().tolist()) \
                     if _df_pend_sem is not None and len(_df_pend_sem) > 0 else set()
                 _vendedores_ativos = sorted(_vends_fat | _vends_inad | _vends_pend)
@@ -2595,19 +2595,6 @@ if st.session_state.menu_option == '__home__':
     except:
         vendas_mes = 0
 
-    try:
-        _ano_anterior = _ano - 1
-        _meses_pt = {1:'jan',2:'fev',3:'mar',4:'abr',5:'mai',6:'jun',
-                     7:'jul',8:'ago',9:'set',10:'out',11:'nov',12:'dez'}
-        vendas_mes_ano_ant = notas_unicas[
-            (notas_unicas['TipoMov'] == 'NF Venda') &
-            (notas_unicas['DataEmissao'].dt.month == _mes) &
-            (notas_unicas['DataEmissao'].dt.year  == _ano_anterior)
-        ]['TotalProduto'].sum()
-        _info_dash_ano_ant = f" · R$ {vendas_mes_ano_ant:,.0f} em {_meses_pt[_mes]}/{_ano_anterior}"
-    except:
-        _info_dash_ano_ant = ""
-
     # Positivação
     try:
         _base_total   = df['CPF_CNPJ'].nunique()
@@ -2655,7 +2642,7 @@ if st.session_state.menu_option == '__home__':
                 with _z.open('xl/sharedStrings.xml') as _f:
                     _st = ET.parse(_f)
                     _ns = {'ss':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                    _ss = [''.join(_si.itertext()) for _si in _st.findall('.//ss:si', _ns)]
+                    _ss = [s.text or '' for s in _st.findall('.//ss:t',_ns)]
                 with _z.open('xl/worksheets/sheet1.xml') as _f:
                     _sh = ET.parse(_f)
                     _val_pend = 0.0; _cli_pend = set()
@@ -2697,7 +2684,7 @@ if st.session_state.menu_option == '__home__':
 
     cards_data = [
         # 💰 GESTÃO COMERCIAL
-        {'nome':'Dashboard',                'info':f'R$ {vendas_mes:,.0f} no mês atual{_info_dash_ano_ant}', 'cat':'💰 Gestão Comercial'},
+        {'nome':'Dashboard',                'info':f'R$ {vendas_mes:,.0f} no mês atual',        'cat':'💰 Gestão Comercial'},
         {'nome':'Performance de Vendedores','info':'Análise completa por vendedor',              'cat':'💰 Gestão Comercial'},
         {'nome':'Positivação',              'info':_info_posit,                                  'cat':'💰 Gestão Comercial'},
         {'nome':'Clientes sem Compra',      'info':_info_churn,                                  'cat':'💰 Gestão Comercial'},
@@ -5055,7 +5042,7 @@ elif menu == "Pedidos Pendentes":
                 with z.open('xl/sharedStrings.xml') as f:
                     strings_tree = ET.parse(f)
                     ns_str = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                    shared_strings = [''.join(si.itertext()) for si in strings_tree.findall('.//ss:si', ns_str)]
+                    shared_strings = [si.text if si.text else '' for si in strings_tree.findall('.//ss:t', ns_str)]
                 
                 # Extrair sheet
                 with z.open('xl/worksheets/sheet1.xml') as f:
@@ -6580,495 +6567,11 @@ elif menu == "Performance de Vendedores":
         })
         st.dataframe(_pv_comp_disp, use_container_width=True)
 
-        # ── Geração do Excel com 3 abas ──────────────────────────────────────
-        def _gerar_excel_performance(
-            _vendas_periodo=None,
-            _comp_data=None,
-            _vendedor_sel=None,
-            _regiao_sel=None,
-            _periodo_sel=None,
-            _now_ts=None,
-            _df_full=None
-        ):
-            # Usar dados passados explicitamente para evitar problema de closure/cache
-            _pv_vendas   = _vendas_periodo
-            _pv_comp     = _comp_data
-            _pv_vendedor = _vendedor_sel
-            _pv_regiao   = _regiao_sel
-            _pv_periodo  = _periodo_sel
-            _pv_now      = _now_ts
-            df           = _df_full
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                wb = writer.book
-
-                # ── Formatos ──────────────────────────────────────────────
-                fmt_header = wb.add_format({
-                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
-                    'border': 1, 'align': 'center', 'valign': 'vcenter',
-                    'font_name': 'Calibri', 'font_size': 10
-                })
-                fmt_moeda = wb.add_format({
-                    'num_format': 'R$ #,##0.00', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9
-                })
-                fmt_perc = wb.add_format({
-                    'num_format': '0.00%', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9
-                })
-                fmt_text = wb.add_format({
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 9
-                })
-                fmt_text_bold = wb.add_format({
-                    'bold': True, 'border': 1, 'font_name': 'Calibri', 'font_size': 9,
-                    'bg_color': '#EEF3FC'
-                })
-                fmt_moeda_bold = wb.add_format({
-                    'bold': True, 'num_format': 'R$ #,##0.00', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9, 'bg_color': '#EEF3FC'
-                })
-                fmt_perc_bold = wb.add_format({
-                    'bold': True, 'num_format': '0.00%', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9, 'bg_color': '#EEF3FC'
-                })
-                fmt_mes_header = wb.add_format({
-                    'bold': True, 'bg_color': '#2D5AA0', 'font_color': '#FFFFFF',
-                    'border': 1, 'align': 'center', 'valign': 'vcenter',
-                    'font_name': 'Calibri', 'font_size': 9
-                })
-                fmt_mes_atual_header = wb.add_format({
-                    'bold': True, 'bg_color': '#E8650A', 'font_color': '#FFFFFF',
-                    'border': 1, 'align': 'center', 'valign': 'vcenter',
-                    'font_name': 'Calibri', 'font_size': 9
-                })
-                fmt_num = wb.add_format({
-                    'num_format': '#,##0', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9
-                })
-
-                # ══════════════════════════════════════════════════════════
-                # ABA 1 — Comparativo (existente, melhorada)
-                # ══════════════════════════════════════════════════════════
-                ws1 = wb.add_worksheet('Comparativo')
-                writer.sheets['Comparativo'] = ws1
-
-                _comp_export = _pv_comp.copy().sort_values('FaturamentoBruto', ascending=False)
-                _comp_export.insert(0, 'Posição', range(1, len(_comp_export) + 1))
-
-                cols1 = ['Posição', 'Vendedor', 'Faturamento Bruto (R$)', 'Nº Notas',
-                         'Clientes Atendidos', 'Ticket Médio (R$)', 'Volume Total (un)',
-                         'Comissão Média (%)', 'Prazo Médio (dias)']
-
-                ws1.set_row(0, 22)
-                ws1.write(0, 0, 'COMPARATIVO DE PERFORMANCE DE VENDEDORES', wb.add_format({
-                    'bold': True, 'font_color': '#1F4788', 'font_size': 13,
-                    'font_name': 'Calibri'
-                }))
-                ws1.merge_range(0, 0, 0, len(cols1)-1, 'COMPARATIVO DE PERFORMANCE DE VENDEDORES',
-                    wb.add_format({'bold': True, 'font_color': '#1F4788', 'font_size': 13,
-                                   'font_name': 'Calibri', 'align': 'center'}))
-                ws1.write(1, 0, f'Vendedor: {_pv_vendedor}  |  Região: {_pv_regiao}  |  Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
-                    wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9, 'font_name': 'Calibri'}))
-
-                for c_idx, col in enumerate(cols1):
-                    ws1.write(3, c_idx, col, fmt_header)
-
-                col_widths1 = [8, 28, 20, 10, 18, 18, 16, 16, 16]
-                for i, w in enumerate(col_widths1):
-                    ws1.set_column(i, i, w)
-
-                for r_idx, row in _comp_export.iterrows():
-                    row_num = list(_comp_export.index).index(r_idx) + 4
-                    ws1.write(row_num, 0, row['Posição'], fmt_text)
-                    ws1.write(row_num, 1, str(row['Vendedor']), fmt_text)
-                    ws1.write(row_num, 2, row['FaturamentoBruto'], fmt_moeda)
-                    ws1.write(row_num, 3, row['QtdNotas'], fmt_num)
-                    ws1.write(row_num, 4, row['ClientesAtendidos'], fmt_num)
-                    ws1.write(row_num, 5, row['TicketMedio'], fmt_moeda)
-                    ws1.write(row_num, 6, row.get('VolumeTotal', 0), fmt_num)
-                    _com_val = row.get('ComissaoMedia')
-                    ws1.write(row_num, 7, (_com_val/100) if pd.notnull(_com_val) else '', fmt_perc)
-                    ws1.write(row_num, 8, row.get('PrazoMedio', 0), fmt_num)
-
-                # Linha de total
-                _tot_row = len(_comp_export) + 4
-                ws1.write(_tot_row, 0, '', fmt_text_bold)
-                ws1.write(_tot_row, 1, 'TOTAL', fmt_text_bold)
-                ws1.write(_tot_row, 2, _comp_export['FaturamentoBruto'].sum(), fmt_moeda_bold)
-                ws1.write(_tot_row, 3, _comp_export['QtdNotas'].sum(), fmt_text_bold)
-                ws1.write(_tot_row, 4, '', fmt_text_bold)
-                ws1.write(_tot_row, 5, '', fmt_text_bold)
-                ws1.write(_tot_row, 6, _comp_export['VolumeTotal'].sum(), fmt_text_bold)
-                ws1.write(_tot_row, 7, '', fmt_text_bold)
-                ws1.write(_tot_row, 8, '', fmt_text_bold)
-
-                # ══════════════════════════════════════════════════════════
-                # ABA 2 — Mês a Mês
-                # ══════════════════════════════════════════════════════════
-                ws2 = wb.add_worksheet('Mês a Mês')
-                writer.sheets['Mês a Mês'] = ws2
-
-                # Usar df completo (sem filtro de período), mas com filtro de vendedor/região
-                _mm_df_base = df.copy()
-                if _pv_regiao != 'Todas':
-                    _mm_df_base = _mm_df_base[_mm_df_base['Estado'] == _pv_regiao]
-
-                _mm_vendas = _mm_df_base[_mm_df_base['TipoMov'] == 'NF Venda'].copy()
-                _mm_notas  = obter_notas_unicas(_mm_df_base)
-                _mm_notas_v = _mm_notas[_mm_notas['TipoMov'] == 'NF Venda'].copy()
-
-                # Total empresa por mês (sem filtro de vendedor)
-                _mm_total_empresa = _mm_notas_v.groupby('MesAno')['TotalProduto'].sum().to_dict()
-
-                # Vendedores a exibir
-                if _pv_vendedor != 'Todos':
-                    _mm_vendedores = [_pv_vendedor]
-                else:
-                    _mm_vendedores = sorted(_mm_notas_v['Vendedor'].dropna().unique().tolist())
-
-                # Meses disponíveis ordenados
-                _mm_meses = sorted(_mm_notas_v['MesAno'].dropna().unique().tolist())
-                _pv_now_mesano = _pv_now.to_period('M').strftime('%Y-%m')
-
-                # Título e filtros
-                ws2.merge_range(0, 0, 0, 5 + len(_mm_meses)*2,
-                    'PERFORMANCE MENSAL — MÊS A MÊS',
-                    wb.add_format({'bold': True, 'font_color': '#1F4788', 'font_size': 13,
-                                   'font_name': 'Calibri', 'align': 'center'}))
-                ws2.write(1, 0, f'Região: {_pv_regiao}  |  Vendedor: {_pv_vendedor}  |  Todos os períodos históricos  |  Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
-                    wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9, 'font_name': 'Calibri'}))
-
-                # Cabeçalhos fixos
-                _mm_fixed_cols = ['Vendedor', 'Região']
-                _mm_col_offset = len(_mm_fixed_cols)
-
-                ws2.set_row(3, 30)
-                ws2.write(3, 0, 'Vendedor', fmt_header)
-                ws2.write(3, 1, 'Região', fmt_header)
-                ws2.set_column(0, 0, 28)
-                ws2.set_column(1, 1, 14)
-
-                # Cabeçalhos de meses (par: valor + %)
-                for m_idx, mesano in enumerate(_mm_meses):
-                    col_v = _mm_col_offset + m_idx * 2
-                    col_p = col_v + 1
-                    _is_atual = (mesano == _pv_now_mesano)
-                    _hfmt = fmt_mes_atual_header if _is_atual else fmt_mes_header
-                    _label = f"{mesano}{'*' if _is_atual else ''}"
-                    ws2.write(3, col_v, _label, _hfmt)
-                    ws2.write(3, col_p, f'% Emp.', _hfmt)
-                    ws2.set_column(col_v, col_v, 16)
-                    ws2.set_column(col_p, col_p, 10)
-
-                # Colunas de total
-                _tot_col_v = _mm_col_offset + len(_mm_meses) * 2
-                _tot_col_p = _tot_col_v + 1
-                ws2.write(3, _tot_col_v, 'Total Geral', fmt_header)
-                ws2.write(3, _tot_col_p, '% Média Emp.', fmt_header)
-                ws2.set_column(_tot_col_v, _tot_col_v, 18)
-                ws2.set_column(_tot_col_p, _tot_col_p, 14)
-
-                # Dados por vendedor
-                _mm_row = 4
-                for vend in _mm_vendedores:
-                    _vend_df = _mm_notas_v[_mm_notas_v['Vendedor'] == vend]
-                    _vend_por_mes = _vend_df.groupby('MesAno')['TotalProduto'].sum().to_dict()
-                    _regiao_vend  = _vend_df['Estado'].mode()[0] if len(_vend_df) > 0 and 'Estado' in _vend_df.columns else _pv_regiao
-
-                    ws2.write(_mm_row, 0, vend, fmt_text)
-                    ws2.write(_mm_row, 1, _regiao_vend if _pv_regiao == 'Todas' else _pv_regiao, fmt_text)
-
-                    _total_vend = 0
-                    _perc_list  = []
-                    for m_idx, mesano in enumerate(_mm_meses):
-                        col_v = _mm_col_offset + m_idx * 2
-                        col_p = col_v + 1
-                        _val  = _vend_por_mes.get(mesano, 0)
-                        _emp  = _mm_total_empresa.get(mesano, 0)
-                        _perc = (_val / _emp) if _emp > 0 else 0
-                        ws2.write(_mm_row, col_v, _val, fmt_moeda)
-                        ws2.write(_mm_row, col_p, _perc, fmt_perc)
-                        _total_vend += _val
-                        if _val > 0:
-                            _perc_list.append(_perc)
-
-                    _perc_media = sum(_perc_list) / len(_perc_list) if _perc_list else 0
-                    ws2.write(_mm_row, _tot_col_v, _total_vend, fmt_moeda_bold)
-                    ws2.write(_mm_row, _tot_col_p, _perc_media, fmt_perc_bold)
-                    _mm_row += 1
-
-                # Linha de total empresa por mês
-                ws2.write(_mm_row, 0, 'TOTAL EMPRESA', fmt_text_bold)
-                ws2.write(_mm_row, 1, '', fmt_text_bold)
-                _grand_total = 0
-                for m_idx, mesano in enumerate(_mm_meses):
-                    col_v = _mm_col_offset + m_idx * 2
-                    col_p = col_v + 1
-                    _emp_val = _mm_total_empresa.get(mesano, 0)
-                    ws2.write(_mm_row, col_v, _emp_val, fmt_moeda_bold)
-                    ws2.write(_mm_row, col_p, '', fmt_text_bold)
-                    _grand_total += _emp_val
-                ws2.write(_mm_row, _tot_col_v, _grand_total, fmt_moeda_bold)
-                ws2.write(_mm_row, _tot_col_p, '', fmt_text_bold)
-
-                # Nota de rodapé
-                _mm_row += 2
-                ws2.write(_mm_row, 0, f'* Mês atual: acumulado até {_pv_now.strftime("%d/%m/%Y")}  |  % Emp. = participação do vendedor no total faturado pela empresa no mês',
-                    wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 8, 'font_name': 'Calibri'}))
-
-                # ══════════════════════════════════════════════════════════
-                # ABA 3 — Resultado por Produto (separado por vendedor)
-                # ══════════════════════════════════════════════════════════
-                ws3 = wb.add_worksheet('Resultado por Produto')
-                writer.sheets['Resultado por Produto'] = ws3
-
-                # ── Classificador de grupo ────────────────────────────────
-                def _classificar_grupo(nome):
-                    if pd.isna(nome):
-                        return 'OUTROS'
-                    n = str(nome).upper()
-                    if 'ATADURA' in n:
-                        return 'ATADURA'
-                    elif 'CAMPO' in n:
-                        return 'CAMPO OPERATÓRIO'
-                    elif 'GAZE' in n and ('CIRCULAR' in n or 'ROLO' in n):
-                        return 'GAZE CIRCULAR'
-                    elif ('ESTERIL' in n or 'ESTÉRIL' in n) and 'NAO' not in n and 'NÃO' not in n:
-                        return 'ESTÉRIL'
-                    elif 'NAO ESTERIL' in n or 'NÃO ESTERIL' in n or 'NÃO ESTÉRIL' in n or 'NAO ESTÉRIL' in n:
-                        return 'NÃO ESTÉRIL (PACOTE)'
-                    else:
-                        return 'OUTROS'
-
-                # ── Base de dados com grupo ───────────────────────────────
-                _rp_df = _pv_vendas.copy()
-                _rp_df['Grupo'] = _rp_df['NomeProduto'].apply(_classificar_grupo)
-                # ValorItem = PrecoUnit * Quantidade (TotalProduto é o total da nota, repetido em cada item)
-                _rp_df['ValorItem'] = _rp_df['PrecoUnit'] * _rp_df['Quantidade']
-
-                # Total geral de todos os vendedores no período (para % relativo)
-                _rp_total_empresa = _rp_df['ValorItem'].sum()
-
-                # Lista de vendedores a exibir
-                if _pv_vendedor != 'Todos':
-                    _rp_vendedores_lista = [_pv_vendedor]
-                else:
-                    _rp_vendedores_lista = sorted(_rp_df['Vendedor'].dropna().unique().tolist())
-
-                # ── Formatos específicos da aba ───────────────────────────
-                fmt_vend_header = wb.add_format({
-                    'bold': True, 'bg_color': '#163561', 'font_color': '#FFFFFF',
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 11,
-                    'valign': 'vcenter'
-                })
-                fmt_grupo_sep = wb.add_format({
-                    'bold': True, 'bg_color': '#D0E4F7', 'font_color': '#1F4788',
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 9
-                })
-                fmt_grupo_perc = wb.add_format({
-                    'bold': True, 'bg_color': '#D0E4F7', 'font_color': '#1F4788',
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 9,
-                    'num_format': '0.00%'
-                })
-                fmt_subtotal = wb.add_format({
-                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9
-                })
-                fmt_subtotal_moeda = wb.add_format({
-                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9, 'num_format': 'R$ #,##0.00'
-                })
-                fmt_subtotal_perc = wb.add_format({
-                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9, 'num_format': '0.00%'
-                })
-                fmt_subtotal_num = wb.add_format({
-                    'bold': True, 'bg_color': '#F0F4FA', 'border': 1,
-                    'font_name': 'Calibri', 'font_size': 9, 'num_format': '#,##0'
-                })
-
-                # ── Configurar larguras de colunas ────────────────────────
-                _rp_col_widths = [12, 42, 22, 12, 20, 10, 18, 22]
-                for i, w in enumerate(_rp_col_widths):
-                    ws3.set_column(i, i, w)
-
-                # ── Título da aba ─────────────────────────────────────────
-                fmt_titulo = wb.add_format({
-                    'bold': True, 'font_color': '#1F4788', 'font_size': 13,
-                    'font_name': 'Calibri', 'align': 'center'
-                })
-                fmt_subtitulo = wb.add_format({
-                    'italic': True, 'font_color': '#6C757D', 'font_size': 9,
-                    'font_name': 'Calibri'
-                })
-                ws3.merge_range(0, 0, 0, 7, 'RESULTADO POR PRODUTO — POR VENDEDOR', fmt_titulo)
-                ws3.write(1, 0,
-                    f'Região: {_pv_regiao}  |  Período: {_pv_periodo}  |  '
-                    f'Total Empresa no Período: R$ {_rp_total_empresa:,.2f}  |  '
-                    f'Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
-                    fmt_subtitulo)
-
-                _rp_row = 3
-                _grupos_ordem = ['ATADURA', 'CAMPO OPERATÓRIO', 'GAZE CIRCULAR',
-                                 'ESTÉRIL', 'NÃO ESTÉRIL (PACOTE)', 'OUTROS']
-
-                # ── Iterar por vendedor ───────────────────────────────────
-                for _vend_nome in _rp_vendedores_lista:
-                    _vend_df = _rp_df[_rp_df['Vendedor'] == _vend_nome].copy()
-                    if len(_vend_df) == 0:
-                        continue
-
-                    # Total do vendedor no período
-                    _vend_total = _vend_df['ValorItem'].sum()
-                    _vend_perc_empresa = (_vend_total / _rp_total_empresa) if _rp_total_empresa > 0 else 0
-
-                    # ── Cabeçalho do vendedor ─────────────────────────────
-                    ws3.set_row(_rp_row, 22)
-                    ws3.merge_range(_rp_row, 0, _rp_row, 7,
-                        f'👤  {_vend_nome}   —   Total: R$ {_vend_total:,.2f}   '
-                        f'({_vend_perc_empresa:.2%} do total da empresa no período)',
-                        fmt_vend_header)
-                    _rp_row += 1
-
-                    # ── Cabeçalho das colunas ─────────────────────────────
-                    _rp_cols = ['Código', 'Produto', 'Grupo', 'Quantidade',
-                                'Faturamento (R$)', 'Clientes',
-                                '% no Total do Vendedor', '% do Grupo no Total']
-                    ws3.set_row(_rp_row, 20)
-                    for c_idx, col in enumerate(_rp_cols):
-                        ws3.write(_rp_row, c_idx, col, fmt_header)
-                    _rp_row += 1
-
-                    # ── Agregar por produto deste vendedor ────────────────
-                    _vp = _vend_df.groupby(['NomeProduto', 'CodigoProduto', 'Grupo']).agg(
-                        Quantidade=('Quantidade', 'sum'),
-                        Faturamento=('ValorItem', 'sum'),
-                        Clientes=('CPF_CNPJ', 'nunique')
-                    ).reset_index().sort_values('Faturamento', ascending=False)
-
-                    _vp['Perc_Total'] = _vp['Faturamento'] / _vend_total if _vend_total > 0 else 0
-                    _vp_grupo_total = _vend_df.groupby('Grupo')['ValorItem'].sum().to_dict()
-                    _vp['Perc_Grupo'] = _vp['Grupo'].map(
-                        lambda g: (_vp_grupo_total.get(g, 0) / _vend_total) if _vend_total > 0 else 0
-                    )
-
-                    # Ordenar por grupo e faturamento
-                    _vp_sorted_parts = [
-                        _vp[_vp['Grupo'] == g] for g in _grupos_ordem if g in _vp['Grupo'].values
-                    ]
-                    _vp_outros = _vp[~_vp['Grupo'].isin(_grupos_ordem)]
-                    _vp_sorted = pd.concat(_vp_sorted_parts + ([_vp_outros] if len(_vp_outros) > 0 else []))
-
-                    _ultimo_grupo = None
-                    for _, row in _vp_sorted.iterrows():
-                        # ── Separador de grupo ────────────────────────────
-                        if row['Grupo'] != _ultimo_grupo:
-                            _g = row['Grupo']
-                            _g_fat = _vp_grupo_total.get(_g, 0)
-                            _g_perc = (_g_fat / _vend_total) if _vend_total > 0 else 0
-                            ws3.write(_rp_row, 0, '', fmt_grupo_sep)
-                            ws3.merge_range(_rp_row, 1, _rp_row, 5,
-                                f'▶  {_g}  —  Total: R$ {_g_fat:,.2f}  ({_g_perc:.2%} do total do vendedor)',
-                                fmt_grupo_sep)
-                            ws3.write(_rp_row, 6, _g_perc, fmt_grupo_perc)
-                            ws3.write(_rp_row, 7, '', fmt_grupo_sep)
-                            _rp_row += 1
-                            _ultimo_grupo = _g
-
-                        # ── Linha do produto ──────────────────────────────
-                        ws3.write(_rp_row, 0, str(row.get('CodigoProduto', '')), fmt_text)
-                        ws3.write(_rp_row, 1, str(row['NomeProduto']), fmt_text)
-                        ws3.write(_rp_row, 2, str(row['Grupo']), fmt_text)
-                        ws3.write(_rp_row, 3, row['Quantidade'], fmt_num)
-                        ws3.write(_rp_row, 4, row['Faturamento'], fmt_moeda)
-                        ws3.write(_rp_row, 5, row['Clientes'], fmt_num)
-                        ws3.write(_rp_row, 6, row['Perc_Total'], fmt_perc)
-                        ws3.write(_rp_row, 7, row['Perc_Grupo'], fmt_perc)
-                        _rp_row += 1
-
-                    # ── Subtotal do vendedor ──────────────────────────────
-                    ws3.write(_rp_row, 0, '', fmt_subtotal)
-                    ws3.merge_range(_rp_row, 1, _rp_row, 2, f'SUBTOTAL — {_vend_nome}', fmt_subtotal)
-                    ws3.write(_rp_row, 3, _vp['Quantidade'].sum(), fmt_subtotal_num)
-                    ws3.write(_rp_row, 4, _vend_total, fmt_subtotal_moeda)
-                    ws3.write(_rp_row, 5, _vp['Clientes'].sum(), fmt_subtotal_num)
-                    ws3.write(_rp_row, 6, 1.0 if _vend_total > 0 else 0, fmt_subtotal_perc)
-                    ws3.write(_rp_row, 7, _vend_perc_empresa, fmt_subtotal_perc)
-                    _rp_row += 1
-
-                    # ── Resumo por grupo do vendedor ──────────────────────
-                    _rp_row += 1
-                    ws3.write(_rp_row, 0, f'Resumo por Grupo — {_vend_nome}', wb.add_format({
-                        'bold': True, 'font_color': '#163561', 'font_size': 9,
-                        'font_name': 'Calibri', 'italic': True
-                    }))
-                    _rp_row += 1
-                    _rg_cols_h = ['Grupo', 'Faturamento (R$)', '% no Total do Vendedor', 'Qtd Produtos Distintos']
-                    for c_idx, col in enumerate(_rg_cols_h):
-                        ws3.write(_rp_row, c_idx, col, fmt_mes_header)
-                    _rp_row += 1
-
-                    _vp_grupo_agg = _vp.groupby('Grupo').agg(
-                        Faturamento=('Faturamento', 'sum'),
-                        QtdProdutos=('NomeProduto', 'count')
-                    ).reset_index()
-                    _vp_grupo_agg['Perc'] = _vp_grupo_agg['Faturamento'] / _vend_total if _vend_total > 0 else 0
-                    _vp_grupo_agg = _vp_grupo_agg.sort_values('Faturamento', ascending=False)
-
-                    for _, grow in _vp_grupo_agg.iterrows():
-                        ws3.write(_rp_row, 0, grow['Grupo'], fmt_text)
-                        ws3.write(_rp_row, 1, grow['Faturamento'], fmt_moeda)
-                        ws3.write(_rp_row, 2, grow['Perc'], fmt_perc)
-                        ws3.write(_rp_row, 3, grow['QtdProdutos'], fmt_num)
-                        _rp_row += 1
-
-                    # Espaço entre vendedores
-                    _rp_row += 2
-
-                # ── Totalizador geral ao final ────────────────────────────
-                fmt_grand = wb.add_format({
-                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 10
-                })
-                fmt_grand_moeda = wb.add_format({
-                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 10,
-                    'num_format': 'R$ #,##0.00'
-                })
-                fmt_grand_num = wb.add_format({
-                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 10,
-                    'num_format': '#,##0'
-                })
-                ws3.set_row(_rp_row, 20)
-                ws3.write(_rp_row, 0, '', fmt_grand)
-                ws3.merge_range(_rp_row, 1, _rp_row, 2, 'TOTAL GERAL — TODOS OS VENDEDORES', fmt_grand)
-                ws3.write(_rp_row, 3, _rp_df['Quantidade'].sum(), fmt_grand_num)
-                ws3.write(_rp_row, 4, _rp_total_empresa, fmt_grand_moeda)
-                ws3.write(_rp_row, 5, _rp_df['CPF_CNPJ'].nunique(), fmt_grand_num)
-                ws3.write(_rp_row, 6, 1.0, wb.add_format({
-                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 10, 'num_format': '0.00%'
-                }))
-                ws3.write(_rp_row, 7, '', fmt_grand)
-
-            output.seek(0)
-            return output.getvalue()
-
-        _excel_bytes = _gerar_excel_performance(
-            _vendas_periodo=_pv_vendas,
-            _comp_data=_pv_comp,
-            _vendedor_sel=_pv_vendedor,
-            _regiao_sel=_pv_regiao,
-            _periodo_sel=_pv_periodo,
-            _now_ts=_pv_now,
-            _df_full=df
-        )
         st.download_button(
-            "📥 Exportar Comparativo (Excel) — 3 abas",
-            _excel_bytes,
-            f"performance_vendedores_{_pv_now.strftime('%Y%m%d_%H%M')}.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "📥 Exportar Comparativo (Excel)",
+            to_excel(_pv_comp),
+            "performance_vendedores.xlsx",
+            "application/vnd.ms-excel",
             key="pv_dl_comp"
         )
 
