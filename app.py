@@ -2395,7 +2395,7 @@ with st.sidebar:
                             with _z.open('xl/sharedStrings.xml') as _f:
                                 _st = _ET.parse(_f)
                                 _ns_s = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                                _ss = [si.text if si.text else '' for si in _st.findall('.//ss:t', _ns_s)]
+                                _ss = [''.join(_si.itertext()) for _si in _st.findall('.//ss:si', _ns_s)]
                             with _z.open('xl/worksheets/sheet1.xml') as _f:
                                 _sh = _ET.parse(_f)
                                 _ns = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
@@ -2655,7 +2655,7 @@ if st.session_state.menu_option == '__home__':
                 with _z.open('xl/sharedStrings.xml') as _f:
                     _st = ET.parse(_f)
                     _ns = {'ss':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                    _ss = [s.text or '' for s in _st.findall('.//ss:t',_ns)]
+                    _ss = [''.join(_si.itertext()) for _si in _st.findall('.//ss:si', _ns)]
                 with _z.open('xl/worksheets/sheet1.xml') as _f:
                     _sh = ET.parse(_f)
                     _val_pend = 0.0; _cli_pend = set()
@@ -5055,7 +5055,7 @@ elif menu == "Pedidos Pendentes":
                 with z.open('xl/sharedStrings.xml') as f:
                     strings_tree = ET.parse(f)
                     ns_str = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                    shared_strings = [si.text if si.text else '' for si in strings_tree.findall('.//ss:t', ns_str)]
+                    shared_strings = [''.join(si.itertext()) for si in strings_tree.findall('.//ss:si', ns_str)]
                 
                 # Extrair sheet
                 with z.open('xl/worksheets/sheet1.xml') as f:
