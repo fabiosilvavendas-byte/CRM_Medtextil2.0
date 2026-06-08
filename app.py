@@ -1691,15 +1691,6 @@ def to_excel_pedidos_pendentes(df):
                 
                 df_tipo = df_tipo.drop(columns=[col for col in colunas_para_remover if col in df_tipo.columns])
                 
-                # Garantir que coluna Observacao existe e está posicionada após Descricao
-                if 'Observacao' not in df_tipo.columns:
-                    df_tipo['Observacao'] = ''
-                cols = list(df_tipo.columns)
-                if 'Descricao' in cols and 'Observacao' in cols:
-                    cols.remove('Observacao')
-                    cols.insert(cols.index('Descricao') + 1, 'Observacao')
-                    df_tipo = df_tipo[cols]
-
                 df_tipo.to_excel(writer, index=False, sheet_name=tipo)
     
     return output.getvalue()
@@ -2447,7 +2438,7 @@ with st.sidebar:
                                                     'NumeroPedido': _cb,
                                                     'CodigoProduto': _desc.split(' - ')[0].strip(),
                                                     'Descricao': _desc,
-                                                    'Observacao': _obs,
+                                                    'Observacoes': _obs,
                                                     'QtdContratada': _qtdc,
                                                     'QtdEntregue': _qtde,
                                                     'QtdPendente': _qtdp,
@@ -5152,7 +5143,7 @@ elif menu == "Pedidos Pendentes":
                                         'NumeroPedido': current_pedido,
                                         'CodigoProduto': codigo_produto,
                                         'Descricao': descricao,
-                                        'Observacao': observacao,
+                                        'Observacoes': observacao,
                                         'QtdContratada': qtd_contratada,
                                         'QtdEntregue': qtd_entregue,
                                         'QtdPendente': qtd_pendente,
