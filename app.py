@@ -2147,78 +2147,79 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # ── CSS dos botões-card da home ──────────────────────────────────────────
+    # ── CSS: grid 2 colunas forçado no mobile + estilo dos cards ────────────
     st.markdown("""
     <style>
-    /* Botões da home: sem altura fixa, texto multilinha, toque fácil no mobile */
-    div[data-testid="stButton"].home-card-btn > button {
+    /* Remove espaçamento excessivo entre elementos da home */
+    .main .block-container { padding-top: 0.5rem !important; }
+
+    /* FORÇAR 2 colunas em qualquer largura de tela */
+    [data-testid="stHorizontalBlock"] {
+        gap: 8px !important;
+        flex-wrap: nowrap !important;
+        display: flex !important;
+        flex-direction: row !important;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        width: 50% !important;
+        max-width: 50% !important;
+        overflow: hidden !important;
+    }
+
+    /* Remover margin-bottom excessivo entre blocos de botão */
+    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stVerticalBlock"] > div:has([data-testid="stButton"]) {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+
+    /* Estilo dos botões-card */
+    [data-testid="stButton"] > button {
         width: 100% !important;
-        min-height: 90px !important;
+        min-height: 80px !important;
         height: auto !important;
         white-space: normal !important;
-        text-align: left !important;
-        padding: 14px 16px !important;
-        border-radius: 14px !important;
+        text-align: center !important;
+        padding: 10px 8px !important;
+        border-radius: 12px !important;
         border: 1.5px solid #D6E4F7 !important;
         background: var(--secondary-background-color) !important;
         color: #2C5AA0 !important;
-        font-size: 0.92rem !important;
+        font-size: 0.80rem !important;
         font-weight: 600 !important;
-        line-height: 1.4 !important;
-        box-shadow: 0 2px 8px rgba(31,71,136,0.07) !important;
-        transition: box-shadow 0.18s, border-color 0.18s, transform 0.15s !important;
-        display: block !important;
+        line-height: 1.35 !important;
+        box-shadow: 0 2px 6px rgba(31,71,136,0.08) !important;
         word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        display: block !important;
     }
-    div[data-testid="stButton"].home-card-btn > button:hover,
-    div[data-testid="stButton"].home-card-btn > button:focus {
+    [data-testid="stButton"] > button:hover {
         border-color: #4A7BC8 !important;
-        box-shadow: 0 6px 20px rgba(31,71,136,0.16) !important;
-        transform: translateY(-2px) !important;
         background: #EEF4FF !important;
         color: #1F4788 !important;
     }
-    div[data-testid="stButton"].home-card-btn > button p {
+    [data-testid="stButton"] > button p {
         white-space: normal !important;
-        text-align: left !important;
-    }
-    /* Garantir 2 colunas fixas no mobile para a home */
-    @media (max-width: 768px) {
-        div.home-btn-row [data-testid="stHorizontalBlock"] {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            gap: 8px !important;
-        }
-        div.home-btn-row [data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            flex: 1 1 0 !important;
-            min-width: 0 !important;
-            width: 50% !important;
-            max-width: 50% !important;
-        }
+        word-break: break-word !important;
+        font-size: 0.80rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # ── Grid 2 colunas: botões nativos estilizados como cards ───────────────
+    # ── Grid 2 colunas: botões nativos ───────────────────────────────────────
     _n_cols = 2
     for row_start in range(0, len(cards_visiveis), _n_cols):
         row = cards_visiveis[row_start:row_start+_n_cols]
-        st.markdown('<div class="home-btn-row">', unsafe_allow_html=True)
-        cols = st.columns([1, 1])
+        cols = st.columns(2)
         for j, c in enumerate(row):
             nome = c['nome']
-            desc = _DESC.get(nome, '')
-            info = c['info']
             ic   = _ICONES_CARD.get(nome, '•')
-            label = f"{ic}  **{nome}**\n{desc}\n_{info}_"
             with cols[j]:
-                st.markdown('<div class="home-card-btn">', unsafe_allow_html=True)
-                if st.button(label, key=f"hc_{nome}", use_container_width=True):
+                if st.button(f"{ic}\n{nome}", key=f"hc_{nome}", use_container_width=True):
                     st.session_state.menu_option = nome
                     st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
