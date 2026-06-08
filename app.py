@@ -33,7 +33,7 @@ def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
 st.set_page_config(
     page_title="Dashboard BI Medtextil", 
     layout="wide", 
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
     page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 )
 
@@ -461,7 +461,7 @@ def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
 st.set_page_config(
     page_title="Dashboard BI Medtextil", 
     layout="wide", 
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
     page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 )
 
@@ -470,580 +470,6 @@ st.set_page_config(
 # Nenhuma configuração adicional é necessária
 
 # ====================== CSS CUSTOMIZADO - UX/UI PROFISSIONAL ======================
-st.markdown("""
-<style>
-/* ── Importar fonte Inter ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-/* ── Reset e fonte base ── */
-html, body, [class*="css"] {
-    font-family: 'Inter', 'Segoe UI', Roboto, sans-serif !important;
-}
-
-/* ── Fundo cinza muito claro ── */
-.stApp {
-    background-color: var(--background-color) !important;
-}
-
-/* ── Sidebar limpa e profissional ── */
-[data-testid="stSidebar"] {
-    background: var(--secondary-background-color) !important;
-    border-right: 1px solid rgba(128,128,128,0.2) !important;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.04) !important;
-}
-[data-testid="stSidebar"] .stMarkdown h1,
-[data-testid="stSidebar"] .stMarkdown h2,
-[data-testid="stSidebar"] .stMarkdown h3 {
-    color: #4A7BC8 !important;
-}
-
-/* ── Botões de navegação da sidebar estilizados ── */
-[data-testid="stSidebar"] [data-testid="stRadio"] {
-    gap: 6px !important;
-}
-
-[data-testid="stSidebar"] [data-testid="stRadio"] label {
-    background: #F8F9FA !important;
-    border: 1px solid #E9ECEF !important;
-    border-radius: 10px !important;
-    padding: 12px 16px !important;
-    margin: 0 !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    font-size: 0.9rem !important;
-    font-weight: 500 !important;
-    display: block !important;
-    width: 100% !important;
-}
-
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-    background: #EEF2F7 !important;
-    border-color: #4A7BC8 !important;
-    transform: translateX(3px) !important;
-}
-
-/* Botão selecionado na sidebar */
-[data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
-    background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
-    border-color: #4A7BC8 !important;
-    color: white !important;
-    font-weight: 600 !important;
-    box-shadow: 0 2px 8px rgba(31, 71, 136, 0.2) !important;
-}
-
-/* Esconder radio button padrão */
-[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
-    display: none !important;
-}
-
-/* ── Cards de métricas (st.metric) ── */
-[data-testid="stMetric"] {
-    background: var(--secondary-background-color) !important;
-    border-radius: 12px !important;
-    padding: 18px 20px !important;
-    border-left: 4px solid #1F4788 !important;
-    box-shadow: 0 2px 8px rgba(31, 71, 136, 0.08), 0 1px 3px rgba(0,0,0,0.04) !important;
-    transition: box-shadow 0.2s ease, transform 0.2s ease !important;
-}
-[data-testid="stMetric"]:hover {
-    box-shadow: 0 6px 20px rgba(31, 71, 136, 0.14) !important;
-    transform: translateY(-2px) !important;
-}
-[data-testid="stMetricLabel"] {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    color: #6C757D !important;
-}
-[data-testid="stMetricValue"] {
-    font-size: 1.5rem !important;
-    font-weight: 700 !important;
-    color: #4A7BC8 !important;
-}
-
-/* ── Cor alternada para cards de destaque ── */
-div[data-testid="column"]:nth-child(2) [data-testid="stMetric"] {
-    border-left-color: #2E86AB !important;
-}
-div[data-testid="column"]:nth-child(3) [data-testid="stMetric"] {
-    border-left-color: #28A745 !important;
-}
-div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
-    border-left-color: #F4A261 !important;
-}
-
-/* ── Botões modernos ── */
-.stButton > button {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    font-size: 0.875rem !important;
-    padding: 0.5rem 1.25rem !important;
-    border: 1.5px solid #1F4788 !important;
-    color: #4A7BC8 !important;
-    background: var(--secondary-background-color) !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 1px 4px rgba(31, 71, 136, 0.10) !important;
-    letter-spacing: 0.01em !important;
-}
-.stButton > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
-    box-shadow: 0 4px 12px rgba(31, 71, 136, 0.25) !important;
-    transform: translateY(-1px) !important;
-}
-.stButton > button[kind="primary"] {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
-}
-.stButton > button[kind="primary"]:hover {
-    background: #163561 !important;
-    border-color: #163561 !important;
-}
-
-/* ── Botão de Download ── */
-[data-testid="stDownloadButton"] > button {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    background: var(--secondary-background-color) !important;
-    color: #4A7BC8 !important;
-    border: 1.5px solid #1F4788 !important;
-}
-[data-testid="stDownloadButton"] > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* ── Cards de navegação (Home) ── */
-.stButton > button p {
-    font-size: 0.9rem !important;
-}
-
-/* ── Títulos de página ── */
-.stApp h1 {
-    color: #2C5AA0 !important;
-    font-weight: 700 !important;
-    font-size: 1.75rem !important;
-    letter-spacing: -0.02em !important;
-}
-.stApp h2 {
-    color: #4A7BC8 !important;
-    font-weight: 600 !important;
-    font-size: 1.3rem !important;
-}
-.stApp h3 {
-    color: #2E4A7A !important;
-    font-weight: 600 !important;
-}
-
-/* ── Selectbox e inputs ── */
-.stSelectbox > div > div,
-.stTextInput > div > div > input,
-.stDateInput > div > div > input,
-.stNumberInput > div > div > input {
-    border-radius: 8px !important;
-    border-color: #DEE2E6 !important;
-    font-size: 0.9rem !important;
-}
-.stSelectbox > div > div:focus-within,
-.stTextInput > div > div:focus-within {
-    border-color: #4A7BC8 !important;
-    box-shadow: 0 0 0 2px rgba(31, 71, 136, 0.15) !important;
-}
-
-/* ── Tabs ── */
-[data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: var(--secondary-background-color) !important;
-    border-radius: 10px !important;
-    padding: 4px !important;
-    border-bottom: none !important;
-    gap: 4px !important;
-}
-[data-testid="stTabs"] [data-baseweb="tab"] {
-    border-radius: 8px !important;
-    font-weight: 500 !important;
-    font-size: 0.875rem !important;
-    color: #6C757D !important;
-    padding: 6px 16px !important;
-}
-[data-testid="stTabs"] [aria-selected="true"] {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    font-weight: 600 !important;
-}
-
-/* ── Dataframes / tabelas ── */
-[data-testid="stDataFrame"] {
-    border-radius: 10px !important;
-    overflow: hidden !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
-}
-
-/* ── Divisores ── */
-hr {
-    border-color: #E9ECEF !important;
-    margin: 1rem 0 !important;
-}
-
-/* ── Alertas e info boxes ── */
-[data-testid="stAlert"] {
-    border-radius: 10px !important;
-}
-
-/* ── Sidebar logo area ── */
-.sidebar-logo-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 16px 8px 8px 8px;
-    border-bottom: 1px solid #E9ECEF;
-    margin-bottom: 12px;
-}
-.sidebar-user-badge {
-    background: #F0F4FF;
-    border: 1px solid #C5D5F0;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 0.85rem;
-    color: #4A7BC8;
-    font-weight: 600;
-    width: 100%;
-    text-align: center;
-    margin-top: 8px;
-}
-
-/* ── Barra de filtros no topo ── */
-.filter-bar {
-    background: #FFFFFF;
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    border: 1px solid #E9ECEF;
-}
-
-/* ── Cabeçalho da página ── */
-.page-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
-}
-.page-subtitle {
-    color: #6C757D;
-    font-size: 0.9rem;
-    margin-bottom: 20px;
-    margin-top: -4px;
-}
-
-/* ── Radio buttons estilo pill ── */
-.stRadio > div {
-    flex-direction: row !important;
-    gap: 8px !important;
-}
-.stRadio > div label {
-    border-radius: 20px !important;
-    padding: 4px 14px !important;
-    border: 1.5px solid #DEE2E6 !important;
-    font-size: 0.875rem !important;
-    cursor: pointer !important;
-    transition: all 0.15s !important;
-}
-.stRadio > div label:has(input:checked) {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
-}
-
-/* ── Spinner ── */
-.stSpinner > div {
-    border-top-color: #4A7BC8 !important;
-}
-
-/* ── Sidebar navigation radio ── */
-[data-testid="stSidebar"] .stRadio > div {
-    flex-direction: column !important;
-    gap: 4px !important;
-}
-[data-testid="stSidebar"] .stRadio > div label {
-    border-radius: 10px !important;
-    padding: 11px 14px !important;
-    border: none !important;
-    font-size: 0.92rem !important;
-    font-weight: 500 !important;
-    color: #495057 !important;
-    background: transparent !important;
-    width: 100% !important;
-    transition: all 0.15s ease !important;
-    margin-bottom: 2px !important;
-}
-[data-testid="stSidebar"] .stRadio > div label:has(input:checked) {
-    background: linear-gradient(135deg, #F0F4FF, #E4EDFC) !important;
-    color: #4A7BC8 !important;
-    border-left: 4px solid #1F4788 !important;
-    border-radius: 0 10px 10px 0 !important;
-    font-weight: 700 !important;
-    box-shadow: 0 1px 4px rgba(31,71,136,0.10) !important;
-}
-[data-testid="stSidebar"] .stRadio > div label:hover {
-    background: #F4F7FD !important;
-    color: #4A7BC8 !important;
-    transform: translateX(2px) !important;
-}
-
-/* ── Success/warning/error messages ── */
-.stSuccess, .stInfo, .stWarning, .stError {
-    border-radius: 8px !important;
-    font-size: 0.875rem !important;
-}
-
-/* ── Métricas: rótulo uppercase corporativo ── */
-[data-testid="stMetricLabel"] p {
-    text-transform: uppercase !important;
-    font-size: 0.72rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.06em !important;
-    color: #8A96A8 !important;
-}
-[data-testid="stMetricValue"] {
-    font-size: 1.45rem !important;
-    font-weight: 700 !important;
-    color: #2C5AA0 !important;
-}
-
-/* ── Subheaders sem emoji weight ── */
-h2, h3 {
-    font-weight: 600 !important;
-    letter-spacing: -0.01em !important;
-}
-
-/* ── Expander painel de controle ── */
-[data-testid="stExpander"] summary {
-    font-size: 0.82rem !important;
-    font-weight: 600 !important;
-    color: #6C757D !important;
-}
-
-/* ── Captions dos filtros ── */
-.stCaption p {
-    font-size: 0.7rem !important;
-    color: #8A96A8 !important;
-    margin-top: -4px !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.03em !important;
-}
-
-
-/* ══════════════════════════════════════════════════════
-   DARK MODE — sobrescreve cores fixas quando o tema
-   escuro está ativo. Usa prefers-color-scheme E o
-   atributo data-theme que o Streamlit injeta no <body>.
-   ══════════════════════════════════════════════════════ */
-
-/* Detectar dark mode via atributo do Streamlit */
-@media (prefers-color-scheme: dark) {
-    .stApp { background-color: #0E1117 !important; }
-}
-
-/* Streamlit injeta data-theme="dark" no root quando tema escuro ativo */
-[data-theme="dark"] .stApp,
-.stApp[data-theme="dark"] {
-    background-color: #0E1117 !important;
-}
-
-/* Sidebar dark */
-[data-theme="dark"] section[data-testid="stSidebar"],
-[data-theme="dark"] [data-testid="stSidebar"] {
-    background: #1A1D24 !important;
-    border-right-color: #2D3139 !important;
-}
-
-/* Métricas dark */
-[data-theme="dark"] [data-testid="stMetric"] {
-    background: #1A1D24 !important;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.3) !important;
-}
-[data-theme="dark"] [data-testid="stMetricLabel"] p {
-    color: #8A96A8 !important;
-}
-[data-theme="dark"] [data-testid="stMetricValue"] {
-    color: #E8EDF5 !important;
-}
-
-/* Filtros dark */
-[data-theme="dark"] div[style*="background:#F2F5FA"],
-[data-theme="dark"] div[style*="background: #F2F5FA"] {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-}
-
-/* Botões gerais dark */
-[data-theme="dark"] .stButton > button {
-    background: #1A1D24 !important;
-    color: #A8C4E8 !important;
-    border-color: #2D5AA0 !important;
-}
-[data-theme="dark"] .stButton > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* Expander dark */
-[data-theme="dark"] [data-testid="stExpander"] {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-}
-
-/* Dataframes dark */
-[data-theme="dark"] [data-testid="stDataFrame"] {
-    background: #1A1D24 !important;
-}
-
-/* Tabs dark */
-[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: #1A1D24 !important;
-}
-[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab"] {
-    color: #8A96A8 !important;
-}
-
-/* Radio sidebar dark */
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
-    color: #A8B4C4 !important;
-}
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
-    background: linear-gradient(90deg,#1A2A45,#1F3560) !important;
-    border-left-color: #4A7BC8 !important;
-}
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #7EB3F7 !important;
-}
-
-/* Breadcrumb e textos de apoio dark */
-[data-theme="dark"] .stMarkdown p {
-    color: #C4CDD9 !important;
-}
-
-/* Inputs dark */
-[data-theme="dark"] .stSelectbox > div > div,
-[data-theme="dark"] .stTextInput > div > div > input,
-[data-theme="dark"] .stDateInput > div > div > input {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-    color: #E0E6EF !important;
-}
-
-/* Download button dark */
-[data-theme="dark"] [data-testid="stDownloadButton"] > button {
-    background: #1A2A45 !important;
-    color: #7EB3F7 !important;
-    border-color: #2D5AA0 !important;
-}
-[data-theme="dark"] [data-testid="stDownloadButton"] > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* Cabeçalho títulos dark */
-[data-theme="dark"] .stApp h1 { color: #E8EDF5 !important; }
-[data-theme="dark"] .stApp h2 { color: #A8C4E8 !important; }
-[data-theme="dark"] .stApp h3 { color: #8AADD4 !important; }
-
-
-/* ── Mobile (≤768px): layout compacto ── */
-@media (max-width: 768px) {
-
-    /* Cards da home: 2 por linha no mobile — seletor correto */
-    div.home-grid > div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        display: flex !important;
-        gap: 6px !important;
-    }
-    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: calc(50% - 3px) !important;
-        min-width: calc(50% - 3px) !important;
-        max-width: calc(50% - 3px) !important;
-        flex: 0 0 calc(50% - 3px) !important;
-        box-sizing: border-box !important;
-    }
-
-    /* Filtros: esconder barra de labels (captions) no mobile */
-    .filter-header-bar { display: none !important; }
-
-    /* Colunas de filtros: empilhar verticalmente no mobile */
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"]) {
-        flex-wrap: wrap !important;
-    }
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"])
-        > div[data-testid="stVerticalBlock"] {
-        width: calc(50% - 4px) !important;
-        min-width: calc(50% - 4px) !important;
-        flex: 0 0 calc(50% - 4px) !important;
-    }
-
-    /* Sidebar: fundo sólido no mobile — cores explícitas */
-    section[data-testid="stSidebar"],
-    section[data-testid="stSidebar"] > div,
-    section[data-testid="stSidebar"] > div:first-child {
-        background-color: #FFFFFF !important;
-        background: #FFFFFF !important;
-    }
-    /* Dark mode sidebar mobile */
-    @media (prefers-color-scheme: dark) {
-        section[data-testid="stSidebar"],
-        section[data-testid="stSidebar"] > div,
-        section[data-testid="stSidebar"] > div:first-child {
-            background-color: #1A1D24 !important;
-            background: #1A1D24 !important;
-        }
-    }
-
-    /* Gráficos: garantir que caibam na tela */
-    div[data-testid="stPlotlyChart"] {
-        overflow-x: auto !important;
-    }
-}
-
-/* ── Expander de filtros discreto ── */
-div[data-testid="stExpander"] details {
-    border: 1px solid rgba(128,128,128,0.15) !important;
-    border-radius: 8px !important;
-    background: transparent !important;
-    margin-bottom: 8px !important;
-}
-div[data-testid="stExpander"] details summary {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    color: #8A96A8 !important;
-    padding: 6px 12px !important;
-}
-div[data-testid="stExpander"] details summary:hover {
-    color: #4A7BC8 !important;
-}
-
-
-/* ── Dark mode via prefers-color-scheme (mais confiável no Streamlit) ── */
-@media (prefers-color-scheme: dark) {
-    .stApp h1, .stApp h2, .stApp h3 { color: #7EB3F7 !important; }
-    [data-testid="stMetricValue"]    { color: #E8EDF5 !important; }
-    [data-testid="stMetricLabel"] p  { color: #8A96A8 !important; }
-    [data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-        color: #7EB3F7 !important;
-    }
-    /* Títulos dos módulos (h2 inline) */
-    .stMarkdown h2 { color: #7EB3F7 !important; }
-    /* Texto padrão */
-    .stMarkdown p  { color: #C4CDD9 !important; }
-    /* Cards */
-    [data-testid="stMetric"] { background: var(--secondary-background-color) !important; }
-    /* Breadcrumb */
-    [data-testid="stSidebar"] { background: var(--secondary-background-color) !important; }
-}
-
-</style>
-""", unsafe_allow_html=True)
 
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
@@ -2395,7 +1821,7 @@ with st.sidebar:
                             with _z.open('xl/sharedStrings.xml') as _f:
                                 _st = _ET.parse(_f)
                                 _ns_s = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                                _ss = [si.text if si.text else '' for si in _st.findall('.//ss:t', _ns_s)]
+                                _ss = [''.join(_si.itertext()) for _si in _st.findall('.//ss:si', _ns_s)]
                             with _z.open('xl/worksheets/sheet1.xml') as _f:
                                 _sh = _ET.parse(_f)
                                 _ns = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
@@ -2655,7 +2081,7 @@ if st.session_state.menu_option == '__home__':
                 with _z.open('xl/sharedStrings.xml') as _f:
                     _st = ET.parse(_f)
                     _ns = {'ss':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                    _ss = [s.text or '' for s in _st.findall('.//ss:t',_ns)]
+                    _ss = [''.join(_si.itertext()) for _si in _st.findall('.//ss:si', _ns)]
                 with _z.open('xl/worksheets/sheet1.xml') as _f:
                     _sh = ET.parse(_f)
                     _val_pend = 0.0; _cli_pend = set()
@@ -2721,90 +2147,78 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # Grid 4 colunas — técnica de botão overlay que FUNCIONA
-    try:
-        from streamlit_card import card as st_card
-        _USE_CARD_LIB = True
-    except ImportError:
-        _USE_CARD_LIB = False
+    # ── CSS dos botões-card da home ──────────────────────────────────────────
+    st.markdown("""
+    <style>
+    /* Botões da home: sem altura fixa, texto multilinha, toque fácil no mobile */
+    div[data-testid="stButton"].home-card-btn > button {
+        width: 100% !important;
+        min-height: 90px !important;
+        height: auto !important;
+        white-space: normal !important;
+        text-align: left !important;
+        padding: 14px 16px !important;
+        border-radius: 14px !important;
+        border: 1.5px solid #D6E4F7 !important;
+        background: var(--secondary-background-color) !important;
+        color: #2C5AA0 !important;
+        font-size: 0.92rem !important;
+        font-weight: 600 !important;
+        line-height: 1.4 !important;
+        box-shadow: 0 2px 8px rgba(31,71,136,0.07) !important;
+        transition: box-shadow 0.18s, border-color 0.18s, transform 0.15s !important;
+        display: block !important;
+        word-break: break-word !important;
+    }
+    div[data-testid="stButton"].home-card-btn > button:hover,
+    div[data-testid="stButton"].home-card-btn > button:focus {
+        border-color: #4A7BC8 !important;
+        box-shadow: 0 6px 20px rgba(31,71,136,0.16) !important;
+        transform: translateY(-2px) !important;
+        background: #EEF4FF !important;
+        color: #1F4788 !important;
+    }
+    div[data-testid="stButton"].home-card-btn > button p {
+        white-space: normal !important;
+        text-align: left !important;
+    }
+    /* Garantir 2 colunas fixas no mobile para a home */
+    @media (max-width: 768px) {
+        div.home-btn-row [data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            gap: 8px !important;
+        }
+        div.home-btn-row [data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            width: 50% !important;
+            max-width: 50% !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Grid 2 colunas — funciona em mobile e desktop sem dependências externas
+    # ── Grid 2 colunas: botões nativos estilizados como cards ───────────────
     _n_cols = 2
-
     for row_start in range(0, len(cards_visiveis), _n_cols):
         row = cards_visiveis[row_start:row_start+_n_cols]
-        cols = st.columns(_n_cols)
+        st.markdown('<div class="home-btn-row">', unsafe_allow_html=True)
+        cols = st.columns([1, 1])
         for j, c in enumerate(row):
+            nome = c['nome']
+            desc = _DESC.get(nome, '')
+            info = c['info']
+            ic   = _ICONES_CARD.get(nome, '•')
+            label = f"{ic}  **{nome}**\n{desc}\n_{info}_"
             with cols[j]:
-                nome = c['nome']
-                desc = _DESC.get(nome, '')
-                info = c['info']
-                ic   = _ICONES_CARD.get(nome, '•')
-
-                if _USE_CARD_LIB:
-                    clicked = st_card(
-                        title=f"{ic}  {nome}",
-                        text=[desc, info],
-                        key=f"hc_{nome}",
-                        styles={
-                            "card": {
-                                "width": "100%",
-                                "height": "190px",
-                                "background-color": "var(--secondary-background-color)",
-                                "border": "1px solid #E4E9F0",
-                                "border-radius": "14px",
-                                "box-shadow": "0 1px 6px rgba(31,71,136,0.07)",
-                                "cursor": "pointer",
-                                "padding": "22px 20px 18px 20px",
-                                "transition": "box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease",
-                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
-                                "margin": "0",
-                            },
-                            "title": {
-                                "font-size": "1rem",
-                                "font-weight": "700",
-                                "color": "#2C5AA0",
-                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
-                                "letter-spacing": "-0.01em",
-                                "margin-bottom": "6px",
-                                "white-space": "nowrap",
-                                "overflow": "hidden",
-                                "text-overflow": "ellipsis",
-                            },
-                            "text": {
-                                "font-size": "0.78rem",
-                                "color": "#6C757D",
-                                "font-family": "'Inter', 'Segoe UI', Roboto, sans-serif",
-                                "line-height": "1.45",
-                                "font-weight": "400",
-                            },
-                            "filter": {"background": "rgba(0,0,0,0)"},
-                        }
-                    )
-                    if clicked:
-                        st.session_state.menu_option = nome
-                        st.rerun()
-                else:
-                    st.markdown(f"""
-                    <div style="background:var(--secondary-background-color);border:1px solid rgba(128,128,128,0.2);
-                                border-radius:14px;padding:20px 18px;min-height:148px;
-                                box-shadow:0 1px 6px rgba(31,71,136,0.07);
-                                font-family:'Inter','Segoe UI',sans-serif;">
-                        <div style="font-size:1rem;margin-bottom:10px;">{ic}</div>
-                        <div style="font-size:0.95rem;font-weight:700;color:#2C5AA0;
-                                    margin-bottom:5px;">{nome}</div>
-                        <div style="font-size:0.76rem;color:#6C757D;
-                                    margin-bottom:8px;">{desc}</div>
-                        <div style="font-size:0.70rem;color:#ADB5BD;
-                                    border-top:1px solid #F0F2F5;padding-top:7px;">{info}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    if st.button(f"Abrir", key=f"hc_{nome}",
-                                 use_container_width=True):
-                        st.session_state.menu_option = nome
-                        st.rerun()
-
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                st.markdown('<div class="home-card-btn">', unsafe_allow_html=True)
+                if st.button(label, key=f"hc_{nome}", use_container_width=True):
+                    st.session_state.menu_option = nome
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
@@ -5055,7 +4469,7 @@ elif menu == "Pedidos Pendentes":
                 with z.open('xl/sharedStrings.xml') as f:
                     strings_tree = ET.parse(f)
                     ns_str = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-                    shared_strings = [si.text if si.text else '' for si in strings_tree.findall('.//ss:t', ns_str)]
+                    shared_strings = [''.join(si.itertext()) for si in strings_tree.findall('.//ss:si', ns_str)]
                 
                 # Extrair sheet
                 with z.open('xl/worksheets/sheet1.xml') as f:
