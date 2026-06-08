@@ -33,7 +33,7 @@ def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
 st.set_page_config(
     page_title="Dashboard BI Medtextil", 
     layout="wide", 
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
     page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
 )
 
@@ -2122,6 +2122,44 @@ if st.session_state.menu_option == '__home__':
     ]
     cards_visiveis = [c for c in cards_data if c['nome'] in modulos_visiveis or c['nome'] in ('Consulta Clientes',)]
 
+    # ── Detectar mobile via query param setado por JS ───────────────────────
+    # JS injeta ?mobile=1 na URL se largura < 768px; Streamlit lê no próximo rerun
+    st.components.v1.html("""
+    <script>
+    (function() {
+        var params = new URLSearchParams(window.location.search);
+        var isMobile = window.innerWidth < 768;
+        if (isMobile && params.get('mobile') !== '1') {
+            params.set('mobile', '1');
+            window.location.search = params.toString();
+        } else if (!isMobile && params.get('mobile') === '1') {
+            params.delete('mobile');
+            window.location.search = params.toString();
+        }
+    })();
+    </script>
+    """, height=0)
+
+    _is_mobile = st.query_params.get("mobile", "0") == "1"
+
+    if _is_mobile:
+        # ── MOBILE: instrução clara para usar sidebar ────────────────────────
+        st.markdown(f"""
+        <div style="padding:24px 16px;text-align:center;">
+            <div style="font-size:2rem;margin-bottom:12px;">👋</div>
+            <div style="font-size:1.2rem;font-weight:700;color:#2C5AA0;margin-bottom:8px;">
+                Olá, {usuario_info.get('nome','Usuário')}!
+            </div>
+            <div style="font-size:0.95rem;color:#6C757D;margin-bottom:20px;line-height:1.5;">
+                Toque no botão <strong>≫</strong> no canto superior esquerdo<br>
+                para abrir o menu e navegar pelos módulos.
+            </div>
+            <div style="font-size:3rem;">☰</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    # ── DESKTOP: cards normais ───────────────────────────────────────────────
     st.markdown(f"""
     <div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #E9ECEF;">
         <div style="font-size:1.45rem;font-weight:600;color:#2C5AA0;margin-bottom:3px;">
@@ -2133,95 +2171,35 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # ── CSS: grid 2 colunas + estilo cards ──────────────────────────────────
-    st.markdown("""
-    <style>
-    /* Compactar header para sobrar espaço para os cards */
-    .main .block-container {
-        padding-top: 0.5rem !important;
-        padding-left: 0.75rem !important;
-        padding-right: 0.75rem !important;
-    }
-
-    /* FORÇAR layout em linha — especificidade alta para vencer regras do CSS principal */
-    .main [data-testid="stHorizontalBlock"],
-    .stApp [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 8px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-        overflow: visible !important;
-    }
-    .main [data-testid="stHorizontalBlock"] > [data-testid="column"],
-    .stApp [data-testid="stHorizontalBlock"] > [data-testid="column"] {
-        flex: 1 1 0% !important;
-        min-width: 0 !important;
-        width: calc(50% - 4px) !important;
-        max-width: calc(50% - 4px) !important;
-        overflow: visible !important;
-        box-sizing: border-box !important;
-    }
-
-    /* Botão ocupa toda a coluna e tem altura mínima para toque */
-    [data-testid="stButton"] > button {
-        width: 100% !important;
-        min-height: 76px !important;
-        height: auto !important;
-        white-space: normal !important;
-        overflow-wrap: break-word !important;
-        word-break: break-word !important;
-        text-align: center !important;
-        padding: 10px 6px !important;
-        border-radius: 12px !important;
-        border: 1.5px solid #D6E4F7 !important;
-        background: var(--secondary-background-color) !important;
-        color: #2C5AA0 !important;
-        font-size: 0.75rem !important;
-        font-weight: 600 !important;
-        line-height: 1.3 !important;
-        box-shadow: 0 2px 6px rgba(31,71,136,0.08) !important;
-        display: block !important;
-        box-sizing: border-box !important;
-    }
-    [data-testid="stButton"] > button:active {
-        background: #EEF4FF !important;
-        border-color: #4A7BC8 !important;
-    }
-    [data-testid="stButton"] > button p,
-    [data-testid="stButton"] > button span {
-        white-space: normal !important;
-        overflow-wrap: break-word !important;
-        word-break: break-word !important;
-        font-size: 0.75rem !important;
-        display: block !important;
-    }
-
-    /* Reduzir gap vertical entre linhas de cards */
-    [data-testid="stVerticalBlock"] > div {
-        margin-bottom: 2px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Grid 2 colunas com ícone, nome e info ────────────────────────────────
     _n_cols = 2
     for row_start in range(0, len(cards_visiveis), _n_cols):
         row = cards_visiveis[row_start:row_start+_n_cols]
-        cols = st.columns(2)
+        cols = st.columns(_n_cols)
         for j, c in enumerate(row):
             nome = c['nome']
             desc = _DESC.get(nome, '')
             info = c['info']
             ic   = _ICONES_CARD.get(nome, '•')
-            # Label compacto: ícone + nome em negrito + info resumida
-            info_curta = info[:35] + '…' if len(info) > 35 else info
-            label = f"{ic} {nome}\n{info_curta}"
             with cols[j]:
-                if st.button(label, key=f"hc_{nome}", use_container_width=True):
+                st.markdown(f"""
+                <div style="background:var(--secondary-background-color);
+                            border:1px solid rgba(128,128,128,0.2);
+                            border-radius:14px;padding:20px 18px;min-height:148px;
+                            box-shadow:0 1px 6px rgba(31,71,136,0.07);
+                            font-family:'Inter','Segoe UI',sans-serif;">
+                    <div style="font-size:1rem;margin-bottom:10px;">{ic}</div>
+                    <div style="font-size:0.95rem;font-weight:700;color:#2C5AA0;
+                                margin-bottom:5px;">{nome}</div>
+                    <div style="font-size:0.76rem;color:#6C757D;
+                                margin-bottom:8px;">{desc}</div>
+                    <div style="font-size:0.70rem;color:#ADB5BD;
+                                border-top:1px solid #F0F2F5;padding-top:7px;">{info}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button(f"Abrir", key=f"hc_{nome}", use_container_width=True):
                     st.session_state.menu_option = nome
                     st.rerun()
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.stop()
 
 # ── Módulo ativo ──────────────────────────────────────────────────────────
