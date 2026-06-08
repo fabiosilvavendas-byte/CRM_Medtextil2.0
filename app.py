@@ -364,15 +364,7 @@ div[data-testid="stPlotlyChart"] {
     section[data-testid="stSidebar"],
     section[data-testid="stSidebar"] > div { background-color: #FFFFFF !important; background: #FFFFFF !important; }
 
-    /* Home grid: 2 cards por linha */
-    div.home-grid > div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important; display: flex !important; gap: 6px !important;
-    }
-    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: calc(50% - 3px) !important; min-width: calc(50% - 3px) !important;
-        max-width: calc(50% - 3px) !important; flex: 0 0 calc(50% - 3px) !important;
-        box-sizing: border-box !important;
-    }
+    /* Home grid: placeholder — regras reais estão no bloco inline dos cards */
 
     /* KPI row: 2 por linha */
     div[data-testid="stHorizontalBlock"]:has(.kpi-card) {
@@ -415,12 +407,6 @@ div[data-testid="stPlotlyChart"] {
     /* KPI cards: 1 por linha em telas muito pequenas */
     div[data-testid="stHorizontalBlock"]:has(.kpi-card) > div[data-testid="column"] {
         width: 100% !important; min-width: 100% !important; flex: 0 0 100% !important;
-    }
-
-    /* Home cards: 1 por linha */
-    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: 100% !important; min-width: 100% !important;
-        max-width: 100% !important; flex: 0 0 100% !important;
     }
 
     /* Tabs: fonte menor */
@@ -2157,18 +2143,22 @@ if st.session_state.menu_option == '__home__':
         padding-right: 0.75rem !important;
     }
 
-    /* FORÇAR layout em linha — Streamlit mobile colapsa para coluna por padrão */
-    [data-testid="stHorizontalBlock"] {
+    /* FORÇAR layout em linha — especificidade alta para vencer regras do CSS principal */
+    .main [data-testid="stHorizontalBlock"],
+    .stApp [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         gap: 8px !important;
         width: 100% !important;
         box-sizing: border-box !important;
+        overflow: visible !important;
     }
-    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+    .main [data-testid="stHorizontalBlock"] > [data-testid="column"],
+    .stApp [data-testid="stHorizontalBlock"] > [data-testid="column"] {
         flex: 1 1 0% !important;
         min-width: 0 !important;
+        width: calc(50% - 4px) !important;
         max-width: calc(50% - 4px) !important;
         overflow: visible !important;
         box-sizing: border-box !important;
