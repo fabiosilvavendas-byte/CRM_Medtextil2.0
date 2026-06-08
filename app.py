@@ -1691,6 +1691,15 @@ def to_excel_pedidos_pendentes(df):
                 
                 df_tipo = df_tipo.drop(columns=[col for col in colunas_para_remover if col in df_tipo.columns])
                 
+                # Garantir que coluna Observacao existe e está posicionada após Descricao
+                if 'Observacao' not in df_tipo.columns:
+                    df_tipo['Observacao'] = ''
+                cols = list(df_tipo.columns)
+                if 'Descricao' in cols and 'Observacao' in cols:
+                    cols.remove('Observacao')
+                    cols.insert(cols.index('Descricao') + 1, 'Observacao')
+                    df_tipo = df_tipo[cols]
+
                 df_tipo.to_excel(writer, index=False, sheet_name=tipo)
     
     return output.getvalue()
@@ -2420,6 +2429,13 @@ with st.sidebar:
                                         _desc = _rd.get('C', '')
                                         if _desc and ' - ' in _desc:
                                             try:
+                                                import re as _re2
+                                                _obs_m = _re2.search(r'observa[çc][aã]o[:\s]*', _desc, _re2.IGNORECASE)
+                                                if _obs_m:
+                                                    _obs = _desc[_obs_m.end():].strip()
+                                                    _desc = _desc[:_obs_m.start()].strip()
+                                                else:
+                                                    _obs = ''
                                                 _qtdc = float(_rd.get('D', 0))
                                                 _vunit = float(_rd.get('E', 0))
                                                 _qtde = float(_rd.get('H', 0))
@@ -2431,6 +2447,7 @@ with st.sidebar:
                                                     'NumeroPedido': _cb,
                                                     'CodigoProduto': _desc.split(' - ')[0].strip(),
                                                     'Descricao': _desc,
+                                                    'Observacao': _obs,
                                                     'QtdContratada': _qtdc,
                                                     'QtdEntregue': _qtde,
                                                     'QtdPendente': _qtdp,
@@ -5100,6 +5117,15 @@ elif menu == "Pedidos Pendentes":
                             # Extrair dados do produto
                             descricao = row_data.get('C', '')
                             if descricao and ' - ' in descricao:
+                                # Separar observação da descrição (tudo após a palavra "observa")
+                                import re as _re
+                                _obs_match = _re.search(r'observa[çc][aã]o[:\s]*', descricao, _re.IGNORECASE)
+                                if _obs_match:
+                                    observacao = descricao[_obs_match.end():].strip()
+                                    descricao = descricao[:_obs_match.start()].strip()
+                                else:
+                                    observacao = ''
+
                                 # Extrair código do produto (ex: "476 - ATADURA...")
                                 codigo_produto = descricao.split(' - ')[0].strip()
                                 
@@ -5126,6 +5152,7 @@ elif menu == "Pedidos Pendentes":
                                         'NumeroPedido': current_pedido,
                                         'CodigoProduto': codigo_produto,
                                         'Descricao': descricao,
+                                        'Observacao': observacao,
                                         'QtdContratada': qtd_contratada,
                                         'QtdEntregue': qtd_entregue,
                                         'QtdPendente': qtd_pendente,
