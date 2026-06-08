@@ -2147,77 +2147,89 @@ if st.session_state.menu_option == '__home__':
     </div>
     """, unsafe_allow_html=True)
 
-    # ── CSS: grid 2 colunas forçado no mobile + estilo dos cards ────────────
+    # ── CSS: grid 2 colunas + estilo cards ──────────────────────────────────
     st.markdown("""
     <style>
-    /* Remove espaçamento excessivo entre elementos da home */
-    .main .block-container { padding-top: 0.5rem !important; }
+    /* Compactar header para sobrar espaço para os cards */
+    .main .block-container {
+        padding-top: 0.5rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
 
-    /* FORÇAR 2 colunas em qualquer largura de tela */
+    /* FORÇAR layout em linha — Streamlit mobile colapsa para coluna por padrão */
     [data-testid="stHorizontalBlock"] {
-        gap: 8px !important;
-        flex-wrap: nowrap !important;
         display: flex !important;
         flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
     [data-testid="stHorizontalBlock"] > [data-testid="column"] {
-        flex: 1 1 0 !important;
+        flex: 1 1 0% !important;
         min-width: 0 !important;
-        width: 50% !important;
-        max-width: 50% !important;
-        overflow: hidden !important;
+        max-width: calc(50% - 4px) !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
     }
 
-    /* Remover margin-bottom excessivo entre blocos de botão */
-    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"],
-    [data-testid="stVerticalBlock"] > div:has([data-testid="stButton"]) {
-        margin-bottom: 0 !important;
-        padding-bottom: 0 !important;
-    }
-
-    /* Estilo dos botões-card */
+    /* Botão ocupa toda a coluna e tem altura mínima para toque */
     [data-testid="stButton"] > button {
         width: 100% !important;
-        min-height: 80px !important;
+        min-height: 76px !important;
         height: auto !important;
         white-space: normal !important;
+        overflow-wrap: break-word !important;
+        word-break: break-word !important;
         text-align: center !important;
-        padding: 10px 8px !important;
+        padding: 10px 6px !important;
         border-radius: 12px !important;
         border: 1.5px solid #D6E4F7 !important;
         background: var(--secondary-background-color) !important;
         color: #2C5AA0 !important;
-        font-size: 0.80rem !important;
+        font-size: 0.75rem !important;
         font-weight: 600 !important;
-        line-height: 1.35 !important;
+        line-height: 1.3 !important;
         box-shadow: 0 2px 6px rgba(31,71,136,0.08) !important;
-        word-break: break-word !important;
+        display: block !important;
+        box-sizing: border-box !important;
+    }
+    [data-testid="stButton"] > button:active {
+        background: #EEF4FF !important;
+        border-color: #4A7BC8 !important;
+    }
+    [data-testid="stButton"] > button p,
+    [data-testid="stButton"] > button span {
+        white-space: normal !important;
         overflow-wrap: break-word !important;
+        word-break: break-word !important;
+        font-size: 0.75rem !important;
         display: block !important;
     }
-    [data-testid="stButton"] > button:hover {
-        border-color: #4A7BC8 !important;
-        background: #EEF4FF !important;
-        color: #1F4788 !important;
-    }
-    [data-testid="stButton"] > button p {
-        white-space: normal !important;
-        word-break: break-word !important;
-        font-size: 0.80rem !important;
+
+    /* Reduzir gap vertical entre linhas de cards */
+    [data-testid="stVerticalBlock"] > div {
+        margin-bottom: 2px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # ── Grid 2 colunas: botões nativos ───────────────────────────────────────
+    # ── Grid 2 colunas com ícone, nome e info ────────────────────────────────
     _n_cols = 2
     for row_start in range(0, len(cards_visiveis), _n_cols):
         row = cards_visiveis[row_start:row_start+_n_cols]
         cols = st.columns(2)
         for j, c in enumerate(row):
             nome = c['nome']
+            desc = _DESC.get(nome, '')
+            info = c['info']
             ic   = _ICONES_CARD.get(nome, '•')
+            # Label compacto: ícone + nome em negrito + info resumida
+            info_curta = info[:35] + '…' if len(info) > 35 else info
+            label = f"{ic} {nome}\n{info_curta}"
             with cols[j]:
-                if st.button(f"{ic}\n{nome}", key=f"hc_{nome}", use_container_width=True):
+                if st.button(label, key=f"hc_{nome}", use_container_width=True):
                     st.session_state.menu_option = nome
                     st.rerun()
     st.stop()
