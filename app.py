@@ -6179,6 +6179,7 @@ elif menu == "Pedidos Pendentes":
                 _i_vend2 = _ci2(['VENDEDOR'])
                 _i_perc2 = _ci2(['%'])
                 _i_cat2  = _ci2(['CATEG'])
+                _i_obs2  = _ci2(['OBSERV']) or _ci2(['OBS'])
 
                 for _row2 in _src2[1:]:
                     _first2 = str(_row2[0]).strip().upper() if _row2[0] is not None else ''
@@ -6208,6 +6209,11 @@ elif menu == "Pedidos Pendentes":
                         _obs2  = _ent2.get('obs', '')
                         if _prev2 or _obs2:
                             _total_aplicados += 1
+
+                    # Observação do arquivo atual (extraída da planilha de origem)
+                    _obs2_atual = str(_gv(_i_obs2)).strip() if _i_obs2 is not None else ''
+                    # Prioridade: arquivo anterior (preenchido manualmente) > arquivo atual (extraído)
+                    _obs2 = _obs2 or _obs2_atual
 
                     # Montar linha como dict compatível com df_merge
                     # Normalizar data: converter datetime do Excel para string dd/mm/yy
