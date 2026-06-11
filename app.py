@@ -7076,6 +7076,105 @@ elif menu == "Performance de Vendedores":
                 }))
                 ws3.write(_rp_row, 7, '', fmt_grand)
 
+                # ══════════════════════════════════════════════════════════
+                # ABA 4 — Clientes sem Compra (últimos 3 meses)
+                # ══════════════════════════════════════════════════════════
+                ws4 = wb.add_worksheet('Clientes sem Compra')
+                writer.sheets['Clientes sem Compra'] = ws4
+
+                # Construir base de clientes sem compra nos últimos 3 meses
+                _cs_hoje = pd.Timestamp.now().normalize()
+                _cs_janela_ini = _cs_hoje - pd.DateOffset(months=3)
+
+                _cs_nf = df[df['TipoMov'] == 'NF Venda'].copy()
+                _cs_nf['DataEmissao'] = pd.to_datetime(_cs_nf['DataEmissao'], errors='coerce')
+
+                # CPFs que compraram nos últimos 3 meses (serão excluídos)
+                _cs_positivaram = set(
+                    _cs_nf[(_cs_nf['DataEmissao'] >= _cs_janela_ini) &
+                            (_cs_nf['DataEmissao'] <= _cs_hoje)]['CPF_CNPJ'].unique()
+                )
+
+                # Cadastro: último registro de cada CPF
+                _cs_cadastro = (
+                    _cs_nf.sort_values('DataEmissao')
+                    .groupby('CPF_CNPJ').last().reset_index()
+                    [['CPF_CNPJ', 'RazaoSocial', 'Cidade', 'Estado']]
+                )
+
+                # Vendedor principal
+                _cs_vend_principal = (
+                    _cs_nf.groupby(['CPF_CNPJ', 'Vendedor']).size()
+                    .reset_index(name='_cnt').sort_values('_cnt', ascending=False)
+                    .groupby('CPF_CNPJ').first().reset_index()[['CPF_CNPJ', 'Vendedor']]
+                )
+
+                # Última compra e valor histórico
+                _cs_ultima = (_cs_nf.groupby('CPF_CNPJ')['DataEmissao'].max()
+                              .reset_index().rename(columns={'DataEmissao': 'UltimaCompra'}))
+                _cs_valor  = (_cs_nf.groupby('CPF_CNPJ')['TotalProduto'].sum()
+                              .reset_index().rename(columns={'TotalProduto': 'ValorHistorico'}))
+
+                _cs_todos = (_cs_cadastro
+                             .merge(_cs_vend_principal, on='CPF_CNPJ', how='left')
+                             .merge(_cs_ultima, on='CPF_CNPJ', how='left')
+                             .merge(_cs_valor,  on='CPF_CNPJ', how='left'))
+                _cs_todos['ValorHistorico'] = _cs_todos['ValorHistorico'].fillna(0)
+                _cs_todos['UltimaCompra']   = pd.to_datetime(_cs_todos['UltimaCompra'], errors='coerce')
+
+                # Excluir quem comprou na janela
+                _cs_result = _cs_todos[~_cs_todos['CPF_CNPJ'].isin(_cs_positivaram)].copy()
+
+                # Aplicar filtros do módulo
+                if _pv_vendedor != 'Todos':
+                    _cpfs_vend = set(_cs_nf[_cs_nf['Vendedor'] == _pv_vendedor]['CPF_CNPJ'].unique())
+                    _cs_result = _cs_result[_cs_result['CPF_CNPJ'].isin(_cpfs_vend)]
+                if _pv_regiao != 'Todas':
+                    _cs_result = _cs_result[_cs_result['Estado'] == _pv_regiao]
+
+                _cs_result = _cs_result.sort_values('ValorHistorico', ascending=False)
+
+                # Título
+                ws4.merge_range(0, 0, 0, 6,
+                    'CLIENTES SEM COMPRA — ÚLTIMOS 3 MESES',
+                    wb.add_format({'bold': True, 'font_color': '#1F4788', 'font_size': 13,
+                                   'font_name': 'Calibri', 'align': 'center'}))
+                ws4.write(1, 0,
+                    f'Vendedor: {_pv_vendedor}  |  Região: {_pv_regiao}  |  '
+                    f'Período: {_cs_janela_ini.strftime("%d/%m/%Y")} a {_cs_hoje.strftime("%d/%m/%Y")}  |  '
+                    f'Total: {len(_cs_result)} clientes  |  Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
+                    wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9, 'font_name': 'Calibri'}))
+
+                # Cabeçalho
+                _cs_cols = ['Razão Social', 'CPF/CNPJ', 'Vendedor', 'Cidade', 'Estado',
+                            'Valor Histórico (R$)', 'Última Compra']
+                _cs_widths = [38, 20, 28, 22, 10, 22, 16]
+                ws4.set_row(3, 20)
+                for c_idx, (col, w) in enumerate(zip(_cs_cols, _cs_widths)):
+                    ws4.write(3, c_idx, col, fmt_header)
+                    ws4.set_column(c_idx, c_idx, w)
+
+                # Dados
+                fmt_data = wb.add_format({'border': 1, 'font_name': 'Calibri', 'font_size': 9,
+                                          'num_format': 'DD/MM/YYYY'})
+                for r_idx, row in enumerate(_cs_result.itertuples(), start=4):
+                    ws4.write(r_idx, 0, str(row.RazaoSocial) if pd.notnull(row.RazaoSocial) else '', fmt_text)
+                    ws4.write(r_idx, 1, str(row.CPF_CNPJ)    if pd.notnull(row.CPF_CNPJ)    else '', fmt_text)
+                    ws4.write(r_idx, 2, str(row.Vendedor)    if pd.notnull(row.Vendedor)     else '', fmt_text)
+                    ws4.write(r_idx, 3, str(row.Cidade)      if pd.notnull(row.Cidade)       else '', fmt_text)
+                    ws4.write(r_idx, 4, str(row.Estado)      if pd.notnull(row.Estado)       else '', fmt_text)
+                    ws4.write(r_idx, 5, row.ValorHistorico, fmt_moeda)
+                    ws4.write(r_idx, 6,
+                        row.UltimaCompra.to_pydatetime() if pd.notnull(row.UltimaCompra) else '',
+                        fmt_data)
+
+                # Linha de total
+                _cs_tot_row = len(_cs_result) + 4
+                ws4.write(_cs_tot_row, 0, '', fmt_text_bold)
+                ws4.merge_range(_cs_tot_row, 1, _cs_tot_row, 4, f'TOTAL — {len(_cs_result)} clientes', fmt_text_bold)
+                ws4.write(_cs_tot_row, 5, _cs_result['ValorHistorico'].sum(), fmt_moeda_bold)
+                ws4.write(_cs_tot_row, 6, '', fmt_text_bold)
+
             output.seek(0)
             return output.getvalue()
 
@@ -7089,7 +7188,7 @@ elif menu == "Performance de Vendedores":
             _df_full=df
         )
         st.download_button(
-            "📥 Exportar Comparativo (Excel) — 3 abas",
+            "📥 Exportar Comparativo (Excel) — 4 abas",
             _excel_bytes,
             f"performance_vendedores_{_pv_now.strftime('%Y%m%d_%H%M')}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
