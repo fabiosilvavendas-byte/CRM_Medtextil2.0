@@ -6141,6 +6141,18 @@ elif menu == "Pedidos Pendentes":
             _wb_at2 = openpyxl.load_workbook(_BIO(_bytes_atual))
             _total_aplicados = 0
 
+            # Lookup código → desc_col para reclassificar abas corretamente
+            _desc_col_lookup = {}
+            if _df_prod_prev is not None and _desc_col:
+                for _, _pr in _df_prod_prev.iterrows():
+                    try:
+                        _pk = str(int(float(str(_pr['ID_COD_N'])))).strip()
+                        _pv = str(_pr.get(_desc_col, '') or '').strip()
+                        if _pv:
+                            _desc_col_lookup[_pk] = _pv
+                    except:
+                        pass
+
             # Reconstruir linhas no formato que _gerar_relatorio_previsao espera (df_merge)
             _rows_conc = []
             for _ws2 in _wb_at2.worksheets:
@@ -6226,6 +6238,14 @@ elif menu == "Pedidos Pendentes":
                         except:
                             pass
 
+                    # Recuperar desc_col da tabela de produtos para classificação correta de abas
+                    _cod2_n = ''
+                    try:
+                        _cod2_n = str(int(float(str(_gv(_i_cod2))))).strip()
+                    except:
+                        _cod2_n = str(_gv(_i_cod2)).strip()
+                    _desc_col_val = _desc_col_lookup.get(_cod2_n, '')
+
                     _rows_conc.append({
                         'NumeroPedido':  _gv(_i_num2),
                         'Cliente':       _gv(_i_cli2),
@@ -6240,6 +6260,7 @@ elif menu == "Pedidos Pendentes":
                         'Vendedor':      _gv(_i_vend2),
                         'Previsao':      _prev2,
                         'Observacoes':   _obs2,
+                        **({_desc_col: _desc_col_val} if _desc_col and _desc_col_val else {}),
                     })
 
             _df_merge_conc = pd.DataFrame(_rows_conc)
@@ -6612,8 +6633,7 @@ elif menu == "Performance de Vendedores":
             _regiao_sel=None,
             _periodo_sel=None,
             _now_ts=None,
-            _df_full=None,
-            _inad_data=None
+            _df_full=None
         ):
             # Usar dados passados explicitamente para evitar problema de closure/cache
             _pv_vendas   = _vendas_periodo
@@ -6623,7 +6643,6 @@ elif menu == "Performance de Vendedores":
             _pv_periodo  = _periodo_sel
             _pv_now      = _now_ts
             df           = _df_full
-            _cs_inad_df  = _inad_data
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 wb = writer.book
@@ -7136,55 +7155,8 @@ elif menu == "Performance de Vendedores":
 
                 _cs_result = _cs_result.sort_values('ValorHistorico', ascending=False)
 
-                # ── Cruzamento com inadimplência ──────────────────────────
-                # A planilha de inadimplência usa "Cliente" (RazaoSocial normalizada)
-                # como chave — não tem CPF/CNPJ. Fazemos match por nome normalizado.
-                def _norm(s):
-                    import unicodedata
-                    if not isinstance(s, str):
-                        return ''
-                    return unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode().upper().strip()
-
-                _cs_inad_nomes = set()
-                _cs_inad_valor = {}   # nome_norm -> valor total em aberto
-                if _cs_inad_df is not None and 'Cliente' in _cs_inad_df.columns:
-                    _inad_hoje = pd.Timestamp.now()
-                    # Apenas títulos vencidos (DataVencimento <= hoje)
-                    _inad_venc = _cs_inad_df.copy()
-                    if 'DataVencimento' in _inad_venc.columns:
-                        _inad_venc = _inad_venc[
-                            pd.to_datetime(_inad_venc['DataVencimento'], errors='coerce') <= _inad_hoje
-                        ]
-                    for _, _ir in _inad_venc.iterrows():
-                        _nk = _norm(str(_ir.get('Cliente', '')))
-                        if _nk:
-                            _cs_inad_nomes.add(_nk)
-                            _vliq = _ir.get('ValorLiquido', 0)
-                            try:
-                                _vliq = float(_vliq)
-                            except:
-                                _vliq = 0.0
-                            _cs_inad_valor[_nk] = _cs_inad_valor.get(_nk, 0.0) + _vliq
-
-                def _get_inad(razao):
-                    _nk = _norm(str(razao))
-                    if _nk in _cs_inad_nomes:
-                        _v = _cs_inad_valor.get(_nk, 0.0)
-                        return f'SIM — R$ {_v:,.2f}' if _v > 0 else 'SIM'
-                    return 'Não'
-
-                # Formatos para inadimplência
-                fmt_inad_sim = wb.add_format({
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 9,
-                    'font_color': '#FFFFFF', 'bg_color': '#C0392B', 'bold': True
-                })
-                fmt_inad_nao = wb.add_format({
-                    'border': 1, 'font_name': 'Calibri', 'font_size': 9,
-                    'font_color': '#155724', 'bg_color': '#D4EDDA'
-                })
-
                 # Título
-                ws4.merge_range(0, 0, 0, 7,
+                ws4.merge_range(0, 0, 0, 6,
                     'CLIENTES SEM COMPRA — ÚLTIMOS 3 MESES',
                     wb.add_format({'bold': True, 'font_color': '#1F4788', 'font_size': 13,
                                    'font_name': 'Calibri', 'align': 'center'}))
@@ -7194,10 +7166,10 @@ elif menu == "Performance de Vendedores":
                     f'Total: {len(_cs_result)} clientes  |  Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
                     wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9, 'font_name': 'Calibri'}))
 
-                # Cabeçalho — agora 8 colunas (inclui Inadimplência)
+                # Cabeçalho
                 _cs_cols = ['Razão Social', 'CPF/CNPJ', 'Vendedor', 'Cidade', 'Estado',
-                            'Valor Histórico (R$)', 'Última Compra', 'Inadimplência']
-                _cs_widths = [38, 20, 28, 22, 10, 22, 16, 24]
+                            'Valor Histórico (R$)', 'Última Compra']
+                _cs_widths = [38, 20, 28, 22, 10, 22, 16]
                 ws4.set_row(3, 20)
                 for c_idx, (col, w) in enumerate(zip(_cs_cols, _cs_widths)):
                     ws4.write(3, c_idx, col, fmt_header)
@@ -7216,20 +7188,13 @@ elif menu == "Performance de Vendedores":
                     ws4.write(r_idx, 6,
                         row.UltimaCompra.to_pydatetime() if pd.notnull(row.UltimaCompra) else '',
                         fmt_data)
-                    _inad_val = _get_inad(row.RazaoSocial)
-                    _ifmt = fmt_inad_sim if _inad_val.startswith('SIM') else fmt_inad_nao
-                    ws4.write(r_idx, 7, _inad_val, _ifmt)
 
-                # Linha de total — ajustada para 8 colunas
+                # Linha de total
                 _cs_tot_row = len(_cs_result) + 4
                 ws4.write(_cs_tot_row, 0, '', fmt_text_bold)
                 ws4.merge_range(_cs_tot_row, 1, _cs_tot_row, 4, f'TOTAL — {len(_cs_result)} clientes', fmt_text_bold)
                 ws4.write(_cs_tot_row, 5, _cs_result['ValorHistorico'].sum(), fmt_moeda_bold)
                 ws4.write(_cs_tot_row, 6, '', fmt_text_bold)
-                _cs_inad_count = sum(1 for rz in _cs_result['RazaoSocial'] if _get_inad(rz).startswith('SIM'))
-                ws4.write(_cs_tot_row, 7,
-                    f'{_cs_inad_count} com débito' if _cs_inad_count > 0 else 'Nenhum débito',
-                    fmt_text_bold)
 
             output.seek(0)
             return output.getvalue()
@@ -7241,8 +7206,7 @@ elif menu == "Performance de Vendedores":
             _regiao_sel=_pv_regiao,
             _periodo_sel=_pv_periodo,
             _now_ts=_pv_now,
-            _df_full=df,
-            _inad_data=_pv_df_inad
+            _df_full=df
         )
         st.download_button(
             "📥 Exportar Comparativo (Excel) — 4 abas",
