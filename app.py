@@ -6141,17 +6141,29 @@ elif menu == "Pedidos Pendentes":
             _wb_at2 = openpyxl.load_workbook(_BIO(_bytes_atual))
             _total_aplicados = 0
 
-            # Lookup código → desc_col para reclassificar abas corretamente
+            # Carregar tabela de produtos localmente para classificar abas corretamente
             _desc_col_lookup = {}
-            if _df_prod_prev is not None and _desc_col:
-                for _, _pr in _df_prod_prev.iterrows():
-                    try:
-                        _pk = str(int(float(str(_pr['ID_COD_N'])))).strip()
-                        _pv = str(_pr.get(_desc_col, '') or '').strip()
-                        if _pv:
-                            _desc_col_lookup[_pk] = _pv
-                    except:
-                        pass
+            _desc_col_conc   = None
+            _cx_col_conc     = None
+            _preco_col_conc  = None
+            _df_prod_conc    = None
+            if planilhas_disponiveis.get('produtos_agrupados'):
+                _df_prod_conc = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
+            if _df_prod_conc is not None:
+                _df_prod_conc.columns = _df_prod_conc.columns.str.strip()
+                _cod_col_conc  = next((c for c in _df_prod_conc.columns if 'ID_COD' in c.upper()), None)
+                _desc_col_conc = next((c for c in _df_prod_conc.columns if 'DESCRI' in c.upper() or 'GRUPO' in c.upper()), None)
+                _cx_col_conc   = next((c for c in _df_prod_conc.columns if 'CX_EMB' in c.upper()), None)
+                _preco_col_conc= next((c for c in _df_prod_conc.columns if 'PRECO' in c.upper() or 'PREÇO' in c.upper()), None)
+                if _cod_col_conc and _desc_col_conc:
+                    for _, _pr in _df_prod_conc.iterrows():
+                        try:
+                            _pk = str(int(float(str(_pr[_cod_col_conc])))).strip()
+                            _pv = str(_pr.get(_desc_col_conc, '') or '').strip()
+                            if _pv:
+                                _desc_col_lookup[_pk] = _pv
+                        except:
+                            pass
 
             # Reconstruir linhas no formato que _gerar_relatorio_previsao espera (df_merge)
             _rows_conc = []
@@ -6260,13 +6272,13 @@ elif menu == "Pedidos Pendentes":
                         'Vendedor':      _gv(_i_vend2),
                         'Previsao':      _prev2,
                         'Observacoes':   _obs2,
-                        **({_desc_col: _desc_col_val} if _desc_col and _desc_col_val else {}),
+                        **({_desc_col_conc: _desc_col_val} if _desc_col_conc and _desc_col_val else {}),
                     })
 
             _df_merge_conc = pd.DataFrame(_rows_conc)
 
             # Gerar Excel usando a mesma função com todas as regras de formatação
-            _buf = _BIO(_gerar_relatorio_previsao(_df_merge_conc, _df_prod_prev, _cx_col, _preco_col, _desc_col))
+            _buf = _BIO(_gerar_relatorio_previsao(_df_merge_conc, _df_prod_conc, _cx_col_conc, _preco_col_conc, _desc_col_conc))
 
             _n_prev = sum(1 for v in _obs_map.values() if v.get('previsao'))
             _n_obs  = sum(1 for v in _obs_map.values() if v.get('obs'))
