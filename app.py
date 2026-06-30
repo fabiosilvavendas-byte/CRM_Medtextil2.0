@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
+import base64
 import requests
 from github import Github
 
@@ -1117,14 +1118,31 @@ def listar_planilhas_github():
         return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
 @st.cache_data(ttl=300)
-def carregar_planilha_github(url, sha=None):  # sha usado como chave de cache
-    """Carrega planilha do GitHub. sha muda automaticamente a cada atualização do arquivo,
-    invalidando o cache do Streamlit sem depender do ttl."""
+def carregar_planilha_github(url, sha=None):
+    """Carrega planilha do GitHub.
+    Quando sha é fornecido, usa a Git Blobs API (api.github.com/git/blobs/{sha}),
+    que retorna o conteúdo diretamente pelo hash do blob — sem passar pela CDN
+    (raw.githubusercontent.com cacheia por até 5 min e ignora cache-busting por URL).
+    O sha muda a cada commit, garantindo que o Streamlit nunca reutilize cache antigo.
+    Fallback: download direto pela URL caso sha não esteja disponível."""
     try:
+        if sha:
+            # ── Blobs API: bypass total da CDN ──────────────────────────────
+            try:
+                _g = Github(GITHUB_TOKEN, timeout=15) if GITHUB_TOKEN else Github(timeout=15)
+                _repo = _g.get_repo(GITHUB_REPO)
+                _blob = _repo.get_git_blob(sha)
+                _content = base64.b64decode(_blob.content)
+                return pd.read_excel(io.BytesIO(_content))
+            except Exception as _blob_err:
+                # Se a Blobs API falhar (ex: rate limit), cai no download direto
+                pass
+
+        # ── Fallback: download direto pela URL (sujeito a CDN de 5 min) ────
         response = requests.get(url, timeout=30)
         response.raise_for_status()
-        df = pd.read_excel(io.BytesIO(response.content))
-        return df
+        return pd.read_excel(io.BytesIO(response.content))
+
     except requests.exceptions.Timeout:
         st.error("⏱️ Timeout ao carregar planilha. Tente novamente.")
         return None
