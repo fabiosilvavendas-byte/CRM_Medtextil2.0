@@ -4,7 +4,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
-import base64
 import requests
 from github import Github
 
@@ -1051,7 +1050,7 @@ GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=3600)
 def listar_planilhas_github():
     """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
@@ -1079,7 +1078,6 @@ def listar_planilhas_github():
                 info = {
                     'nome': content.name,
                     'url': content.download_url,
-                    'sha': content.sha,
                     'path': content.path
                 }
                 planilhas['todas'].append(info)
@@ -1117,32 +1115,14 @@ def listar_planilhas_github():
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
         return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
-@st.cache_data(ttl=300)
-def carregar_planilha_github(url, sha=None):
-    """Carrega planilha do GitHub.
-    Quando sha é fornecido, usa a Git Blobs API (api.github.com/git/blobs/{sha}),
-    que retorna o conteúdo diretamente pelo hash do blob — sem passar pela CDN
-    (raw.githubusercontent.com cacheia por até 5 min e ignora cache-busting por URL).
-    O sha muda a cada commit, garantindo que o Streamlit nunca reutilize cache antigo.
-    Fallback: download direto pela URL caso sha não esteja disponível."""
+@st.cache_data(ttl=3600)
+def carregar_planilha_github(url):
+    """Carrega planilha diretamente do GitHub"""
     try:
-        if sha:
-            # ── Blobs API: bypass total da CDN ──────────────────────────────
-            try:
-                _g = Github(GITHUB_TOKEN, timeout=15) if GITHUB_TOKEN else Github(timeout=15)
-                _repo = _g.get_repo(GITHUB_REPO)
-                _blob = _repo.get_git_blob(sha)
-                _content = base64.b64decode(_blob.content)
-                return pd.read_excel(io.BytesIO(_content))
-            except Exception as _blob_err:
-                # Se a Blobs API falhar (ex: rate limit), cai no download direto
-                pass
-
-        # ── Fallback: download direto pela URL (sujeito a CDN de 5 min) ────
         response = requests.get(url, timeout=30)
         response.raise_for_status()
-        return pd.read_excel(io.BytesIO(response.content))
-
+        df = pd.read_excel(io.BytesIO(response.content))
+        return df
     except requests.exceptions.Timeout:
         st.error("⏱️ Timeout ao carregar planilha. Tente novamente.")
         return None
@@ -2132,7 +2112,6 @@ with st.sidebar:
         if planilhas_disponiveis['vendas']:
             st.success(f"✅ Vendas: {planilhas_disponiveis['vendas']['nome']}")
             url_planilha_vendas = planilhas_disponiveis['vendas']['url']
-            sha_planilha_vendas = planilhas_disponiveis['vendas'].get('sha')
         else:
             st.error("❌ Planilha de vendas não encontrada")
             st.info("Procurando por arquivo com 'CONSULTA_VENDEDORES' no nome")
@@ -2145,11 +2124,6 @@ with st.sidebar:
         if planilhas_disponiveis.get('produtos_agrupados'):
             st.success(f"✅ Produtos: {planilhas_disponiveis['produtos_agrupados']['nome']}")
 
-        if planilhas_disponiveis.get('pedidos_pendentes'):
-            st.success(f"✅ Pedidos Pendentes: {planilhas_disponiveis['pedidos_pendentes']['nome']}")
-        else:
-            st.warning("⚠️ Pedidos Pendentes não encontrada (módulo desabilitado)")
-
         if st.button("🔄 Recarregar Dados", use_container_width=True, key="btn_reload"):
             st.cache_data.clear()
             st.rerun()
@@ -2160,7 +2134,7 @@ if not planilhas_disponiveis.get('vendas'):
     st.stop()
 
 with st.spinner(""):
-    df = carregar_planilha_github(url_planilha_vendas, sha_planilha_vendas)
+    df = carregar_planilha_github(url_planilha_vendas)
 
 if df is None:
     st.error("❌ Não foi possível carregar os dados de vendas.")
@@ -2170,7 +2144,7 @@ df = processar_dados(df)
 
 # Carregar planilha de produtos para cálculo de comissão
 if planilhas_disponiveis.get('produtos_agrupados'):
-    df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+    df_ref_preco = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
     if df_ref_preco is not None:
         df_ref_preco.columns = df_ref_preco.columns.str.upper()
         if 'ID_COD' in df_ref_preco.columns and 'PRECO' in df_ref_preco.columns:
@@ -2404,7 +2378,7 @@ with st.sidebar:
                 # ── Carregar inadimplência ──
                 _df_inad_sem = None
                 if planilhas_disponiveis.get('inadimplencia'):
-                    _raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'], planilhas_disponiveis['inadimplencia'].get('sha'))
+                    _raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
                     if _raw_inad is not None:
                         _df_inad_sem = processar_inadimplencia(_raw_inad)
 
@@ -2657,7 +2631,7 @@ if st.session_state.menu_option == '__home__':
     # Inadimplência — carregada separadamente, usar placeholder se não disponível
     try:
         if planilhas_disponiveis.get('inadimplencia'):
-            _df_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'], planilhas_disponiveis['inadimplencia'].get('sha'))
+            _df_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
             if _df_inad is not None:
                 _df_inad = processar_inadimplencia(_df_inad)
                 _val_inad = _df_inad['ValorLiquido'].sum()
@@ -3341,7 +3315,7 @@ elif menu == "Positivação":
             # Adicionar Gramatura via lookup da planilha de produtos
             if planilhas_disponiveis.get('produtos_agrupados'):
                 try:
-                    _fp_gram_df = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+                    _fp_gram_df = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
                     if _fp_gram_df is not None:
                         _fp_gram_df.columns = _fp_gram_df.columns.str.upper().str.strip()
                         _fp_kc = next((c for c in _fp_gram_df.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
@@ -3400,7 +3374,7 @@ elif menu == "Inadimplência":
     
     # Carregar dados de inadimplência
     with st.spinner("📥 Carregando dados de inadimplência..."):
-        df_inadimplencia = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'], planilhas_disponiveis['inadimplencia'].get('sha'))
+        df_inadimplencia = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
     
     if df_inadimplencia is not None and len(df_inadimplencia) > 0:
         df_inadimplencia = processar_inadimplencia(df_inadimplencia)
@@ -3863,7 +3837,7 @@ elif menu == "Histórico":
             historico = df[df['CPF_CNPJ'] == cpf_cnpj].sort_values('DataEmissao', ascending=False).copy()
             # Gramatura: buscar na planilha produtos_agrupados pela coluna GRAMATURA/GRAMAT pelo ID_COD
             if planilhas_disponiveis.get('produtos_agrupados'):
-                _hg_plan = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+                _hg_plan = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
                 if _hg_plan is not None:
                     _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
                     _hg_gcol = next((c for c in _hg_plan.columns if c in ('GRAMATURA','GRAMAT')), None)
@@ -4133,7 +4107,7 @@ elif menu == "Histórico":
         df_produtos_pedido = None
         if planilhas_disponiveis.get('produtos_agrupados'):
             with st.spinner("📥 Carregando catálogo de produtos..."):
-                df_produtos_pedido = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+                df_produtos_pedido = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
                 if df_produtos_pedido is not None:
                     df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
         
@@ -4588,7 +4562,7 @@ elif menu == "__novo_pedido__":
     df_produtos_pedido = None
     if planilhas_disponiveis.get('produtos_agrupados'):
         with st.spinner("📥 Carregando catálogo de produtos..."):
-            df_produtos_pedido = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+            df_produtos_pedido = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
             if df_produtos_pedido is not None:
                 df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
 
@@ -4819,18 +4793,13 @@ elif menu == "__historico_cliente__":
             cliente_info = historico_cli.iloc[0].to_dict() if len(historico_cli) > 0 else {}
             # Gramatura: buscar na planilha produtos_agrupados
             _hg_url = None
-            _hg_sha = None
             if planilhas_disponiveis.get('produtos_agrupados'):
                 _hg_url = planilhas_disponiveis['produtos_agrupados']['url']
-                _hg_sha = planilhas_disponiveis['produtos_agrupados'].get('sha')
             else:
-                _hg_entry = next((p for p in planilhas_disponiveis.get('todas', []) if 'PRODUTO' in p['nome'].upper()), None)
-                if _hg_entry:
-                    _hg_url = _hg_entry['url']
-                    _hg_sha = _hg_entry.get('sha')
+                _hg_url = next((p['url'] for p in planilhas_disponiveis.get('todas', []) if 'PRODUTO' in p['nome'].upper()), None)
             if _hg_url:
                 try:
-                    _hg_plan = carregar_planilha_github(_hg_url, _hg_sha)
+                    _hg_plan = carregar_planilha_github(_hg_url)
                     if _hg_plan is not None:
                         _hg_plan.columns = _hg_plan.columns.str.upper().str.strip()
                         _hg_kcol = next((c for c in _hg_plan.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
@@ -4900,8 +4869,8 @@ elif menu == "Preço Médio":
         st.stop()
 
     with st.spinner("Carregando planilhas..."):
-        _pm_v = carregar_planilha_github(planilhas_disponiveis['vendas_produto']['url'], planilhas_disponiveis['vendas_produto'].get('sha'))
-        _pm_p = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+        _pm_v = carregar_planilha_github(planilhas_disponiveis['vendas_produto']['url'])
+        _pm_p = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
 
     if _pm_v is None or _pm_p is None:
         st.error("❌ Erro ao carregar planilhas")
@@ -5398,8 +5367,7 @@ elif menu == "Pedidos Pendentes":
     if planilhas_disponiveis.get('produtos_agrupados'):
         with st.spinner("Carregando dados de produtos para previsão..."):
             _df_prod_prev = carregar_planilha_github(
-                planilhas_disponiveis['produtos_agrupados']['url'],
-                planilhas_disponiveis['produtos_agrupados'].get('sha')
+                planilhas_disponiveis['produtos_agrupados']['url']
             )
         if _df_prod_prev is not None:
             _df_prod_prev.columns = _df_prod_prev.columns.str.upper().str.strip()
@@ -6153,7 +6121,7 @@ elif menu == "Pedidos Pendentes":
             # ── PASSO 2: gramatura via tabela de produtos do GitHub ──────────
             _gram_map = {}
             if planilhas_disponiveis.get('produtos_agrupados'):
-                _df_gram = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+                _df_gram = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
                 if _df_gram is not None:
                     _df_gram.columns = _df_gram.columns.str.upper().str.strip()
                     _gc = next((c for c in _df_gram.columns if any(x in c for x in ['ID_COD','CODIGO','COD'])), None)
@@ -6458,7 +6426,7 @@ elif menu == "Performance de Vendedores":
     _pv_perc_inad = 0.0
     if planilhas_disponiveis.get('inadimplencia'):
         try:
-            _pv_raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'], planilhas_disponiveis['inadimplencia'].get('sha'))
+            _pv_raw_inad = carregar_planilha_github(planilhas_disponiveis['inadimplencia']['url'])
             if _pv_raw_inad is not None:
                 _pv_df_inad = processar_inadimplencia(_pv_raw_inad)
                 if _pv_vendedor != 'Todos' and 'Vendedor' in _pv_df_inad.columns:
@@ -8642,7 +8610,7 @@ elif menu == "Consulta Clientes":
     # Tentar carregar produtos_agrupados primeiro (mais confiável)
     if planilhas_disponiveis.get('produtos_agrupados'):
         with st.spinner("Carregando catálogo de produtos..."):
-            _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'], planilhas_disponiveis['produtos_agrupados'].get('sha'))
+            _df_tabela = carregar_planilha_github(planilhas_disponiveis['produtos_agrupados']['url'])
             if _df_tabela is not None:
                 _df_tabela.columns = _df_tabela.columns.str.upper().str.strip()
                 st.success("✅ Usando: Produtos Agrupados")
