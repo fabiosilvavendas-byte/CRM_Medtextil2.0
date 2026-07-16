@@ -4851,6 +4851,16 @@ elif menu == "__historico_cliente__":
                     st.dataframe(_dd.sort_values('DataEmissao', ascending=False), use_container_width=True, height=350)
                 else:
                     st.info("Sem devoluções registradas")
+
+            st.markdown("---")
+            _hc_export = historico_cli[_colunas_disp].sort_values('DataEmissao', ascending=False).copy()
+            st.download_button(
+                "📥 Exportar Histórico Excel",
+                to_excel(_hc_export),
+                f"historico_cliente_{cliente_info.get('CPF_CNPJ','cliente')}.xlsx",
+                "application/vnd.ms-excel",
+                key="dl_hist_cliente_excel"
+            )
         else:
             st.warning("Nenhum cliente encontrado com esse critério.")
     else:
