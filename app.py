@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from datetime import datetime
 import io
 import requests
-from github import Github
 
 # ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
 def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
@@ -429,11 +428,6 @@ div[data-testid="stPlotlyChart"] {
 
 </style>
 """, unsafe_allow_html=True)
-
-# ====================== CONFIGURAÇÕES GITHUB ======================om datetime import datetime
-import io
-import requests
-from github import Github
 
 # ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
 def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
@@ -1048,72 +1042,90 @@ div[data-testid="stExpander"] details summary:hover {
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
-GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
+GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", None) if hasattr(st, "secrets") else None  # Opcional: configure em Settings → Secrets no Streamlit Cloud
 
 @st.cache_data(ttl=3600)
 def listar_planilhas_github():
-    """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
+    """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub (via API REST, sem PyGithub)"""
+    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FOLDER}"
+    headers = {"Accept": "application/vnd.github+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
+    planilhas = {
+        'vendas': None,
+        'inadimplencia': None,
+        'vendas_produto': None,
+        'produtos_agrupados': None,
+        'pedidos_pendentes': None,
+        'tabela_ne': None,
+        'contrato': None,
+        'todas': []
+    }
+
     try:
-        if GITHUB_TOKEN:
-            g = Github(GITHUB_TOKEN, timeout=15)
-        else:
-            g = Github(timeout=15)
-        
-        repo = g.get_repo(GITHUB_REPO)
-        # ⭐ BUSCAR NA PASTA 'dados'
-        contents = repo.get_contents(GITHUB_FOLDER)
-        
-        planilhas = {
-            'vendas': None,
-            'inadimplencia': None,
-            'vendas_produto': None,
-            'produtos_agrupados': None,
-            'pedidos_pendentes': None,
-            'tabela_ne': None,
-            'todas': []
-        }
-        
+        response = requests.get(api_url, headers=headers, timeout=15)
+
+        if response.status_code == 403 and response.headers.get("X-RateLimit-Remaining") == "0":
+            st.error("⏱️ Limite de requisições do GitHub atingido (rate limit). Configure o GITHUB_TOKEN nos Secrets do Streamlit para aumentar o limite de 60 para 5.000 req/hora.")
+            return planilhas
+
+        if response.status_code == 404:
+            st.error(f"❌ Pasta '{GITHUB_FOLDER}' não encontrada em {GITHUB_REPO}")
+            return planilhas
+
+        response.raise_for_status()
+        contents = response.json()
+
         for content in contents:
-            if content.name.endswith(('.xlsx', '.xls')):
+            nome = content.get('name', '')
+            if nome.endswith(('.xlsx', '.xls')):
                 info = {
-                    'nome': content.name,
-                    'url': content.download_url,
-                    'path': content.path
+                    'nome': nome,
+                    'url': content.get('download_url'),
+                    'path': content.get('path')
                 }
                 planilhas['todas'].append(info)
-                
+
                 # Identificar planilha de vendas
-                if 'CONSULTA_VENDEDORES' in content.name.upper():
+                if 'CONSULTA_VENDEDORES' in nome.upper():
                     planilhas['vendas'] = info
-                
+
                 # Identificar planilha de inadimplência
-                if 'LANCAMENTO A RECEBER' in content.name.upper() or 'LANCAMENTO_A_RECEBER' in content.name.upper():
+                if 'LANCAMENTO A RECEBER' in nome.upper() or 'LANCAMENTO_A_RECEBER' in nome.upper():
                     planilhas['inadimplencia'] = info
-                
+
                 # Identificar planilha de vendas por produto
-                if 'VENDAS POR PRODUTO' in content.name.upper() and 'GERAL' in content.name.upper():
+                if 'VENDAS POR PRODUTO' in nome.upper() and 'GERAL' in nome.upper():
                     planilhas['vendas_produto'] = info
-                
+
                 # Identificar planilha de produtos agrupados
-                if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in content.name.upper():
+                if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in nome.upper():
                     planilhas['produtos_agrupados'] = info
-                
+
                 # Identificar planilha de pedidos pendentes
-                if 'PEDIDOSPENDENTES' in content.name.upper().replace(' ', '').replace('_', ''):
+                if 'PEDIDOSPENDENTES' in nome.upper().replace(' ', '').replace('_', ''):
                     planilhas['pedidos_pendentes'] = info
 
                 # Identificar tabela NE
-                if 'TABELA_NE' in content.name.upper().replace(' ', '_'):
+                if 'TABELA_NE' in nome.upper().replace(' ', '_'):
                     planilhas['tabela_ne'] = info
-        
+
+                # Identificar planilha de contratos (Grid Contrato Consulta)
+                if 'CONTRATO' in nome.upper() and 'CONSULTA' in nome.upper():
+                    planilhas['contrato'] = info
+
         if not planilhas['todas']:
             st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
-        
+
         return planilhas
-    except Exception as e:
+    except requests.exceptions.Timeout:
+        st.error("⏱️ Timeout ao conectar ao GitHub. Verifique sua conexão ou tente novamente.")
+        return planilhas
+    except requests.exceptions.RequestException as e:
         st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
-        return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
+        return planilhas
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
@@ -6451,6 +6463,77 @@ elif menu == "Performance de Vendedores":
         except:
             pass
 
+    # ── Contratos por Vendedor (Realizado x Contratado) ─────────────────────
+    _pv_df_contrato = None
+    _pv_contrato_valor = 0
+    _pv_contrato_total = 0
+    _pv_perc_realizacao = 0.0
+    _pv_contrato_por_vendedor = None
+    if planilhas_disponiveis.get('contrato'):
+        try:
+            _pv_raw_contrato = carregar_planilha_github(planilhas_disponiveis['contrato']['url'])
+            if _pv_raw_contrato is not None:
+                _pv_df_contrato = _pv_raw_contrato.copy()
+                _pv_df_contrato.columns = [str(c).strip() for c in _pv_df_contrato.columns]
+
+                # Normalizar nome do vendedor (coluna "Funcionário") para casar com "Vendedor"
+                if 'Funcionário' in _pv_df_contrato.columns:
+                    _pv_df_contrato['_FuncNorm'] = _pv_df_contrato['Funcionário'].astype(str).str.strip().str.upper()
+                else:
+                    _pv_df_contrato['_FuncNorm'] = ''
+
+                if 'Total Contrato (R$)' in _pv_df_contrato.columns:
+                    _pv_df_contrato['_ValorContrato'] = pd.to_numeric(
+                        _pv_df_contrato['Total Contrato (R$)'], errors='coerce'
+                    ).fillna(0)
+                else:
+                    _pv_df_contrato['_ValorContrato'] = 0
+
+                # Filtro de período — coluna de data é "Dt.Emissão"
+                if 'Dt.Emissão' in _pv_df_contrato.columns:
+                    _pv_col_data_contrato = 'Dt.Emissão'
+                else:
+                    _pv_col_data_contrato = next(
+                        (c for c in _pv_df_contrato.columns if 'data' in c.lower() or 'emiss' in c.lower()), None
+                    )
+                _pv_ctr_filtrado = _pv_df_contrato.copy()
+                if _pv_col_data_contrato:
+                    _pv_ctr_filtrado[_pv_col_data_contrato] = pd.to_datetime(
+                        _pv_ctr_filtrado[_pv_col_data_contrato], errors='coerce'
+                    )
+                    if _pv_periodo == "Mês Atual":
+                        _pv_ctr_filtrado = _pv_ctr_filtrado[
+                            (_pv_ctr_filtrado[_pv_col_data_contrato].dt.month == _pv_now.month) &
+                            (_pv_ctr_filtrado[_pv_col_data_contrato].dt.year == _pv_now.year)
+                        ]
+                    elif _pv_periodo == "Últimos 3 Meses":
+                        _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] >= (_pv_now - pd.DateOffset(months=3))]
+                    elif _pv_periodo == "Últimos 6 Meses":
+                        _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] >= (_pv_now - pd.DateOffset(months=6))]
+                    elif _pv_periodo == "Ano Atual":
+                        _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato].dt.year == _pv_now.year]
+                    elif _pv_periodo == "Personalizado":
+                        if _pv_data_ini:
+                            _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] >= pd.to_datetime(_pv_data_ini)]
+                        if _pv_data_fim:
+                            _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] <= pd.to_datetime(_pv_data_fim)]
+
+                _pv_contrato_total = _pv_ctr_filtrado['_ValorContrato'].sum()
+
+                if _pv_vendedor != 'Todos':
+                    _pv_contrato_valor = _pv_ctr_filtrado[
+                        _pv_ctr_filtrado['_FuncNorm'] == str(_pv_vendedor).strip().upper()
+                    ]['_ValorContrato'].sum()
+                else:
+                    _pv_contrato_valor = _pv_contrato_total
+
+                _pv_perc_realizacao = (_pv_fat_bruto / _pv_contrato_valor * 100) if _pv_contrato_valor > 0 else 0
+
+                _pv_contrato_por_vendedor = _pv_ctr_filtrado.groupby('_FuncNorm')['_ValorContrato'].sum().reset_index()
+                _pv_contrato_por_vendedor.columns = ['_FuncNorm', 'ValorContratado']
+        except:
+            pass
+
     # Card de inadimplência
     _pv_ki1, _pv_ki2 = st.columns(2)
     with _pv_ki1:
@@ -6466,6 +6549,25 @@ elif menu == "Performance de Vendedores":
             f"{_pv_perc_inad:.1f}%",
             icon="📊",
             color="#EF4444" if _pv_perc_inad > 5 else "#F4A261"
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Card de Contrato x Faturado
+    _pv_kc1, _pv_kc2 = st.columns(2)
+    with _pv_kc1:
+        render_kpi_card(
+            "Valor Contratado",
+            f"R$ {_pv_contrato_valor:,.0f}",
+            icon="📄",
+            color="#1F4788"
+        )
+    with _pv_kc2:
+        render_kpi_card(
+            "% Realização (Faturado / Contratado)",
+            f"{_pv_perc_realizacao:.1f}%",
+            icon="🎯",
+            color="#28A745" if _pv_perc_realizacao >= 100 else "#F4A261"
         )
 
     st.markdown("---")
@@ -6523,6 +6625,21 @@ elif menu == "Performance de Vendedores":
             _pv_comp = _pv_comp.merge(_pv_prazo_vend, on='Vendedor', how='left')
         else:
             _pv_comp['PrazoMedio'] = 0
+
+        # Valor Contratado e % Realização por vendedor
+        if _pv_contrato_por_vendedor is not None:
+            _pv_comp['_VendNorm'] = _pv_comp['Vendedor'].astype(str).str.strip().str.upper()
+            _pv_comp = _pv_comp.merge(
+                _pv_contrato_por_vendedor, left_on='_VendNorm', right_on='_FuncNorm', how='left'
+            ).drop(columns=['_FuncNorm', '_VendNorm'])
+            _pv_comp['ValorContratado'] = _pv_comp['ValorContratado'].fillna(0)
+        else:
+            _pv_comp['ValorContratado'] = 0
+
+        _pv_comp['PercRealizacao'] = _pv_comp.apply(
+            lambda r: (r['FaturamentoBruto'] / r['ValorContratado'] * 100) if r['ValorContratado'] > 0 else 0,
+            axis=1
+        )
 
         _pv_comp = _pv_comp.sort_values('FaturamentoBruto', ascending=False)
 
@@ -6602,6 +6719,8 @@ elif menu == "Performance de Vendedores":
             lambda x: f"{x:.2f}%" if pd.notnull(x) else "N/D"
         )
         _pv_comp_disp['PrazoMedio']       = _pv_comp_disp['PrazoMedio'].apply(lambda x: f"{x:.0f} dias")
+        _pv_comp_disp['ValorContratado']  = _pv_comp_disp['ValorContratado'].apply(formatar_moeda)
+        _pv_comp_disp['PercRealizacao']   = _pv_comp_disp['PercRealizacao'].apply(lambda x: f"{x:.1f}%")
         _pv_comp_disp.insert(0, 'Posição', range(1, len(_pv_comp_disp) + 1))
         _pv_comp_disp = _pv_comp_disp.rename(columns={
             'FaturamentoBruto': 'Faturamento',
@@ -6611,6 +6730,8 @@ elif menu == "Performance de Vendedores":
             'VolumeTotal':      'Volume',
             'ComissaoMedia':    'Comissão Média',
             'PrazoMedio':       'Prazo Médio',
+            'ValorContratado':  'Valor Contratado',
+            'PercRealizacao':   '% Realização',
         })
         st.dataframe(_pv_comp_disp, use_container_width=True)
 
