@@ -2108,11 +2108,18 @@ with col_titulo:
     st.markdown('<p class="page-subtitle">Medtextil Produtos Textil Hospitalares — Análise de Vendas & BI</p>',
                 unsafe_allow_html=True)
 
-# ── Carregamento silencioso + Status no sidebar expander ─────────────────
+# ── Carregamento com status VISÍVEL no sidebar (não mais escondido) ──────
 with st.sidebar:
-    with st.expander("🛠️ Status das Planilhas", expanded=False):
-        with st.spinner("Conectando ao GitHub..."):
+    with st.status("🔄 Conectando ao GitHub...", expanded=True) as _status_github:
+        try:
             planilhas_disponiveis = listar_planilhas_github()
+        except Exception as _e_git:
+            _status_github.update(label="❌ Falha ao conectar ao GitHub", state="error", expanded=True)
+            st.error(f"Erro ao conectar: {_e_git}")
+            st.info("Verifique sua conexão com a internet ou se o repositório/token do GitHub está correto.")
+            st.stop()
+
+        st.write("📡 Lendo lista de planilhas na pasta 'dados'...")
 
         if planilhas_disponiveis['vendas']:
             st.success(f"✅ Vendas: {planilhas_disponiveis['vendas']['nome']}")
@@ -2129,16 +2136,21 @@ with st.sidebar:
         if planilhas_disponiveis.get('produtos_agrupados'):
             st.success(f"✅ Produtos: {planilhas_disponiveis['produtos_agrupados']['nome']}")
 
+        if not planilhas_disponiveis.get('vendas'):
+            _status_github.update(label="❌ Planilha de vendas não encontrada", state="error", expanded=True)
+        else:
+            _status_github.update(label="✅ Planilhas do GitHub carregadas", state="complete", expanded=False)
+
         if st.button("🔄 Recarregar Dados", use_container_width=True, key="btn_reload"):
             st.cache_data.clear()
             st.rerun()
 
-# Validação crítica fora do expander (sem mensagem visual)
+# Validação crítica (mensagem visível na área principal)
 if not planilhas_disponiveis.get('vendas'):
     st.error("❌ Planilha de vendas não encontrada no GitHub. Verifique o repositório.")
     st.stop()
 
-with st.spinner(""):
+with st.spinner("📥 Carregando dados de vendas..."):
     df = carregar_planilha_github(url_planilha_vendas)
 
 if df is None:
