@@ -6469,6 +6469,7 @@ elif menu == "Performance de Vendedores":
     _pv_contrato_total = 0
     _pv_perc_realizacao = 0.0
     _pv_contrato_por_vendedor = None
+    _pv_col_data_contrato = None
     if planilhas_disponiveis.get('contrato'):
         try:
             _pv_raw_contrato = carregar_planilha_github(planilhas_disponiveis['contrato']['url'])
@@ -6812,7 +6813,8 @@ elif menu == "Performance de Vendedores":
 
                 cols1 = ['Posição', 'Vendedor', 'Faturamento Bruto (R$)', 'Nº Notas',
                          'Clientes Atendidos', 'Ticket Médio (R$)', 'Volume Total (un)',
-                         'Comissão Média (%)', 'Prazo Médio (dias)']
+                         'Comissão Média (%)', 'Prazo Médio (dias)',
+                         'Valor Contratado (R$)', '% Realização']
 
                 ws1.set_row(0, 22)
                 ws1.write(0, 0, 'COMPARATIVO DE PERFORMANCE DE VENDEDORES', wb.add_format({
@@ -6828,7 +6830,7 @@ elif menu == "Performance de Vendedores":
                 for c_idx, col in enumerate(cols1):
                     ws1.write(3, c_idx, col, fmt_header)
 
-                col_widths1 = [8, 28, 20, 10, 18, 18, 16, 16, 16]
+                col_widths1 = [8, 28, 20, 10, 18, 18, 16, 16, 16, 20, 14]
                 for i, w in enumerate(col_widths1):
                     ws1.set_column(i, i, w)
 
@@ -6844,6 +6846,9 @@ elif menu == "Performance de Vendedores":
                     _com_val = row.get('ComissaoMedia')
                     ws1.write(row_num, 7, (_com_val/100) if pd.notnull(_com_val) else '', fmt_perc)
                     ws1.write(row_num, 8, row.get('PrazoMedio', 0), fmt_num)
+                    ws1.write(row_num, 9, row.get('ValorContratado', 0), fmt_moeda)
+                    _real_val = row.get('PercRealizacao')
+                    ws1.write(row_num, 10, (_real_val/100) if pd.notnull(_real_val) else '', fmt_perc)
 
                 # Linha de total
                 _tot_row = len(_comp_export) + 4
@@ -6856,6 +6861,11 @@ elif menu == "Performance de Vendedores":
                 ws1.write(_tot_row, 6, _comp_export['VolumeTotal'].sum(), fmt_text_bold)
                 ws1.write(_tot_row, 7, '', fmt_text_bold)
                 ws1.write(_tot_row, 8, '', fmt_text_bold)
+                _tot_contratado = _comp_export.get('ValorContratado', pd.Series(dtype=float)).sum()
+                ws1.write(_tot_row, 9, _tot_contratado, fmt_moeda_bold)
+                _tot_fat_geral = _comp_export['FaturamentoBruto'].sum()
+                _perc_real_geral = (_tot_fat_geral / _tot_contratado) if _tot_contratado > 0 else ''
+                ws1.write(_tot_row, 10, _perc_real_geral, fmt_perc_bold)
 
                 # ══════════════════════════════════════════════════════════
                 # ABA 2 — Mês a Mês
@@ -8153,6 +8163,26 @@ elif menu == "Performance de Vendedores":
                 _cresc_a = ((_fat_r - _fat_aa) / _fat_aa * 100) if _fat_aa > 0 else 0
                 _reat_v  = _reativados_vend(vendedor)
 
+                # Contratado x Faturado (mês de referência)
+                _contrato_v = 0.0
+                if _pv_df_contrato is not None:
+                    try:
+                        _ctr_mes_v = _pv_df_contrato.copy()
+                        if _pv_col_data_contrato and _pv_col_data_contrato in _ctr_mes_v.columns:
+                            _ctr_mes_v[_pv_col_data_contrato] = pd.to_datetime(
+                                _ctr_mes_v[_pv_col_data_contrato], errors='coerce'
+                            )
+                            _ctr_mes_v = _ctr_mes_v[
+                                (_ctr_mes_v[_pv_col_data_contrato].dt.month == _mes_card) &
+                                (_ctr_mes_v[_pv_col_data_contrato].dt.year == _ano_card)
+                            ]
+                        _contrato_v = _ctr_mes_v[
+                            _ctr_mes_v['_FuncNorm'] == str(vendedor).strip().upper()
+                        ]['_ValorContrato'].sum()
+                    except:
+                        _contrato_v = 0.0
+                _perc_real_ctr = (_fat_r / _contrato_v * 100) if _contrato_v > 0 else 0
+
                 # Meta próximo mês
                 _meta_prox, _meta_prox_lbl = _meta_proximo_mes(vendedor)
                 _mes_prox_nm = _meses_pt[(_mes_card % 12) + 1]
@@ -8389,6 +8419,32 @@ elif menu == "Performance de Vendedores":
     </div>
   </div>
 
+  <!-- ROW 3: Contratado | % Realização -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">$</div>
+        <div class="card-label">VALOR CONTRATADO</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val">R$ {_contrato_v:,.0f}</div>
+        <div class="card-sub">no mês de referência</div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+    <div class="card">
+      <div class="card-top">
+        <div class="card-icon">%</div>
+        <div class="card-label">% REALIZAÇÃO</div>
+      </div>
+      <div class="card-body">
+        <div class="card-val {'green' if _perc_real_ctr>=100 else ('orange' if _perc_real_ctr>=70 else 'red')}">{_perc_real_ctr:.1f}%</div>
+        <div class="card-sub">Faturado / Contratado</div>
+      </div>
+      <div class="card-dot"></div>
+    </div>
+  </div>
+
   <!-- META PRÓXIMO MÊS -->
   <div class="prox-box">
     <div class="card-icon" style="width:70px;height:70px;font-size:34px;">M</div>
@@ -8528,6 +8584,26 @@ elif menu == "Performance de Vendedores":
                 _cresc_m = ((_fat_r - _fat_mes_ant) / _fat_mes_ant * 100) if _fat_mes_ant > 0 else 0
                 _cresc_a = ((_fat_r - _base_meta) / _base_meta * 100) if _base_meta > 0 else 0
 
+                # Contratado x Faturado (mês de referência)
+                _contrato_v3 = 0.0
+                if _pv_df_contrato is not None:
+                    try:
+                        _ctr_mes_v3 = _pv_df_contrato.copy()
+                        if _pv_col_data_contrato and _pv_col_data_contrato in _ctr_mes_v3.columns:
+                            _ctr_mes_v3[_pv_col_data_contrato] = pd.to_datetime(
+                                _ctr_mes_v3[_pv_col_data_contrato], errors='coerce'
+                            )
+                            _ctr_mes_v3 = _ctr_mes_v3[
+                                (_ctr_mes_v3[_pv_col_data_contrato].dt.month == _mes_card) &
+                                (_ctr_mes_v3[_pv_col_data_contrato].dt.year == _ano_card)
+                            ]
+                        _contrato_v3 = _ctr_mes_v3[
+                            _ctr_mes_v3['_FuncNorm'] == str(_vend).strip().upper()
+                        ]['_ValorContrato'].sum()
+                    except:
+                        _contrato_v3 = 0.0
+                _perc_real_ctr3 = (_fat_r / _contrato_v3 * 100) if _contrato_v3 > 0 else 0
+
                 # Clientes sem compra há 60 dias (base do vendedor)
                 _corte60 = _pv_now2 - pd.Timedelta(days=60)
                 _ult_cli = _df_nf_hist[_df_nf_hist["Vendedor"] == _vend].groupby("CPF_CNPJ")["DataEmissao"].max()
@@ -8553,6 +8629,9 @@ elif menu == "Performance de Vendedores":
                     ["Meta atingida (%)", f"{_perc_m:.1f}%"],
                     [f"Crescimento vs {_mes_nome_det.get(_mes_ant2,'')[:3]}/{_ano_ant2}", f"{_cresc_m:+.1f}%"],
                     [f"Crescimento vs {_mes_nome_det.get(_mes_meta,'')[:3]}/{_ano_meta}", f"{_cresc_a:+.1f}%"],
+                    ["", ""],
+                    ["Valor Contratado (mês)", f"R$ {_contrato_v3:,.2f}"],
+                    ["% Realização (Faturado / Contratado)", f"{_perc_real_ctr3:.1f}%"],
                     ["", ""],
                     ["Base total de clientes", str(_base_v)],
                     ["Positivados no mês", str(_posit_v)],
