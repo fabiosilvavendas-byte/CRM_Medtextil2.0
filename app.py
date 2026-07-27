@@ -7981,6 +7981,27 @@ elif menu == "Performance de Vendedores":
                 # Clientes reativados
                 _reat_v = _reativados_vend(_vend)
 
+                # Contratado x Faturado (mês de referência)
+                _contrato_v2 = 0.0
+                if _pv_df_contrato is not None:
+                    try:
+                        _ctr_mes_v2 = _pv_df_contrato.copy()
+                        if _pv_col_data_contrato and _pv_col_data_contrato in _ctr_mes_v2.columns:
+                            _ctr_mes_v2[_pv_col_data_contrato] = pd.to_datetime(
+                                _ctr_mes_v2[_pv_col_data_contrato], errors='coerce'
+                            )
+                            _ctr_mes_v2 = _ctr_mes_v2[
+                                (_ctr_mes_v2[_pv_col_data_contrato].dt.month == _mes_card) &
+                                (_ctr_mes_v2[_pv_col_data_contrato].dt.year == _ano_card)
+                            ]
+                        _contrato_v2 = _ctr_mes_v2[
+                            _ctr_mes_v2['_FuncNorm'] == str(_vend).strip().upper()
+                        ]['_ValorContrato'].sum()
+                    except:
+                        _contrato_v2 = 0.0
+                _perc_real_ctr2 = (_fat_r / _contrato_v2 * 100) if _contrato_v2 > 0 else 0
+                _real_cor2 = "#28A745" if _perc_real_ctr2 >= 100 else ("#F4A261" if _perc_real_ctr2 >= 70 else "#EF4444")
+
                 _cor      = "#28A745" if _perc_m >= 100 else ("#F4A261" if _perc_m >= 70 else "#EF4444")
                 _barra    = min(int(_perc_m), 100)
                 _sinal    = "✅" if _perc_m >= 100 else ("⚠️" if _perc_m >= 70 else "🔴")
@@ -8051,6 +8072,23 @@ elif menu == "Performance de Vendedores":
                     f'<div style="text-align:center;">'
                     f'<div style="font-size:1.15rem;font-weight:700;color:{_posit_cor};">{_posit_p:.0f}%</div>'
                     f'<div style="font-size:0.68rem;color:#6C757D;">% posit.</div></div>'
+
+                    f'</div></div>'
+
+                    # Contratado x Faturado
+                    f'<div style="background:#F8FAFF;border-radius:8px;padding:8px 6px;border:1px solid #EEF3FC;margin-top:8px;">'
+                    f'<div style="font-size:0.72rem;color:#6C757D;text-align:center;margin-bottom:6px;font-weight:600;">CONTRATO x FATURADO {_label_mes_card}</div>'
+                    f'<div style="display:flex;justify-content:space-around;align-items:center;">'
+
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:1.0rem;font-weight:700;color:#1F4788;">R$ {_contrato_v2:,.0f}</div>'
+                    f'<div style="font-size:0.68rem;color:#6C757D;">Contratado</div></div>'
+
+                    f'<div style="font-size:1.2rem;color:#CDD4E0;">|</div>'
+
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:1.15rem;font-weight:700;color:{_real_cor2};">{_perc_real_ctr2:.1f}%</div>'
+                    f'<div style="font-size:0.68rem;color:#6C757D;">% Realização</div></div>'
 
                     f'</div></div>'
                     f'</div>'
