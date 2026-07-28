@@ -6470,6 +6470,7 @@ elif menu == "Performance de Vendedores":
     _pv_perc_realizacao = 0.0
     _pv_contrato_por_vendedor = None
     _pv_col_data_contrato = None
+    _pv_ctr_filtrado = None
     if planilhas_disponiveis.get('contrato'):
         try:
             _pv_raw_contrato = carregar_planilha_github(planilhas_disponiveis['contrato']['url'])
@@ -6744,7 +6745,9 @@ elif menu == "Performance de Vendedores":
             _regiao_sel=None,
             _periodo_sel=None,
             _now_ts=None,
-            _df_full=None
+            _df_full=None,
+            _ctr_data=None,
+            _ctr_col_data=None
         ):
             # Usar dados passados explicitamente para evitar problema de closure/cache
             _pv_vendas   = _vendas_periodo
@@ -6754,6 +6757,8 @@ elif menu == "Performance de Vendedores":
             _pv_periodo  = _periodo_sel
             _pv_now      = _now_ts
             df           = _df_full
+            _pv_ctr      = _ctr_data
+            _pv_ctr_col  = _ctr_col_data
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 wb = writer.book
@@ -7316,6 +7321,108 @@ elif menu == "Performance de Vendedores":
                 ws4.write(_cs_tot_row, 5, _cs_result['ValorHistorico'].sum(), fmt_moeda_bold)
                 ws4.write(_cs_tot_row, 6, '', fmt_text_bold)
 
+                # ══════════════════════════════════════════════════════════
+                # ABA 5 — Vendas / Contratos (detalhamento)
+                # ══════════════════════════════════════════════════════════
+                ws5 = wb.add_worksheet('Vendas - Contratos')
+                writer.sheets['Vendas - Contratos'] = ws5
+
+                if _pv_ctr is not None and len(_pv_ctr) > 0:
+                    _vc_df = _pv_ctr.copy()
+
+                    # Aplicar filtro de vendedor do módulo
+                    if _pv_vendedor != 'Todos':
+                        _vc_df = _vc_df[_vc_df['_FuncNorm'] == str(_pv_vendedor).strip().upper()]
+
+                    # Aplicar filtro de região do módulo, se a planilha tiver essa informação
+                    _vc_col_regiao = next(
+                        (c for c in _vc_df.columns if c.strip().lower() in
+                         ('estado', 'uf', 'regiao', 'região')), None
+                    )
+                    if _pv_regiao != 'Todas' and _vc_col_regiao:
+                        _vc_df = _vc_df[_vc_df[_vc_col_regiao] == _pv_regiao]
+
+                    # Ordenar pela data de emissão (mais recente primeiro), se disponível
+                    if _pv_ctr_col and _pv_ctr_col in _vc_df.columns:
+                        _vc_df = _vc_df.sort_values(_pv_ctr_col, ascending=False)
+
+                    # Montar colunas de saída: prioridade para Cliente / Data / Valor / Vendedor,
+                    # seguidas de todas as demais colunas originais da planilha (produtos, etc.)
+                    _vc_col_cliente = next(
+                        (c for c in _vc_df.columns if c.strip().lower() in
+                         ('nome cliente', 'cliente', 'razão social', 'razao social')), None
+                    )
+                    _vc_prioritarias = [c for c in [_vc_col_cliente, 'Funcionário', _pv_ctr_col,
+                                                     'Total Contrato (R$)'] if c and c in _vc_df.columns]
+                    _vc_demais = [c for c in _vc_df.columns
+                                  if c not in _vc_prioritarias and not c.startswith('_')]
+                    _vc_cols_final = _vc_prioritarias + _vc_demais
+
+                    _vc_export = _vc_df[_vc_cols_final].copy()
+
+                    _vc_rename = {}
+                    if _vc_col_cliente:
+                        _vc_rename[_vc_col_cliente] = 'Cliente'
+                    if 'Funcionário' in _vc_export.columns:
+                        _vc_rename['Funcionário'] = 'Vendedor'
+                    if _pv_ctr_col and _pv_ctr_col in _vc_export.columns:
+                        _vc_rename[_pv_ctr_col] = 'Data'
+                    if 'Total Contrato (R$)' in _vc_export.columns:
+                        _vc_rename['Total Contrato (R$)'] = 'Valor Contrato (R$)'
+                    _vc_export = _vc_export.rename(columns=_vc_rename)
+
+                    # Título e cabeçalho informativo
+                    _vc_ncols = len(_vc_export.columns)
+                    ws5.merge_range(0, 0, 0, max(_vc_ncols - 1, 1),
+                        'VENDAS / CONTRATOS — DETALHAMENTO',
+                        wb.add_format({'bold': True, 'font_color': '#1F4788', 'font_size': 13,
+                                       'font_name': 'Calibri', 'align': 'center'}))
+                    ws5.write(1, 0,
+                        f'Vendedor: {_pv_vendedor}  |  Região: {_pv_regiao}  |  Período: {_pv_periodo}  |  '
+                        f'Total: {len(_vc_export)} contratos  |  Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
+                        wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9, 'font_name': 'Calibri'}))
+
+                    # Cabeçalho das colunas
+                    ws5.set_row(3, 20)
+                    for c_idx, col in enumerate(_vc_export.columns):
+                        ws5.write(3, c_idx, str(col), fmt_header)
+                        _w = 30 if col in ('Cliente',) else (18 if col in ('Data', 'Vendedor', 'Valor Contrato (R$)') else 20)
+                        ws5.set_column(c_idx, c_idx, _w)
+
+                    # Dados — detecta tipo de cada coluna para formatar adequadamente
+                    fmt_vc_data = wb.add_format({'border': 1, 'font_name': 'Calibri', 'font_size': 9,
+                                                  'num_format': 'DD/MM/YYYY'})
+                    for r_idx, (_, row) in enumerate(_vc_export.iterrows(), start=4):
+                        for c_idx, col in enumerate(_vc_export.columns):
+                            _val = row[col]
+                            if col == 'Data':
+                                _dt = pd.to_datetime(_val, errors='coerce')
+                                ws5.write(r_idx, c_idx, _dt.to_pydatetime() if pd.notnull(_dt) else '', fmt_vc_data)
+                            elif col == 'Valor Contrato (R$)':
+                                ws5.write(r_idx, c_idx, float(_val) if pd.notnull(_val) else 0, fmt_moeda)
+                            elif isinstance(_val, (int, float)) and pd.notnull(_val):
+                                ws5.write(r_idx, c_idx, _val, fmt_num)
+                            else:
+                                ws5.write(r_idx, c_idx, str(_val) if pd.notnull(_val) else '', fmt_text)
+
+                    # Linha de total
+                    _vc_tot_row = len(_vc_export) + 4
+                    _vc_val_col_idx = list(_vc_export.columns).index('Valor Contrato (R$)') \
+                        if 'Valor Contrato (R$)' in _vc_export.columns else None
+                    ws5.write(_vc_tot_row, 0, '', fmt_text_bold)
+                    if _vc_val_col_idx is not None and _vc_val_col_idx > 0:
+                        ws5.merge_range(_vc_tot_row, 1, _vc_tot_row, _vc_val_col_idx - 1,
+                                         f'TOTAL — {len(_vc_export)} contratos', fmt_text_bold)
+                        ws5.write(_vc_tot_row, _vc_val_col_idx,
+                                  _vc_export['Valor Contrato (R$)'].sum(), fmt_moeda_bold)
+                    else:
+                        ws5.merge_range(_vc_tot_row, 0, _vc_tot_row, max(_vc_ncols - 1, 1),
+                                         f'TOTAL — {len(_vc_export)} contratos', fmt_text_bold)
+                else:
+                    ws5.write(0, 0, 'Nenhum dado de contrato disponível para o período/filtro selecionado.',
+                               wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 10,
+                                              'font_name': 'Calibri'}))
+
             output.seek(0)
             return output.getvalue()
 
@@ -7326,10 +7433,12 @@ elif menu == "Performance de Vendedores":
             _regiao_sel=_pv_regiao,
             _periodo_sel=_pv_periodo,
             _now_ts=_pv_now,
-            _df_full=df
+            _df_full=df,
+            _ctr_data=_pv_ctr_filtrado,
+            _ctr_col_data=_pv_col_data_contrato
         )
         st.download_button(
-            "📥 Exportar Comparativo (Excel) — 4 abas",
+            "📥 Exportar Comparativo (Excel) — 5 abas",
             _excel_bytes,
             f"performance_vendedores_{_pv_now.strftime('%Y%m%d_%H%M')}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
