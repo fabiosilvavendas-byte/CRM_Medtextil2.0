@@ -5,6 +5,282 @@ import plotly.graph_objects as go
 from datetime import datetime
 import io
 import requests
+from github import Github
+import json
+import hashlib
+import uuid as _uuid_mod
+
+# ====================== SUPABASE — CLIENTE CENTRALIZADO ======================
+# Credenciais lidas dos secrets do Streamlit.
+# Configure em .streamlit/secrets.toml:
+#   [supabase]
+#   url = "https://XXXXXXXX.supabase.co"
+#   key = "eyJ..."
+# No Streamlit Cloud: Settings → Secrets
+
+def _supa_headers():
+    """Retorna headers HTTP para chamadas à API REST do Supabase."""
+    try:
+        key = st.secrets["supabase"]["key"]
+    except Exception:
+        return None
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+
+def _supa_url(tabela):
+    """Retorna a URL REST para uma tabela do Supabase."""
+    try:
+        base = st.secrets["supabase"]["url"].rstrip("/")
+        return f"{base}/rest/v1/{tabela}"
+    except Exception:
+        return None
+
+def supa_disponivel():
+    """Verifica se as credenciais do Supabase estão configuradas."""
+    try:
+        _ = st.secrets["supabase"]["url"]
+        _ = st.secrets["supabase"]["key"]
+        return True
+    except Exception:
+        return False
+
+def supa_select(tabela, filtros=None, ordem=None, limite=1000):
+    """
+    Lê registros de uma tabela.
+    filtros: dict {coluna: valor} → igualdade simples
+    ordem:   string ex: "criado_em.desc"
+    Retorna lista de dicts ou [] em caso de erro.
+    """
+    url = _supa_url(tabela)
+    headers = _supa_headers()
+    if not url or not headers:
+        return []
+    params = {"limit": limite}
+    if filtros:
+        for col, val in filtros.items():
+            params[col] = f"eq.{val}"
+    if ordem:
+        params["order"] = ordem
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        return []
+    except Exception:
+        return []
+
+def supa_insert(tabela, dados):
+    """
+    Insere um registro.
+    dados: dict com os campos.
+    Retorna o registro inserido (dict) ou None em caso de erro.
+    """
+    url = _supa_url(tabela)
+    headers = _supa_headers()
+    if not url or not headers:
+        return None
+    try:
+        r = requests.post(url, headers=headers,
+                          data=json.dumps(dados), timeout=10)
+        if r.status_code in (200, 201):
+            resultado = r.json()
+            return resultado[0] if isinstance(resultado, list) else resultado
+        return None
+    except Exception:
+        return None
+
+def supa_update(tabela, id_valor, dados, id_col="id"):
+    """
+    Atualiza um registro pelo id.
+    Retorna True em caso de sucesso.
+    """
+    url = _supa_url(tabela)
+    headers = _supa_headers()
+    if not url or not headers:
+        return False
+    try:
+        r = requests.patch(
+            url,
+            headers=headers,
+            params={id_col: f"eq.{id_valor}"},
+            data=json.dumps(dados),
+            timeout=10,
+        )
+        return r.status_code in (200, 204)
+    except Exception:
+        return False
+
+def supa_delete(tabela, id_valor, id_col="id"):
+    """Deleta um registro pelo id. Retorna True em caso de sucesso."""
+    url = _supa_url(tabela)
+    headers = _supa_headers()
+    if not url or not headers:
+        return False
+    try:
+        r = requests.delete(
+            url,
+            headers=headers,
+            params={id_col: f"eq.{id_valor}"},
+            timeout=10,
+        )
+        return r.status_code in (200, 204)
+    except Exception:
+        return False
+
+# ── Funções específicas de pedidos ──────────────────────────────────────
+
+def gerar_numero_pedido():
+    """
+    Gera o próximo número sequencial no padrão MED-AAAA-NNNNNN.
+    Consulta o maior número do ano atual e incrementa.
+    """
+    ano = datetime.now().year
+    prefixo = f"MED-{ano}-"
+    registros = supa_select("pedidos", ordem="numero.desc", limite=1)
+    ultimo_seq = 0
+    for reg in registros:
+        num = reg.get("numero", "")
+        if num.startswith(prefixo):
+            try:
+                ultimo_seq = int(num.replace(prefixo, ""))
+            except Exception:
+                pass
+    return f"{prefixo}{str(ultimo_seq + 1).zfill(6)}"
+
+def salvar_pedido(dados_cliente, dados_pedido, itens, obs_pedido,
+                  status="rascunho", usuario_id=None, usuario_nome=None,
+                  pedido_id=None):
+    """
+    Cria ou atualiza um pedido completo (cabeçalho + itens).
+    Se pedido_id for fornecido, atualiza; caso contrário, cria novo.
+    Retorna (pedido_id, numero_pedido) ou (None, None) em caso de erro.
+    """
+    agora = datetime.now().isoformat()
+    total = sum(i.get("total", 0) for i in itens)
+
+    cabecalho = {
+        "status":               status,
+        "cliente_razao_social": dados_cliente.get("razao_social", ""),
+        "cliente_cpf_cnpj":     dados_cliente.get("cpf_cnpj", ""),
+        "cliente_ie":           dados_cliente.get("ie", ""),
+        "cliente_cidade":       dados_cliente.get("cidade", ""),
+        "cliente_estado":       dados_cliente.get("estado", ""),
+        "cliente_telefone":     dados_cliente.get("telefone", ""),
+        "cliente_email_nfe":    dados_cliente.get("email", ""),
+        "cliente_endereco":     dados_cliente.get("endereco", ""),
+        "representante":        dados_cliente.get("representante", ""),
+        "obs_cliente":          dados_cliente.get("obs_cliente", ""),
+        "tabela_preco":         dados_pedido.get("tabela_preco", ""),
+        "tipo_frete":           dados_pedido.get("tipo_frete", "CIF"),
+        "data_venda":           dados_pedido.get("data_venda", ""),
+        "cond_pagto":           dados_pedido.get("cond_pagto", ""),
+        "estado_comissao":      dados_pedido.get("estado_comissao", ""),
+        "obs_pedido":           obs_pedido or "",
+        "valor_total":          total,
+        "atualizado_em":        agora,
+    }
+
+    if pedido_id:
+        # Atualização
+        ok = supa_update("pedidos", pedido_id, cabecalho)
+        if not ok:
+            return None, None
+        # Apagar itens antigos e reinserir
+        supa_delete("itens_pedido", pedido_id, id_col="pedido_id")
+        numero = dados_pedido.get("numero", "")
+    else:
+        # Criação
+        numero = gerar_numero_pedido()
+        pedido_id = str(_uuid_mod.uuid4())
+        cabecalho.update({
+            "id":           pedido_id,
+            "numero":       numero,
+            "criado_por_id": usuario_id or "",
+            "criado_por_nome": usuario_nome or "",
+            "criado_em":    agora,
+        })
+        resultado = supa_insert("pedidos", cabecalho)
+        if not resultado:
+            return None, None
+
+    # Inserir itens
+    for item in itens:
+        item_row = {
+            "id":              str(_uuid_mod.uuid4()),
+            "pedido_id":       pedido_id,
+            "codigo_produto":  item.get("codigo", ""),
+            "descricao":       item.get("descricao", ""),
+            "gramatura":       item.get("peso", ""),
+            "cx_embarque":     item.get("cx_embarque", ""),
+            "quantidade":      item.get("quantidade", 0),
+            "valor_unit":      item.get("valor_unit", 0),
+            "preco_ref":       item.get("preco_ref", 0),
+            "preco_historico": item.get("preco_historico", 0),
+            "comissao_perc":   item.get("comissao", ""),
+            "total":           item.get("total", 0),
+            "alerta_preco_baixo": item.get("alerta_preco_baixo", False),
+            "criado_em":       agora,
+        }
+        supa_insert("itens_pedido", item_row)
+
+    # Registrar no histórico de status
+    hist = {
+        "id":              str(_uuid_mod.uuid4()),
+        "pedido_id":       pedido_id,
+        "status_anterior": "",
+        "status_novo":     status,
+        "usuario_id":      usuario_id or "",
+        "usuario_nome":    usuario_nome or "",
+        "observacao":      f"Pedido {'criado' if not pedido_id else 'atualizado'}",
+        "criado_em":       agora,
+    }
+    supa_insert("historico_status", hist)
+
+    return pedido_id, numero
+
+def mudar_status_pedido(pedido_id, status_novo, usuario_id,
+                        usuario_nome, observacao="", status_anterior=""):
+    """Muda o status de um pedido e registra no histórico."""
+    agora = datetime.now().isoformat()
+    ok = supa_update("pedidos", pedido_id, {
+        "status": status_novo,
+        "atualizado_em": agora,
+    })
+    if ok:
+        supa_insert("historico_status", {
+            "id":              str(_uuid_mod.uuid4()),
+            "pedido_id":       pedido_id,
+            "status_anterior": status_anterior,
+            "status_novo":     status_novo,
+            "usuario_id":      usuario_id,
+            "usuario_nome":    usuario_nome,
+            "observacao":      observacao,
+            "criado_em":       agora,
+        })
+    return ok
+
+# ── Funções de autenticação via Supabase ────────────────────────────────
+
+def _hash_senha(senha):
+    """Hash SHA-256 simples para senhas."""
+    return hashlib.sha256(senha.encode()).hexdigest()
+
+def autenticar_usuario(email, senha):
+    """
+    Autentica pelo Supabase (tabela 'usuarios').
+    Retorna dict do usuário ou None.
+    """
+    if not supa_disponivel():
+        return None
+    registros = supa_select("usuarios", filtros={"email": email, "ativo": True})
+    for reg in registros:
+        if reg.get("senha_hash") == _hash_senha(senha):
+            return reg
+    return None
 
 # ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
 def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
@@ -14,7 +290,7 @@ def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
         delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
         try:
             delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
-        except:
+        except Exception:
             delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
         delta_html = f'<div style="color:{delta_color};font-size:0.78rem;font-weight:600;margin-top:6px;">{delta}</div>'
     st.markdown(f"""
@@ -426,305 +702,14 @@ div[data-testid="stPlotlyChart"] {
     [data-testid="stTabs"] [data-baseweb="tab"] { font-size: 0.72rem !important; padding: 4px 8px !important; }
 }
 
-</style>
-""", unsafe_allow_html=True)
-
-# ====================== FUNÇÃO KPI CARD PROFISSIONAL ======================
-def render_kpi_card(label, value, delta=None, icon="📊", color="#1F4788"):
-    """Renderiza card KPI profissional com HTML/CSS — mobile-first, sem height fixo"""
-    delta_html = ""
-    if delta:
-        delta_val = str(delta).replace("%","").replace(",","").replace("+","").strip()
-        try:
-            delta_color = "#10B981" if float(delta_val) >= 0 else "#EF4444"
-        except:
-            delta_color = "#10B981" if "+" in str(delta) else "#EF4444"
-        delta_html = f'<div style="color:{delta_color};font-size:0.78rem;font-weight:600;margin-top:6px;">{delta}</div>'
-    st.markdown(f"""
-    <div class="kpi-card" style="border-left:4px solid {color};">
-        <div class="kpi-top">
-            <span class="kpi-label">{label}</span>
-            <span class="kpi-icon">{icon}</span>
-        </div>
-        <div class="kpi-value">{value}</div>
-        {delta_html}
-    </div>
-    """, unsafe_allow_html=True)
-
-# Configuração da página
-st.set_page_config(
-    page_title="Dashboard BI Medtextil", 
-    layout="wide", 
-    initial_sidebar_state="expanded",
-    page_icon="https://i.imgur.com/gt3rgyL.png"  # Logo Medtextil
-)
-
-# ====================== CONFIGURAÇÃO DO ÍCONE ======================
-# O Streamlit gerencia automaticamente o ícone via page_icon
-# Nenhuma configuração adicional é necessária
-
-# ====================== CSS CUSTOMIZADO - UX/UI PROFISSIONAL ======================
-st.markdown("""
-<style>
-/* ── Importar fonte Inter ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-/* ── Reset e fonte base ── */
-html, body, [class*="css"] {
-    font-family: 'Inter', 'Segoe UI', Roboto, sans-serif !important;
-}
-
-/* ── Fundo cinza muito claro ── */
-.stApp {
-    background-color: var(--background-color) !important;
-}
-
-/* ── Sidebar limpa e profissional ── */
-[data-testid="stSidebar"] {
-    background: var(--secondary-background-color) !important;
-    border-right: 1px solid rgba(128,128,128,0.2) !important;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.04) !important;
-}
-[data-testid="stSidebar"] .stMarkdown h1,
-[data-testid="stSidebar"] .stMarkdown h2,
-[data-testid="stSidebar"] .stMarkdown h3 {
-    color: #4A7BC8 !important;
-}
-
-/* ── Botões de navegação da sidebar estilizados ── */
-[data-testid="stSidebar"] [data-testid="stRadio"] {
-    gap: 6px !important;
-}
-
-[data-testid="stSidebar"] [data-testid="stRadio"] label {
-    background: #F8F9FA !important;
-    border: 1px solid #E9ECEF !important;
-    border-radius: 10px !important;
-    padding: 12px 16px !important;
-    margin: 0 !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    font-size: 0.9rem !important;
-    font-weight: 500 !important;
-    display: block !important;
-    width: 100% !important;
-}
-
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-    background: #EEF2F7 !important;
-    border-color: #4A7BC8 !important;
-    transform: translateX(3px) !important;
-}
-
-/* Botão selecionado na sidebar */
-[data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
-    background: linear-gradient(135deg, #1F4788 0%, #2D5AA0 100%) !important;
-    border-color: #4A7BC8 !important;
-    color: white !important;
-    font-weight: 600 !important;
-    box-shadow: 0 2px 8px rgba(31, 71, 136, 0.2) !important;
-}
-
-/* Esconder radio button padrão */
-[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
-    display: none !important;
-}
-
-/* ── Cards de métricas (st.metric) ── */
-[data-testid="stMetric"] {
-    background: var(--secondary-background-color) !important;
-    border-radius: 12px !important;
-    padding: 18px 20px !important;
-    border-left: 4px solid #1F4788 !important;
-    box-shadow: 0 2px 8px rgba(31, 71, 136, 0.08), 0 1px 3px rgba(0,0,0,0.04) !important;
-    transition: box-shadow 0.2s ease, transform 0.2s ease !important;
-}
-[data-testid="stMetric"]:hover {
-    box-shadow: 0 6px 20px rgba(31, 71, 136, 0.14) !important;
-    transform: translateY(-2px) !important;
-}
-[data-testid="stMetricLabel"] {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    color: #6C757D !important;
-}
-[data-testid="stMetricValue"] {
-    font-size: 1.5rem !important;
-    font-weight: 700 !important;
-    color: #4A7BC8 !important;
-}
-
-/* ── Cor alternada para cards de destaque ── */
-div[data-testid="column"]:nth-child(2) [data-testid="stMetric"] {
-    border-left-color: #2E86AB !important;
-}
-div[data-testid="column"]:nth-child(3) [data-testid="stMetric"] {
-    border-left-color: #28A745 !important;
-}
-div[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {
-    border-left-color: #F4A261 !important;
-}
-
-/* ── Botões modernos ── */
-.stButton > button {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    font-size: 0.875rem !important;
-    padding: 0.5rem 1.25rem !important;
-    border: 1.5px solid #1F4788 !important;
-    color: #4A7BC8 !important;
-    background: var(--secondary-background-color) !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 1px 4px rgba(31, 71, 136, 0.10) !important;
-    letter-spacing: 0.01em !important;
-}
-.stButton > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
-    box-shadow: 0 4px 12px rgba(31, 71, 136, 0.25) !important;
-    transform: translateY(-1px) !important;
-}
-.stButton > button[kind="primary"] {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
-}
-.stButton > button[kind="primary"]:hover {
-    background: #163561 !important;
-    border-color: #163561 !important;
-}
-
-/* ── Botão de Download ── */
-[data-testid="stDownloadButton"] > button {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    background: var(--secondary-background-color) !important;
-    color: #4A7BC8 !important;
-    border: 1.5px solid #1F4788 !important;
-}
-[data-testid="stDownloadButton"] > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* ── Cards de navegação (Home) ── */
-.stButton > button p {
-    font-size: 0.9rem !important;
-}
-
-/* ── Títulos de página ── */
-.stApp h1 {
-    color: #2C5AA0 !important;
-    font-weight: 700 !important;
-    font-size: 1.75rem !important;
-    letter-spacing: -0.02em !important;
-}
-.stApp h2 {
-    color: #4A7BC8 !important;
-    font-weight: 600 !important;
-    font-size: 1.3rem !important;
-}
-.stApp h3 {
-    color: #2E4A7A !important;
-    font-weight: 600 !important;
-}
-
-/* ── Selectbox e inputs ── */
-.stSelectbox > div > div,
-.stTextInput > div > div > input,
-.stDateInput > div > div > input,
-.stNumberInput > div > div > input {
-    border-radius: 8px !important;
-    border-color: #DEE2E6 !important;
-    font-size: 0.9rem !important;
-}
-.stSelectbox > div > div:focus-within,
-.stTextInput > div > div:focus-within {
-    border-color: #4A7BC8 !important;
-    box-shadow: 0 0 0 2px rgba(31, 71, 136, 0.15) !important;
-}
-
-/* ── Tabs ── */
-[data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: var(--secondary-background-color) !important;
-    border-radius: 10px !important;
-    padding: 4px !important;
-    border-bottom: none !important;
-    gap: 4px !important;
-}
-[data-testid="stTabs"] [data-baseweb="tab"] {
-    border-radius: 8px !important;
-    font-weight: 500 !important;
-    font-size: 0.875rem !important;
-    color: #6C757D !important;
-    padding: 6px 16px !important;
-}
-[data-testid="stTabs"] [aria-selected="true"] {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    font-weight: 600 !important;
-}
-
-/* ── Dataframes / tabelas ── */
-[data-testid="stDataFrame"] {
-    border-radius: 10px !important;
-    overflow: hidden !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
-}
-
-/* ── Divisores ── */
-hr {
-    border-color: #E9ECEF !important;
-    margin: 1rem 0 !important;
-}
-
-/* ── Alertas e info boxes ── */
-[data-testid="stAlert"] {
-    border-radius: 10px !important;
-}
-
-/* ── Sidebar logo area ── */
-.sidebar-logo-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 16px 8px 8px 8px;
-    border-bottom: 1px solid #E9ECEF;
-    margin-bottom: 12px;
-}
-.sidebar-user-badge {
-    background: #F0F4FF;
-    border: 1px solid #C5D5F0;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 0.85rem;
-    color: #4A7BC8;
-    font-weight: 600;
-    width: 100%;
-    text-align: center;
-    margin-top: 8px;
-}
-
-/* ── Barra de filtros no topo ── */
-.filter-bar {
-    background: #FFFFFF;
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    border: 1px solid #E9ECEF;
-}
-
-/* ── Cabeçalho da página ── */
+/* ── Migrados do bloco legado (seletores exclusivos preservados) ── */
 .page-header {
     display: flex;
     align-items: center;
     gap: 10px;
     margin-bottom: 4px;
 }
+
 .page-subtitle {
     color: #6C757D;
     font-size: 0.9rem;
@@ -732,11 +717,15 @@ hr {
     margin-top: -4px;
 }
 
-/* ── Radio buttons estilo pill ── */
+.stButton > button p {
+    font-size: 0.9rem !important;
+}
+
 .stRadio > div {
     flex-direction: row !important;
     gap: 8px !important;
 }
+
 .stRadio > div label {
     border-radius: 20px !important;
     padding: 4px 14px !important;
@@ -745,295 +734,9 @@ hr {
     cursor: pointer !important;
     transition: all 0.15s !important;
 }
-.stRadio > div label:has(input:checked) {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-    border-color: #4A7BC8 !important;
-}
 
-/* ── Spinner ── */
 .stSpinner > div {
     border-top-color: #4A7BC8 !important;
-}
-
-/* ── Sidebar navigation radio ── */
-[data-testid="stSidebar"] .stRadio > div {
-    flex-direction: column !important;
-    gap: 4px !important;
-}
-[data-testid="stSidebar"] .stRadio > div label {
-    border-radius: 10px !important;
-    padding: 11px 14px !important;
-    border: none !important;
-    font-size: 0.92rem !important;
-    font-weight: 500 !important;
-    color: #495057 !important;
-    background: transparent !important;
-    width: 100% !important;
-    transition: all 0.15s ease !important;
-    margin-bottom: 2px !important;
-}
-[data-testid="stSidebar"] .stRadio > div label:has(input:checked) {
-    background: linear-gradient(135deg, #F0F4FF, #E4EDFC) !important;
-    color: #4A7BC8 !important;
-    border-left: 4px solid #1F4788 !important;
-    border-radius: 0 10px 10px 0 !important;
-    font-weight: 700 !important;
-    box-shadow: 0 1px 4px rgba(31,71,136,0.10) !important;
-}
-[data-testid="stSidebar"] .stRadio > div label:hover {
-    background: #F4F7FD !important;
-    color: #4A7BC8 !important;
-    transform: translateX(2px) !important;
-}
-
-/* ── Success/warning/error messages ── */
-.stSuccess, .stInfo, .stWarning, .stError {
-    border-radius: 8px !important;
-    font-size: 0.875rem !important;
-}
-
-/* ── Métricas: rótulo uppercase corporativo ── */
-[data-testid="stMetricLabel"] p {
-    text-transform: uppercase !important;
-    font-size: 0.72rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.06em !important;
-    color: #8A96A8 !important;
-}
-[data-testid="stMetricValue"] {
-    font-size: 1.45rem !important;
-    font-weight: 700 !important;
-    color: #2C5AA0 !important;
-}
-
-/* ── Subheaders sem emoji weight ── */
-h2, h3 {
-    font-weight: 600 !important;
-    letter-spacing: -0.01em !important;
-}
-
-/* ── Expander painel de controle ── */
-[data-testid="stExpander"] summary {
-    font-size: 0.82rem !important;
-    font-weight: 600 !important;
-    color: #6C757D !important;
-}
-
-/* ── Captions dos filtros ── */
-.stCaption p {
-    font-size: 0.7rem !important;
-    color: #8A96A8 !important;
-    margin-top: -4px !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.03em !important;
-}
-
-
-/* ══════════════════════════════════════════════════════
-   DARK MODE — sobrescreve cores fixas quando o tema
-   escuro está ativo. Usa prefers-color-scheme E o
-   atributo data-theme que o Streamlit injeta no <body>.
-   ══════════════════════════════════════════════════════ */
-
-/* Detectar dark mode via atributo do Streamlit */
-@media (prefers-color-scheme: dark) {
-    .stApp { background-color: #0E1117 !important; }
-}
-
-/* Streamlit injeta data-theme="dark" no root quando tema escuro ativo */
-[data-theme="dark"] .stApp,
-.stApp[data-theme="dark"] {
-    background-color: #0E1117 !important;
-}
-
-/* Sidebar dark */
-[data-theme="dark"] section[data-testid="stSidebar"],
-[data-theme="dark"] [data-testid="stSidebar"] {
-    background: #1A1D24 !important;
-    border-right-color: #2D3139 !important;
-}
-
-/* Métricas dark */
-[data-theme="dark"] [data-testid="stMetric"] {
-    background: #1A1D24 !important;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.3) !important;
-}
-[data-theme="dark"] [data-testid="stMetricLabel"] p {
-    color: #8A96A8 !important;
-}
-[data-theme="dark"] [data-testid="stMetricValue"] {
-    color: #E8EDF5 !important;
-}
-
-/* Filtros dark */
-[data-theme="dark"] div[style*="background:#F2F5FA"],
-[data-theme="dark"] div[style*="background: #F2F5FA"] {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-}
-
-/* Botões gerais dark */
-[data-theme="dark"] .stButton > button {
-    background: #1A1D24 !important;
-    color: #A8C4E8 !important;
-    border-color: #2D5AA0 !important;
-}
-[data-theme="dark"] .stButton > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* Expander dark */
-[data-theme="dark"] [data-testid="stExpander"] {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-}
-
-/* Dataframes dark */
-[data-theme="dark"] [data-testid="stDataFrame"] {
-    background: #1A1D24 !important;
-}
-
-/* Tabs dark */
-[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: #1A1D24 !important;
-}
-[data-theme="dark"] [data-testid="stTabs"] [data-baseweb="tab"] {
-    color: #8A96A8 !important;
-}
-
-/* Radio sidebar dark */
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {
-    color: #A8B4C4 !important;
-}
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] {
-    background: linear-gradient(90deg,#1A2A45,#1F3560) !important;
-    border-left-color: #4A7BC8 !important;
-}
-[data-theme="dark"] section[data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-    color: #7EB3F7 !important;
-}
-
-/* Breadcrumb e textos de apoio dark */
-[data-theme="dark"] .stMarkdown p {
-    color: #C4CDD9 !important;
-}
-
-/* Inputs dark */
-[data-theme="dark"] .stSelectbox > div > div,
-[data-theme="dark"] .stTextInput > div > div > input,
-[data-theme="dark"] .stDateInput > div > div > input {
-    background: #1A1D24 !important;
-    border-color: #2D3139 !important;
-    color: #E0E6EF !important;
-}
-
-/* Download button dark */
-[data-theme="dark"] [data-testid="stDownloadButton"] > button {
-    background: #1A2A45 !important;
-    color: #7EB3F7 !important;
-    border-color: #2D5AA0 !important;
-}
-[data-theme="dark"] [data-testid="stDownloadButton"] > button:hover {
-    background: #1F4788 !important;
-    color: #FFFFFF !important;
-}
-
-/* Cabeçalho títulos dark */
-[data-theme="dark"] .stApp h1 { color: #E8EDF5 !important; }
-[data-theme="dark"] .stApp h2 { color: #A8C4E8 !important; }
-[data-theme="dark"] .stApp h3 { color: #8AADD4 !important; }
-
-
-/* ── Mobile (≤768px): layout compacto ── */
-@media (max-width: 768px) {
-
-    /* Cards da home: 2 por linha no mobile — seletor correto */
-    div.home-grid > div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        display: flex !important;
-        gap: 6px !important;
-    }
-    div.home-grid > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        width: calc(50% - 3px) !important;
-        min-width: calc(50% - 3px) !important;
-        max-width: calc(50% - 3px) !important;
-        flex: 0 0 calc(50% - 3px) !important;
-        box-sizing: border-box !important;
-    }
-
-    /* Filtros: esconder barra de labels (captions) no mobile */
-    .filter-header-bar { display: none !important; }
-
-    /* Colunas de filtros: empilhar verticalmente no mobile */
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"]) {
-        flex-wrap: wrap !important;
-    }
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stSelectbox"])
-        > div[data-testid="stVerticalBlock"] {
-        width: calc(50% - 4px) !important;
-        min-width: calc(50% - 4px) !important;
-        flex: 0 0 calc(50% - 4px) !important;
-    }
-
-    /* Sidebar: fundo sólido no mobile — cores explícitas */
-    section[data-testid="stSidebar"],
-    section[data-testid="stSidebar"] > div,
-    section[data-testid="stSidebar"] > div:first-child {
-        background-color: #FFFFFF !important;
-        background: #FFFFFF !important;
-    }
-    /* Dark mode sidebar mobile */
-    @media (prefers-color-scheme: dark) {
-        section[data-testid="stSidebar"],
-        section[data-testid="stSidebar"] > div,
-        section[data-testid="stSidebar"] > div:first-child {
-            background-color: #1A1D24 !important;
-            background: #1A1D24 !important;
-        }
-    }
-
-    /* Gráficos: garantir que caibam na tela */
-    div[data-testid="stPlotlyChart"] {
-        overflow-x: auto !important;
-    }
-}
-
-/* ── Expander de filtros discreto ── */
-div[data-testid="stExpander"] details {
-    border: 1px solid rgba(128,128,128,0.15) !important;
-    border-radius: 8px !important;
-    background: transparent !important;
-    margin-bottom: 8px !important;
-}
-div[data-testid="stExpander"] details summary {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    color: #8A96A8 !important;
-    padding: 6px 12px !important;
-}
-div[data-testid="stExpander"] details summary:hover {
-    color: #4A7BC8 !important;
-}
-
-
-/* ── Dark mode via prefers-color-scheme (mais confiável no Streamlit) ── */
-@media (prefers-color-scheme: dark) {
-    .stApp h1, .stApp h2, .stApp h3 { color: #7EB3F7 !important; }
-    [data-testid="stMetricValue"]    { color: #E8EDF5 !important; }
-    [data-testid="stMetricLabel"] p  { color: #8A96A8 !important; }
-    [data-testid="stSidebar"] .stRadio label[aria-checked="true"] p {
-        color: #7EB3F7 !important;
-    }
-    /* Títulos dos módulos (h2 inline) */
-    .stMarkdown h2 { color: #7EB3F7 !important; }
-    /* Texto padrão */
-    .stMarkdown p  { color: #C4CDD9 !important; }
-    /* Cards */
-    [data-testid="stMetric"] { background: var(--secondary-background-color) !important; }
-    /* Breadcrumb */
-    [data-testid="stSidebar"] { background: var(--secondary-background-color) !important; }
 }
 
 </style>
@@ -1042,90 +745,72 @@ div[data-testid="stExpander"] details summary:hover {
 # ====================== CONFIGURAÇÕES GITHUB ======================
 GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
-GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", None) if hasattr(st, "secrets") else None  # Opcional: configure em Settings → Secrets no Streamlit Cloud
+GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
 @st.cache_data(ttl=3600)
 def listar_planilhas_github():
-    """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub (via API REST, sem PyGithub)"""
-    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FOLDER}"
-    headers = {"Accept": "application/vnd.github+json"}
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-
-    planilhas = {
-        'vendas': None,
-        'inadimplencia': None,
-        'vendas_produto': None,
-        'produtos_agrupados': None,
-        'pedidos_pendentes': None,
-        'tabela_ne': None,
-        'contrato': None,
-        'todas': []
-    }
-
+    """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
     try:
-        response = requests.get(api_url, headers=headers, timeout=15)
-
-        if response.status_code == 403 and response.headers.get("X-RateLimit-Remaining") == "0":
-            st.error("⏱️ Limite de requisições do GitHub atingido (rate limit). Configure o GITHUB_TOKEN nos Secrets do Streamlit para aumentar o limite de 60 para 5.000 req/hora.")
-            return planilhas
-
-        if response.status_code == 404:
-            st.error(f"❌ Pasta '{GITHUB_FOLDER}' não encontrada em {GITHUB_REPO}")
-            return planilhas
-
-        response.raise_for_status()
-        contents = response.json()
-
+        if GITHUB_TOKEN:
+            g = Github(GITHUB_TOKEN, timeout=15)
+        else:
+            g = Github(timeout=15)
+        
+        repo = g.get_repo(GITHUB_REPO)
+        # ⭐ BUSCAR NA PASTA 'dados'
+        contents = repo.get_contents(GITHUB_FOLDER)
+        
+        planilhas = {
+            'vendas': None,
+            'inadimplencia': None,
+            'vendas_produto': None,
+            'produtos_agrupados': None,
+            'pedidos_pendentes': None,
+            'tabela_ne': None,
+            'todas': []
+        }
+        
         for content in contents:
-            nome = content.get('name', '')
-            if nome.endswith(('.xlsx', '.xls')):
+            if content.name.endswith(('.xlsx', '.xls')):
                 info = {
-                    'nome': nome,
-                    'url': content.get('download_url'),
-                    'path': content.get('path')
+                    'nome': content.name,
+                    'url': content.download_url,
+                    'path': content.path
                 }
                 planilhas['todas'].append(info)
-
+                
                 # Identificar planilha de vendas
-                if 'CONSULTA_VENDEDORES' in nome.upper():
+                if 'CONSULTA_VENDEDORES' in content.name.upper():
                     planilhas['vendas'] = info
-
+                
                 # Identificar planilha de inadimplência
-                if 'LANCAMENTO A RECEBER' in nome.upper() or 'LANCAMENTO_A_RECEBER' in nome.upper():
+                if 'LANCAMENTO A RECEBER' in content.name.upper() or 'LANCAMENTO_A_RECEBER' in content.name.upper():
                     planilhas['inadimplencia'] = info
-
+                
                 # Identificar planilha de vendas por produto
-                if 'VENDAS POR PRODUTO' in nome.upper() and 'GERAL' in nome.upper():
+                if 'VENDAS POR PRODUTO' in content.name.upper() and 'GERAL' in content.name.upper():
                     planilhas['vendas_produto'] = info
-
+                
                 # Identificar planilha de produtos agrupados
-                if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in nome.upper():
+                if 'PRODUTOS_AGRUPADOS_COMPLETOS_CONCILIADOS' in content.name.upper():
                     planilhas['produtos_agrupados'] = info
-
+                
                 # Identificar planilha de pedidos pendentes
-                if 'PEDIDOSPENDENTES' in nome.upper().replace(' ', '').replace('_', ''):
+                if 'PEDIDOSPENDENTES' in content.name.upper().replace(' ', '').replace('_', ''):
                     planilhas['pedidos_pendentes'] = info
 
                 # Identificar tabela NE
-                if 'TABELA_NE' in nome.upper().replace(' ', '_'):
+                if 'TABELA_NE' in content.name.upper().replace(' ', '_'):
                     planilhas['tabela_ne'] = info
-
-                # Identificar planilha de contratos (Grid Contrato Consulta)
-                if 'CONTRATO' in nome.upper() and 'CONSULTA' in nome.upper():
-                    planilhas['contrato'] = info
-
+        
         if not planilhas['todas']:
             st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
-
+        
         return planilhas
-    except requests.exceptions.Timeout:
-        st.error("⏱️ Timeout ao conectar ao GitHub. Verifique sua conexão ou tente novamente.")
-        return planilhas
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
-        return planilhas
+        return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'todas': []}
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
@@ -1145,71 +830,141 @@ def carregar_planilha_github(url):
         st.error(f"❌ Erro ao processar planilha: {str(e)}")
         return None
 
-# ====================== AUTENTICAÇÃO ======================
-def check_password():
-    """Sistema de autenticação com níveis de acesso"""
-    
-    # 🔐 CONFIGURAÇÃO DE USUÁRIOS E SENHAS
-    USUARIOS = {
-        "admin123": {
-            "tipo": "administrador",
-            "nome": "Administrador",
-            "modulos": ["Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra", "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings", "Performance de Vendedores", "Consulta Clientes"]
-        },
-        "colaborador123": {  # ⬅️ MUDE ESTA SENHA
-            "tipo": "colaborador",
-            "nome": "Colaborador",
-            "modulos": ["Inadimplência", "Histórico", "Pedidos Pendentes", "Consulta Clientes"]
-        }
-    }
-    
-    def password_entered():
-        senha = st.session_state.get("password_input", "")
-        
-        if senha in USUARIOS:
-            st.session_state["password_correct"] = True
-            st.session_state["usuario"] = USUARIOS[senha]
-            st.session_state["senha_usada"] = senha
-        else:
-            st.session_state["password_correct"] = False
-            st.session_state["show_error"] = True
-            if "usuario" in st.session_state:
-                del st.session_state["usuario"]
+# ====================== AUTENTICAÇÃO — SISTEMA DUAL ======================
+# Prioridade 1: Supabase (usuários individuais com e-mail + senha)
+# Prioridade 2: Fallback legado (senhas compartilhadas) — ativo enquanto
+#               o Supabase não estiver configurado ou o usuário não migrar.
 
-    # Tela de login estilizada
-    def render_login(show_error=False):
-        st.markdown("""
-        <div style="max-width:420px;margin:60px auto 0 auto;background:#FFFFFF;border-radius:16px;
-                    padding:40px 36px;box-shadow:0 8px 32px rgba(31,71,136,0.12);border-top:4px solid #1F4788;">
-            <div style="text-align:center;margin-bottom:10px;">
-                <img src="https://i.imgur.com/gt3rgyL.png" height="52"
-                     style="border-radius:8px;" onerror="this.style.display='none'"/>
-            </div>
-            <div style="text-align:center;font-size:1.4rem;font-weight:700;color:#4A7BC8;margin-bottom:4px;">
-                Medtextil BI
-            </div>
-            <div style="text-align:center;font-size:0.85rem;color:#6C757D;margin-bottom:8px;">
-                Dashboard Comercial 2.0
-            </div>
+_MODULOS_ADMIN = [
+    "Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra",
+    "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings",
+    "Performance de Vendedores", "Consulta Clientes",
+    "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos",
+]
+_MODULOS_GESTOR = [
+    "Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra",
+    "Histórico", "Preço Médio", "Pedidos Pendentes", "Rankings",
+    "Performance de Vendedores", "Consulta Clientes",
+    "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos",
+]
+_MODULOS_VENDEDOR = [
+    "Histórico", "Consulta Clientes", "Meus Pedidos",
+]
+_MODULOS_COLABORADOR = [
+    "Inadimplência", "Histórico", "Pedidos Pendentes", "Consulta Clientes",
+]
+
+_PERFIL_MODULOS = {
+    "admin":        _MODULOS_ADMIN,
+    "administrador":_MODULOS_ADMIN,
+    "gestor":       _MODULOS_GESTOR,
+    "vendedor":     _MODULOS_VENDEDOR,
+    "colaborador":  _MODULOS_COLABORADOR,
+}
+
+# Fallback legado — removido quando todos estiverem no Supabase
+_USUARIOS_LEGADO = {
+    "admin123": {
+        "tipo": "administrador", "nome": "Administrador",
+        "modulos": _MODULOS_ADMIN,
+        "id": "legacy-admin", "email": "admin@medtextil.local",
+    },
+    "colaborador123": {
+        "tipo": "colaborador", "nome": "Colaborador",
+        "modulos": _MODULOS_COLABORADOR,
+        "id": "legacy-colab", "email": "colaborador@medtextil.local",
+    },
+}
+
+def _render_tela_login(modo="email", show_error=False, msg_erro=""):
+    """Renderiza tela de login — modo 'email' (Supabase) ou 'senha' (legado)."""
+    st.markdown("""
+    <div style="max-width:420px;margin:60px auto 0 auto;background:#FFFFFF;
+                border-radius:16px;padding:40px 36px;
+                box-shadow:0 8px 32px rgba(31,71,136,0.12);
+                border-top:4px solid #1F4788;">
+        <div style="text-align:center;margin-bottom:10px;">
+            <img src="https://i.imgur.com/gt3rgyL.png" height="52"
+                 style="border-radius:8px;" onerror="this.style.display='none'"/>
         </div>
-        """, unsafe_allow_html=True)
-        col_l, col_c, col_r = st.columns([1, 2, 1])
-        with col_c:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.text_input("🔑 Senha de acesso", type="password", key="password_input", placeholder="Digite sua senha...")
-            if st.button("Entrar →", use_container_width=True, type="primary"):
-                password_entered()
-            if show_error:
-                st.error("Senha incorreta. Verifique e tente novamente.")
+        <div style="text-align:center;font-size:1.4rem;font-weight:700;
+                    color:#4A7BC8;margin-bottom:4px;">Medtextil ERP</div>
+        <div style="text-align:center;font-size:0.85rem;color:#6C757D;
+                    margin-bottom:8px;">Dashboard Comercial 2.0</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    if "password_correct" not in st.session_state:
-        render_login(show_error=False)
-        return False
-    elif not st.session_state["password_correct"]:
-        render_login(show_error=st.session_state.get("show_error", False))
-        return False
-    else:
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    with col_c:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if modo == "email":
+            st.text_input("✉️ E-mail", key="login_email",
+                          placeholder="seu@email.com.br")
+            st.text_input("🔑 Senha", type="password", key="login_senha",
+                          placeholder="Digite sua senha...")
+        else:
+            st.text_input("🔑 Senha de acesso", type="password",
+                          key="password_input",
+                          placeholder="Digite sua senha...")
+        if st.button("Entrar →", use_container_width=True,
+                     type="primary", key="btn_login_enter"):
+            st.session_state["_login_tentativa"] = True
+        if show_error:
+            st.error(msg_erro or "Credenciais inválidas. Tente novamente.")
+
+def check_password():
+    """
+    Sistema de autenticação dual.
+    — Se o Supabase estiver configurado: login com e-mail + senha individual.
+    — Caso contrário: fallback com senha compartilhada (legado).
+    """
+    # Já autenticado
+    if st.session_state.get("password_correct"):
         return True
+
+    usa_supabase = supa_disponivel()
+    tentativa = st.session_state.pop("_login_tentativa", False)
+    show_error = st.session_state.pop("_login_erro", False)
+    msg_erro   = st.session_state.pop("_login_msg", "")
+
+    if usa_supabase:
+        # ── Modo Supabase ─────────────────────────────────────────────────
+        _render_tela_login(modo="email", show_error=show_error, msg_erro=msg_erro)
+        if tentativa:
+            email = st.session_state.get("login_email", "").strip().lower()
+            senha = st.session_state.get("login_senha", "")
+            reg = autenticar_usuario(email, senha)
+            if reg:
+                perfil = reg.get("perfil", "vendedor")
+                st.session_state["password_correct"] = True
+                st.session_state["usuario"] = {
+                    "id":      reg.get("id", ""),
+                    "email":   reg.get("email", email),
+                    "nome":    reg.get("nome", email),
+                    "tipo":    perfil,
+                    "modulos": _PERFIL_MODULOS.get(perfil, _MODULOS_COLABORADOR),
+                }
+                st.rerun()
+            else:
+                st.session_state["_login_erro"] = True
+                st.session_state["_login_msg"]  = "E-mail ou senha incorretos."
+                st.rerun()
+        return False
+
+    else:
+        # ── Modo legado (senha compartilhada) ─────────────────────────────
+        _render_tela_login(modo="senha", show_error=show_error, msg_erro=msg_erro)
+        if tentativa:
+            senha = st.session_state.get("password_input", "")
+            if senha in _USUARIOS_LEGADO:
+                st.session_state["password_correct"] = True
+                st.session_state["usuario"] = _USUARIOS_LEGADO[senha]
+                st.rerun()
+            else:
+                st.session_state["_login_erro"] = True
+                st.session_state["_login_msg"]  = "Senha incorreta."
+                st.rerun()
+        return False
 
 # ====================== PROCESSAMENTO DE DADOS ======================
 def calcular_prazo_historico(data_emissao, data_vencimento_str):
@@ -1265,7 +1020,7 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
                         # Validar prazo razoável (entre 1 e 365 dias)
                         if 1 <= diferenca <= 365:
                             prazos.append(str(diferenca))
-            except:
+            except Exception:
                 # Ignorar datas inválidas silenciosamente
                 continue
         
@@ -1274,7 +1029,7 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
             return '/'.join(prazos)
         else:
             return ''
-    except:
+    except Exception:
         return ''
 
 def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
@@ -1391,7 +1146,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
             elements.append(cabecalho_table)
             elements.append(Spacer(1, 5*mm))
             logo_adicionado = True
-        except:
+        except Exception:
             pass
     
     if not logo_adicionado:
@@ -1581,7 +1336,7 @@ def calcular_comissao(preco_unit, preco_ref):
             return '2,5%'
         else:                 # -3% ou mais abaixo → 2%
             return '2%'
-    except:
+    except Exception:
         return ''
 
 
@@ -1607,7 +1362,7 @@ def aplicar_layout_grafico(fig, height=None):
     fig.update_layout(**layout_kwargs)
     return fig
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def processar_dados(df):
     """Aplica as regras de negócio nos dados"""
     df['Valor_Real'] = df.apply(
@@ -1719,7 +1474,7 @@ def formatar_dataframe_moeda(df, colunas_moeda):
             df_formatado[col] = df_formatado[col].apply(lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00")
     return df_formatado
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def processar_inadimplencia(df):
     """Processa dados de inadimplência"""
     # Padronizar nomes das colunas
@@ -2166,7 +1921,7 @@ if planilhas_disponiveis.get('produtos_agrupados'):
             def normalizar_codigo(val):
                 try:
                     return str(int(float(str(val).strip())))
-                except:
+                except Exception:
                     return str(val).strip()
             df['CodigoProduto'] = df['CodigoProduto'].apply(normalizar_codigo)
             df_ref_preco['CodigoProduto'] = df_ref_preco['CodigoProduto'].apply(normalizar_codigo)
@@ -2182,7 +1937,6 @@ if planilhas_disponiveis.get('produtos_agrupados'):
 else:
     df['PrecoRef'] = None
     df['Comissao'] = ''
-''
 
 # ── Filtros Globais — dentro de expander único ───────────────────────────
 with st.expander("⚙️ Filtros", expanded=False):
@@ -2254,6 +2008,12 @@ _CATEGORIAS_NAV = {
         "Preço Médio",
         "Novo Pedido",
     ],
+    "PEDIDOS ERP": [
+        "Novo Pedido ERP",
+        "Meus Pedidos",
+        "Fila de Aprovação",
+        "Todos os Pedidos",
+    ],
     "RELATÓRIOS E ATENÇÃO": [
         "Pedidos Pendentes",
         "Inadimplência",
@@ -2266,15 +2026,21 @@ _CATEGORIAS_NAV = {
 
 # Alias: label exibido → nome real do módulo no session_state
 _ALIAS_MODULO = {
-    "Novo Pedido":         "__novo_pedido__",
-    "Tabela de Preços":    "Consulta Clientes",
-    "Histórico do Cliente":"__historico_cliente__",
+    "Novo Pedido":          "__novo_pedido__",
+    "Novo Pedido ERP":      "__erp_novo_pedido__",
+    "Meus Pedidos":         "__erp_meus_pedidos__",
+    "Fila de Aprovação":    "__erp_fila_aprovacao__",
+    "Todos os Pedidos":     "__erp_todos_pedidos__",
+    "Tabela de Preços":     "Consulta Clientes",
+    "Histórico do Cliente": "__historico_cliente__",
 }
 _ICONES_NAV = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
     "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
     "Novo Pedido":"📝","Tabela de Preços":"＄","Histórico do Cliente":"◷",
+    "Novo Pedido ERP":"🆕","Meus Pedidos":"📋",
+    "Fila de Aprovação":"⏳","Todos os Pedidos":"🗂️",
 }
 
 if 'menu_option' not in st.session_state:
@@ -2297,12 +2063,8 @@ modulos_visiveis = modulos_permitidos if modulos_permitidos else [
 # CSS unificado já injetado acima — bloco secundário removido.
 # ══════════════════════════════════════════════════════════════════
 
-# ── Sidebar: st.radio com labels com ícone Unicode ────────────────────────
-_ICONES_NAV = {
-    "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
-    "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
-    "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
-}
+# ── Sidebar: ícones por módulo ───────────────────────────────────────────
+# _ICONES_NAV já definido acima com todos os módulos (incluindo Novo Pedido, Tabela de Preços, Histórico do Cliente)
 _ICONES_CARD = {
     "Dashboard":"▦","Positivação":"✓","Inadimplência":"⚠",
     "Clientes sem Compra":"＋","Histórico":"◷","Preço Médio":"＄",
@@ -2327,13 +2089,26 @@ with st.sidebar:
     # ── Navegação categorizada ──────────────────────────────────────────
     _CAT_ICONS = {
         "GESTÃO COMERCIAL":       "💰",
+        "PEDIDOS ERP":            "🛒",
         "RELATÓRIOS E ATENÇÃO":   "📋",
         "CONSULTAS RÁPIDAS":      "🔍",
     }
     # Todos os módulos reais que o usuário tem acesso + aliases sempre visíveis
     _todos_reais = set(modulos_visiveis) | {"Consulta Clientes"}
 
+    # Módulos ERP — só mostrar se Supabase disponível
+    _modulos_erp = {
+        "__erp_novo_pedido__", "__erp_meus_pedidos__",
+        "__erp_fila_aprovacao__", "__erp_todos_pedidos__",
+    }
+    # Perfis que podem ver Fila de Aprovação e Todos os Pedidos
+    _perfis_gestor = {"admin", "administrador", "gestor"}
+    _tipo_atual = usuario.get("tipo", "colaborador")
+
     for _cat_label, _cat_itens in _CATEGORIAS_NAV.items():
+        # Ocultar categoria PEDIDOS ERP se Supabase não configurado
+        if _cat_label == "PEDIDOS ERP" and not supa_disponivel():
+            continue
         _cat_icon = _CAT_ICONS.get(_cat_label, "•")
         st.sidebar.markdown(
             f"""<div style="font-size:0.60rem;font-weight:700;color:#8A96A8;
@@ -2344,10 +2119,17 @@ with st.sidebar:
         for _item in _cat_itens:
             # Resolver módulo real
             _modulo_real = _ALIAS_MODULO.get(_item, _item)
-            # Verificar permissão: Novo Pedido e aliases especiais sempre visíveis
-            _especial = _modulo_real.startswith("__")
-            if not _especial and _modulo_real not in _todos_reais:
-                continue
+            # Controle de visibilidade ERP por perfil
+            if _modulo_real in _modulos_erp:
+                # Fila de Aprovação e Todos os Pedidos: só gestor/admin
+                if _modulo_real in ("__erp_fila_aprovacao__", "__erp_todos_pedidos__"):
+                    if _tipo_atual not in _perfis_gestor:
+                        continue
+            else:
+                # Módulos clássicos: verificar permissão normal
+                _especial = _modulo_real.startswith("__")
+                if not _especial and _modulo_real not in _todos_reais:
+                    continue
             _icone = _ICONES_NAV.get(_item, "•")
             _sel = (st.session_state.menu_option == _modulo_real)
             if st.button(f"{_icone}  {_item}", key=f"nav_{_item.replace(' ','_')}",
@@ -2460,7 +2242,7 @@ with st.sidebar:
                                                     'Vendedor': _rd.get('J', ''),
                                                     'PercEntregue': float(_rd.get('I', 0))
                                                 })
-                                            except:
+                                            except Exception:
                                                 continue
                         _df_pend_sem = pd.DataFrame(_data_p)
                         if len(_df_pend_sem) > 0:
@@ -2468,7 +2250,7 @@ with st.sidebar:
                         # Filtrar: apenas com quantidade pendente (independente do mês)
                         if len(_df_pend_sem) > 0 and 'QtdPendente' in _df_pend_sem.columns:
                             _df_pend_sem = _df_pend_sem[_df_pend_sem['QtdPendente'] > 0]
-                    except:
+                    except Exception:
                         _df_pend_sem = None
 
                 # ── Faturados: início do mês vigente até hoje ──
@@ -2612,7 +2394,7 @@ if st.session_state.menu_option == '__home__':
             (notas_unicas['DataEmissao'].dt.month == _mes) &
             (notas_unicas['DataEmissao'].dt.year  == _ano)
         ]['Valor_Real'].sum()
-    except:
+    except Exception:
         vendas_mes = 0
 
     try:
@@ -2625,7 +2407,7 @@ if st.session_state.menu_option == '__home__':
             (notas_unicas['DataEmissao'].dt.year  == _ano_anterior)
         ]['TotalProduto'].sum()
         _info_dash_ano_ant = f" · R$ {vendas_mes_ano_ant:,.0f} em {_meses_pt[_mes]}/{_ano_anterior}"
-    except:
+    except Exception:
         _info_dash_ano_ant = ""
 
     # Positivação
@@ -2637,7 +2419,7 @@ if st.session_state.menu_option == '__home__':
             (df['DataEmissao'].dt.year==_ano)
         ]['CPF_CNPJ'].nunique()
         _info_posit   = f"{_base_total:,} na base · {_posit_mes:,} positivados no mês"
-    except:
+    except Exception:
         _info_posit   = "Base de clientes"
 
     # Inadimplência — carregada separadamente, usar placeholder se não disponível
@@ -2653,7 +2435,7 @@ if st.session_state.menu_option == '__home__':
                 _info_inad = "Dados não disponíveis"
         else:
             _info_inad = "Planilha não configurada"
-    except:
+    except Exception:
         _info_inad = "Títulos em aberto e atrasos"
 
     # Clientes sem compra há mais de 6 meses
@@ -2661,7 +2443,7 @@ if st.session_state.menu_option == '__home__':
         _ultima_compra = df[df['TipoMov']=='NF Venda'].groupby('CPF_CNPJ')['DataEmissao'].max()
         _sem_6m = (_ultima_compra < _6m).sum()
         _info_churn = f"{_sem_6m:,} clientes sem compra há +6 meses"
-    except:
+    except Exception:
         _info_churn = "Clientes inativos"
 
     # Pedidos pendentes — carregado separadamente
@@ -2695,11 +2477,11 @@ if st.session_state.menu_option == '__home__':
                                 _qe=float(_rd.get('H',0)); _qp=_qc-_qe
                                 _val_pend+=_qp*_vu
                                 if hasattr(_cur_cli,'__len__'): _cli_pend.add(_cur_cli)
-                            except: pass
+                            except Exception: pass
             _info_pend = f"R$ {_val_pend:,.0f} · {len(_cli_pend):,} clientes"
         else:
             _info_pend = "Aguardando faturamento"
-    except:
+    except Exception:
         _info_pend = "Aguardando faturamento"
 
     # Rankings — top 3 vendedores DO MÊS ATUAL
@@ -2712,7 +2494,7 @@ if st.session_state.menu_option == '__home__':
         ]
         _rank = vendas_mes_atual.groupby('Vendedor')['TotalProduto'].sum().nlargest(3)
         _info_rank = " · ".join([f"{v.split()[0]} R${r:,.0f}" for v,r in _rank.items()])
-    except:
+    except Exception:
         _info_rank = "Top vendedores e clientes"
 
     cards_data = [
@@ -2858,7 +2640,7 @@ if menu not in modulos_permitidos and menu not in _MENU_ESPECIAIS:
     </div>""", unsafe_allow_html=True)
     st.stop()
 # ====================== DASHBOARD ======================
-if menu == "Dashboard":
+elif menu == "Dashboard":
     # KPIs principais com cards customizados
     col1, col2, col3, col4 = st.columns(4)
     
@@ -3046,7 +2828,8 @@ elif menu == "Positivação":
             "📥 Exportar Positivação por Vendedor",
             to_excel(relatorio_positivacao),
             "positivacao_vendedor.xlsx",
-            "application/vnd.ms-excel"
+            "application/vnd.ms-excel",
+            key="dl_posit_vendedor"
         )
         
         st.markdown("---")
@@ -3080,7 +2863,8 @@ elif menu == "Positivação":
                 f"📥 Exportar Clientes - {vendedor_selecionado}",
                 to_excel(clientes_vendedor),
                 f"clientes_{vendedor_selecionado}.xlsx",
-                "application/vnd.ms-excel"
+                "application/vnd.ms-excel",
+                key="dl_posit_cliente_det"
             )
     
     with tab2:
@@ -3143,7 +2927,8 @@ elif menu == "Positivação":
             "📥 Exportar Positivação por Estado",
             to_excel(relatorio_estado),
             "positivacao_estado.xlsx",
-            "application/vnd.ms-excel"
+            "application/vnd.ms-excel",
+            key="dl_posit_estado"
         )
 
     with tab3_fat:
@@ -3335,11 +3120,11 @@ elif menu == "Positivação":
                         if _fp_kc and _fp_gc:
                             def _fp_norm(v):
                                 try: return str(int(float(str(v).strip())))
-                                except: return str(v).strip()
+                                except Exception: return str(v).strip()
                             _fp_gram_df['_K'] = _fp_gram_df[_fp_kc].apply(_fp_norm)
                             _fp_gmap = _fp_gram_df.drop_duplicates(subset='_K').set_index('_K')[_fp_gc]
                             _prod_agrup['Gramatura'] = _prod_agrup['CodigoProduto'].apply(_fp_norm).map(_fp_gmap).fillna('')
-                except:
+                except Exception:
                     _prod_agrup['Gramatura'] = ''
 
             _col_fp_m1, _col_fp_m2, _col_fp_m3 = st.columns(3)
@@ -3539,7 +3324,8 @@ elif menu == "Inadimplência":
             "📥 Exportar Relatório Completo",
             to_excel(df_detalhado),
             _nome_inad,
-            "application/vnd.ms-excel"
+            "application/vnd.ms-excel",
+            key="dl_inad_completo"
         )
 
 # ====================== CLIENTES SEM COMPRA ======================
@@ -3797,7 +3583,8 @@ elif menu == "Clientes sem Compra":
         "📥 Exportar Clientes sem Compra",
         to_excel(clientes_sem_compra[_display_cols]),
         "clientes_sem_compra.xlsx",
-        "application/vnd.ms-excel"
+        "application/vnd.ms-excel",
+        key="dl_churn_excel"
     )
 
 # ====================== HISTÓRICO ======================
@@ -4208,7 +3995,7 @@ elif menu == "Histórico":
                     codigos = [''] + sorted(df_produtos_pedido['ID_COD'].dropna().astype(str).unique().tolist())
                     codigo_selecionado = st.selectbox("Código do Produto", codigos, key="cod_prod_pedido")
                 else:
-                    codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido")
+                    codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_txt")
             else:
                 busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido")
                 codigo_selecionado = None
@@ -4635,7 +4422,7 @@ elif menu == "__novo_pedido__":
                 codigos_lista = [''] + sorted(df_produtos_pedido['ID_COD'].dropna().astype(str).unique().tolist())
                 codigo_selecionado = st.selectbox("Código do Produto", codigos_lista, key="cod_prod_pedido_np")
             else:
-                codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_np")
+                codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_np_txt")
         else:
             busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido_np")
             codigo_selecionado = None
@@ -4819,11 +4606,11 @@ elif menu == "__historico_cliente__":
                         if _hg_kcol and _hg_gcol:
                             def _hg_norm2(v):
                                 try: return str(int(float(str(v).strip())))
-                                except: return str(v).strip()
+                                except Exception: return str(v).strip()
                             _hg_plan['_K'] = _hg_plan[_hg_kcol].apply(_hg_norm2)
                             _hg_map = _hg_plan.drop_duplicates(subset='_K').set_index('_K')[_hg_gcol]
                             historico_cli['Gramatura'] = historico_cli['CodigoProduto'].apply(_hg_norm2).map(_hg_map).fillna('')
-                except:
+                except Exception:
                     pass
 
             _hc1, _hc2, _hc3, _hc4 = st.columns(4)
@@ -4863,16 +4650,6 @@ elif menu == "__historico_cliente__":
                     st.dataframe(_dd.sort_values('DataEmissao', ascending=False), use_container_width=True, height=350)
                 else:
                     st.info("Sem devoluções registradas")
-
-            st.markdown("---")
-            _hc_export = historico_cli[_colunas_disp].sort_values('DataEmissao', ascending=False).copy()
-            st.download_button(
-                "📥 Exportar Histórico Excel",
-                to_excel(_hc_export),
-                f"historico_cliente_{cliente_info.get('CPF_CNPJ','cliente')}.xlsx",
-                "application/vnd.ms-excel",
-                key="dl_hist_cliente_excel"
-            )
         else:
             st.warning("Nenhum cliente encontrado com esse critério.")
     else:
@@ -5155,7 +4932,7 @@ elif menu == "Pedidos Pendentes":
                                         try:
                                             # Data vem como número (days since 1900)
                                             dt_emissao = pd.Timestamp('1899-12-30') + pd.Timedelta(days=float(dt_emissao_val))
-                                        except:
+                                        except Exception:
                                             dt_emissao = None
                                     else:
                                         dt_emissao = None
@@ -5175,7 +4952,7 @@ elif menu == "Pedidos Pendentes":
                                         'Vendedor': row_data.get('J', ''),  # Corrigido: J é o vendedor
                                         'PercEntregue': float(row_data.get('I', 0))  # Corrigido: I é % entregue
                                     })
-                                except:
+                                except Exception:
                                     continue
             
             df_pendentes = pd.DataFrame(data)
@@ -5401,7 +5178,7 @@ elif menu == "Pedidos Pendentes":
         def _norm_cod(v):
             try:
                 return str(int(float(str(v).strip())))
-            except:
+            except Exception:
                 return str(v).strip()
 
         _df_prod_prev['ID_COD_N'] = _df_prod_prev['ID_COD'].apply(_norm_cod)
@@ -5435,7 +5212,7 @@ elif menu == "Pedidos Pendentes":
                     if cx <= 0 or pd.isna(cx):
                         return None
                     return math.ceil(float(row['QtdPendente']) / cx)
-                except:
+                except Exception:
                     return None
 
             _df_merge['CAIXAS_NECESSARIAS'] = _df_merge.apply(_calc_caixas, axis=1)
@@ -5452,7 +5229,7 @@ elif menu == "Pedidos Pendentes":
                     if row['CAPACIDADE_DIA'] is None or row['CAIXAS_NECESSARIAS'] is None:
                         return None
                     return math.ceil(row['CAIXAS_NECESSARIAS'] / row['CAPACIDADE_DIA'])
-                except:
+                except Exception:
                     return None
 
             _df_merge['DIAS_PRODUCAO'] = _df_merge.apply(_calc_dias, axis=1)
@@ -5476,7 +5253,7 @@ elif menu == "Pedidos Pendentes":
             def _calc_valor(row):
                 try:
                     return float(row['QtdPendente']) * float(row[_preco_col])
-                except:
+                except Exception:
                     return 0.0
 
             _df_merge['VALOR_TOTAL'] = _df_merge.apply(_calc_valor, axis=1)
@@ -5640,7 +5417,7 @@ elif menu == "Pedidos Pendentes":
                             v = float(row[cx_col])
                             if v > 0:
                                 cx_lookup[k] = v
-                        except:
+                        except Exception:
                             pass
 
                 # Gramatura lookup (mesma lógica do módulo consulta tabela)
@@ -5653,7 +5430,7 @@ elif menu == "Pedidos Pendentes":
                             gv = str(row.get(gram_col_g, '')).strip()
                             if gv and gv.lower() not in ('nan', '0', '0.0', ''):
                                 gram_lookup[k] = gv
-                        except:
+                        except Exception:
                             pass
 
                 COLUNAS_BASE = [
@@ -5701,7 +5478,7 @@ elif menu == "Pedidos Pendentes":
                     cod = str(row.get('CodigoProduto', '')).strip()
                     try:
                         cod_n = str(int(float(cod)))
-                    except:
+                    except Exception:
                         cod_n = cod
 
                     cx = cx_lookup.get(cod_n, 0)
@@ -5722,7 +5499,7 @@ elif menu == "Pedidos Pendentes":
                             dias_pend = (hoje - _dt_p2.date()).days if pd.notna(_dt_p2) else ''
                         else:
                             dias_pend = ''
-                    except:
+                    except Exception:
                         dias_pend = ''
 
                     # % entregue
@@ -5738,7 +5515,7 @@ elif menu == "Pedidos Pendentes":
                             _dt_parsed = pd.to_datetime(_dt_raw, dayfirst=True, errors='coerce')
                             if pd.notna(_dt_parsed):
                                 dt_em_fmt = _dt_parsed.strftime('%d/%m/%y')
-                    except:
+                    except Exception:
                         pass
 
                     # Gramatura pelo código
@@ -6151,7 +5928,7 @@ elif menu == "Pedidos Pendentes":
                     if _gc and _gg:
                         for _, _gr in _df_gram.iterrows():
                             try:    _gk = str(int(float(str(_gr[_gc]).strip())))
-                            except: _gk = str(_gr[_gc]).strip()
+                            except Exception: _gk = str(_gr[_gc]).strip()
                             _gv = str(_gr[_gg]).strip()
                             if _gv and _gv.lower() not in ('nan','0','0.0',''):
                                 _gram_map[_gk] = _gv
@@ -6245,7 +6022,7 @@ elif menu == "Pedidos Pendentes":
                             _dt_conc_p = pd.to_datetime(_dt_conc, dayfirst=True, errors='coerce')
                             if pd.notna(_dt_conc_p):
                                 _dt_conc = _dt_conc_p.strftime('%d/%m/%y')
-                        except:
+                        except Exception:
                             pass
 
                     _rows_conc.append({
@@ -6393,10 +6170,10 @@ elif menu == "Performance de Vendedores":
                 for p in str(val).split('/'):
                     try:
                         prazos.append(int(p))
-                    except:
+                    except Exception:
                         pass
             return sum(prazos) / len(prazos) if prazos else 0
-        except:
+        except Exception:
             return 0
 
     _pv_prazo = _pv_prazo_medio(_pv_vendas)
@@ -6411,7 +6188,7 @@ elif menu == "Performance de Vendedores":
             if len(vals) == 0:
                 return "N/D"
             return f"{vals.mean():.2f}%"
-        except:
+        except Exception:
             return "N/D"
 
     _pv_comissao = _pv_comissao_media(_pv_vendas)
@@ -6460,80 +6237,7 @@ elif menu == "Performance de Vendedores":
                 _pv_inad_vendedor = _pv_inad_vend_df['ValorLiquido'].sum() if 'ValorLiquido' in _pv_inad_vend_df.columns else 0
                 _pv_inad_total    = _pv_df_inad['ValorLiquido'].sum() if 'ValorLiquido' in _pv_df_inad.columns else 0
                 _pv_perc_inad     = (_pv_inad_vendedor / _pv_fat_bruto * 100) if _pv_fat_bruto > 0 else 0
-        except:
-            pass
-
-    # ── Contratos por Vendedor (Realizado x Contratado) ─────────────────────
-    _pv_df_contrato = None
-    _pv_contrato_valor = 0
-    _pv_contrato_total = 0
-    _pv_perc_realizacao = 0.0
-    _pv_contrato_por_vendedor = None
-    _pv_col_data_contrato = None
-    _pv_ctr_filtrado = None
-    if planilhas_disponiveis.get('contrato'):
-        try:
-            _pv_raw_contrato = carregar_planilha_github(planilhas_disponiveis['contrato']['url'])
-            if _pv_raw_contrato is not None:
-                _pv_df_contrato = _pv_raw_contrato.copy()
-                _pv_df_contrato.columns = [str(c).strip() for c in _pv_df_contrato.columns]
-
-                # Normalizar nome do vendedor (coluna "Funcionário") para casar com "Vendedor"
-                if 'Funcionário' in _pv_df_contrato.columns:
-                    _pv_df_contrato['_FuncNorm'] = _pv_df_contrato['Funcionário'].astype(str).str.strip().str.upper()
-                else:
-                    _pv_df_contrato['_FuncNorm'] = ''
-
-                if 'Total Contrato (R$)' in _pv_df_contrato.columns:
-                    _pv_df_contrato['_ValorContrato'] = pd.to_numeric(
-                        _pv_df_contrato['Total Contrato (R$)'], errors='coerce'
-                    ).fillna(0)
-                else:
-                    _pv_df_contrato['_ValorContrato'] = 0
-
-                # Filtro de período — coluna de data é "Dt.Emissão"
-                if 'Dt.Emissão' in _pv_df_contrato.columns:
-                    _pv_col_data_contrato = 'Dt.Emissão'
-                else:
-                    _pv_col_data_contrato = next(
-                        (c for c in _pv_df_contrato.columns if 'data' in c.lower() or 'emiss' in c.lower()), None
-                    )
-                _pv_ctr_filtrado = _pv_df_contrato.copy()
-                if _pv_col_data_contrato:
-                    _pv_ctr_filtrado[_pv_col_data_contrato] = pd.to_datetime(
-                        _pv_ctr_filtrado[_pv_col_data_contrato], errors='coerce'
-                    )
-                    if _pv_periodo == "Mês Atual":
-                        _pv_ctr_filtrado = _pv_ctr_filtrado[
-                            (_pv_ctr_filtrado[_pv_col_data_contrato].dt.month == _pv_now.month) &
-                            (_pv_ctr_filtrado[_pv_col_data_contrato].dt.year == _pv_now.year)
-                        ]
-                    elif _pv_periodo == "Últimos 3 Meses":
-                        _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] >= (_pv_now - pd.DateOffset(months=3))]
-                    elif _pv_periodo == "Últimos 6 Meses":
-                        _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] >= (_pv_now - pd.DateOffset(months=6))]
-                    elif _pv_periodo == "Ano Atual":
-                        _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato].dt.year == _pv_now.year]
-                    elif _pv_periodo == "Personalizado":
-                        if _pv_data_ini:
-                            _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] >= pd.to_datetime(_pv_data_ini)]
-                        if _pv_data_fim:
-                            _pv_ctr_filtrado = _pv_ctr_filtrado[_pv_ctr_filtrado[_pv_col_data_contrato] <= pd.to_datetime(_pv_data_fim)]
-
-                _pv_contrato_total = _pv_ctr_filtrado['_ValorContrato'].sum()
-
-                if _pv_vendedor != 'Todos':
-                    _pv_contrato_valor = _pv_ctr_filtrado[
-                        _pv_ctr_filtrado['_FuncNorm'] == str(_pv_vendedor).strip().upper()
-                    ]['_ValorContrato'].sum()
-                else:
-                    _pv_contrato_valor = _pv_contrato_total
-
-                _pv_perc_realizacao = (_pv_fat_bruto / _pv_contrato_valor * 100) if _pv_contrato_valor > 0 else 0
-
-                _pv_contrato_por_vendedor = _pv_ctr_filtrado.groupby('_FuncNorm')['_ValorContrato'].sum().reset_index()
-                _pv_contrato_por_vendedor.columns = ['_FuncNorm', 'ValorContratado']
-        except:
+        except Exception:
             pass
 
     # Card de inadimplência
@@ -6551,25 +6255,6 @@ elif menu == "Performance de Vendedores":
             f"{_pv_perc_inad:.1f}%",
             icon="📊",
             color="#EF4444" if _pv_perc_inad > 5 else "#F4A261"
-        )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Card de Contrato x Faturado
-    _pv_kc1, _pv_kc2 = st.columns(2)
-    with _pv_kc1:
-        render_kpi_card(
-            "Valor Contratado",
-            f"R$ {_pv_contrato_valor:,.0f}",
-            icon="📄",
-            color="#1F4788"
-        )
-    with _pv_kc2:
-        render_kpi_card(
-            "% Realização (Faturado / Contratado)",
-            f"{_pv_perc_realizacao:.1f}%",
-            icon="🎯",
-            color="#28A745" if _pv_perc_realizacao >= 100 else "#F4A261"
         )
 
     st.markdown("---")
@@ -6619,7 +6304,7 @@ elif menu == "Performance de Vendedores":
                     for p in str(val).split('/'):
                         try:
                             prazos.append(int(p))
-                        except:
+                        except Exception:
                             pass
                 return sum(prazos) / len(prazos) if prazos else 0
             _pv_prazo_vend = _pv_vendas.groupby('Vendedor')['PrazoHistorico'].apply(_prazo_med_vend).reset_index()
@@ -6627,21 +6312,6 @@ elif menu == "Performance de Vendedores":
             _pv_comp = _pv_comp.merge(_pv_prazo_vend, on='Vendedor', how='left')
         else:
             _pv_comp['PrazoMedio'] = 0
-
-        # Valor Contratado e % Realização por vendedor
-        if _pv_contrato_por_vendedor is not None:
-            _pv_comp['_VendNorm'] = _pv_comp['Vendedor'].astype(str).str.strip().str.upper()
-            _pv_comp = _pv_comp.merge(
-                _pv_contrato_por_vendedor, left_on='_VendNorm', right_on='_FuncNorm', how='left'
-            ).drop(columns=['_FuncNorm', '_VendNorm'])
-            _pv_comp['ValorContratado'] = _pv_comp['ValorContratado'].fillna(0)
-        else:
-            _pv_comp['ValorContratado'] = 0
-
-        _pv_comp['PercRealizacao'] = _pv_comp.apply(
-            lambda r: (r['FaturamentoBruto'] / r['ValorContratado'] * 100) if r['ValorContratado'] > 0 else 0,
-            axis=1
-        )
 
         _pv_comp = _pv_comp.sort_values('FaturamentoBruto', ascending=False)
 
@@ -6721,8 +6391,6 @@ elif menu == "Performance de Vendedores":
             lambda x: f"{x:.2f}%" if pd.notnull(x) else "N/D"
         )
         _pv_comp_disp['PrazoMedio']       = _pv_comp_disp['PrazoMedio'].apply(lambda x: f"{x:.0f} dias")
-        _pv_comp_disp['ValorContratado']  = _pv_comp_disp['ValorContratado'].apply(formatar_moeda)
-        _pv_comp_disp['PercRealizacao']   = _pv_comp_disp['PercRealizacao'].apply(lambda x: f"{x:.1f}%")
         _pv_comp_disp.insert(0, 'Posição', range(1, len(_pv_comp_disp) + 1))
         _pv_comp_disp = _pv_comp_disp.rename(columns={
             'FaturamentoBruto': 'Faturamento',
@@ -6732,8 +6400,6 @@ elif menu == "Performance de Vendedores":
             'VolumeTotal':      'Volume',
             'ComissaoMedia':    'Comissão Média',
             'PrazoMedio':       'Prazo Médio',
-            'ValorContratado':  'Valor Contratado',
-            'PercRealizacao':   '% Realização',
         })
         st.dataframe(_pv_comp_disp, use_container_width=True)
 
@@ -6745,9 +6411,7 @@ elif menu == "Performance de Vendedores":
             _regiao_sel=None,
             _periodo_sel=None,
             _now_ts=None,
-            _df_full=None,
-            _ctr_data=None,
-            _ctr_col_data=None
+            _df_full=None
         ):
             # Usar dados passados explicitamente para evitar problema de closure/cache
             _pv_vendas   = _vendas_periodo
@@ -6757,8 +6421,6 @@ elif menu == "Performance de Vendedores":
             _pv_periodo  = _periodo_sel
             _pv_now      = _now_ts
             df           = _df_full
-            _pv_ctr      = _ctr_data
-            _pv_ctr_col  = _ctr_col_data
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 wb = writer.book
@@ -6818,8 +6480,7 @@ elif menu == "Performance de Vendedores":
 
                 cols1 = ['Posição', 'Vendedor', 'Faturamento Bruto (R$)', 'Nº Notas',
                          'Clientes Atendidos', 'Ticket Médio (R$)', 'Volume Total (un)',
-                         'Comissão Média (%)', 'Prazo Médio (dias)',
-                         'Valor Contratado (R$)', '% Realização']
+                         'Comissão Média (%)', 'Prazo Médio (dias)']
 
                 ws1.set_row(0, 22)
                 ws1.write(0, 0, 'COMPARATIVO DE PERFORMANCE DE VENDEDORES', wb.add_format({
@@ -6835,7 +6496,7 @@ elif menu == "Performance de Vendedores":
                 for c_idx, col in enumerate(cols1):
                     ws1.write(3, c_idx, col, fmt_header)
 
-                col_widths1 = [8, 28, 20, 10, 18, 18, 16, 16, 16, 20, 14]
+                col_widths1 = [8, 28, 20, 10, 18, 18, 16, 16, 16]
                 for i, w in enumerate(col_widths1):
                     ws1.set_column(i, i, w)
 
@@ -6851,9 +6512,6 @@ elif menu == "Performance de Vendedores":
                     _com_val = row.get('ComissaoMedia')
                     ws1.write(row_num, 7, (_com_val/100) if pd.notnull(_com_val) else '', fmt_perc)
                     ws1.write(row_num, 8, row.get('PrazoMedio', 0), fmt_num)
-                    ws1.write(row_num, 9, row.get('ValorContratado', 0), fmt_moeda)
-                    _real_val = row.get('PercRealizacao')
-                    ws1.write(row_num, 10, (_real_val/100) if pd.notnull(_real_val) else '', fmt_perc)
 
                 # Linha de total
                 _tot_row = len(_comp_export) + 4
@@ -6866,11 +6524,6 @@ elif menu == "Performance de Vendedores":
                 ws1.write(_tot_row, 6, _comp_export['VolumeTotal'].sum(), fmt_text_bold)
                 ws1.write(_tot_row, 7, '', fmt_text_bold)
                 ws1.write(_tot_row, 8, '', fmt_text_bold)
-                _tot_contratado = _comp_export.get('ValorContratado', pd.Series(dtype=float)).sum()
-                ws1.write(_tot_row, 9, _tot_contratado, fmt_moeda_bold)
-                _tot_fat_geral = _comp_export['FaturamentoBruto'].sum()
-                _perc_real_geral = (_tot_fat_geral / _tot_contratado) if _tot_contratado > 0 else ''
-                ws1.write(_tot_row, 10, _perc_real_geral, fmt_perc_bold)
 
                 # ══════════════════════════════════════════════════════════
                 # ABA 2 — Mês a Mês
@@ -7321,108 +6974,6 @@ elif menu == "Performance de Vendedores":
                 ws4.write(_cs_tot_row, 5, _cs_result['ValorHistorico'].sum(), fmt_moeda_bold)
                 ws4.write(_cs_tot_row, 6, '', fmt_text_bold)
 
-                # ══════════════════════════════════════════════════════════
-                # ABA 5 — Vendas / Contratos (detalhamento)
-                # ══════════════════════════════════════════════════════════
-                ws5 = wb.add_worksheet('Vendas - Contratos')
-                writer.sheets['Vendas - Contratos'] = ws5
-
-                if _pv_ctr is not None and len(_pv_ctr) > 0:
-                    _vc_df = _pv_ctr.copy()
-
-                    # Aplicar filtro de vendedor do módulo
-                    if _pv_vendedor != 'Todos':
-                        _vc_df = _vc_df[_vc_df['_FuncNorm'] == str(_pv_vendedor).strip().upper()]
-
-                    # Aplicar filtro de região do módulo, se a planilha tiver essa informação
-                    _vc_col_regiao = next(
-                        (c for c in _vc_df.columns if c.strip().lower() in
-                         ('estado', 'uf', 'regiao', 'região')), None
-                    )
-                    if _pv_regiao != 'Todas' and _vc_col_regiao:
-                        _vc_df = _vc_df[_vc_df[_vc_col_regiao] == _pv_regiao]
-
-                    # Ordenar pela data de emissão (mais recente primeiro), se disponível
-                    if _pv_ctr_col and _pv_ctr_col in _vc_df.columns:
-                        _vc_df = _vc_df.sort_values(_pv_ctr_col, ascending=False)
-
-                    # Montar colunas de saída: prioridade para Cliente / Data / Valor / Vendedor,
-                    # seguidas de todas as demais colunas originais da planilha (produtos, etc.)
-                    _vc_col_cliente = next(
-                        (c for c in _vc_df.columns if c.strip().lower() in
-                         ('nome cliente', 'cliente', 'razão social', 'razao social')), None
-                    )
-                    _vc_prioritarias = [c for c in [_vc_col_cliente, 'Funcionário', _pv_ctr_col,
-                                                     'Total Contrato (R$)'] if c and c in _vc_df.columns]
-                    _vc_demais = [c for c in _vc_df.columns
-                                  if c not in _vc_prioritarias and not c.startswith('_')]
-                    _vc_cols_final = _vc_prioritarias + _vc_demais
-
-                    _vc_export = _vc_df[_vc_cols_final].copy()
-
-                    _vc_rename = {}
-                    if _vc_col_cliente:
-                        _vc_rename[_vc_col_cliente] = 'Cliente'
-                    if 'Funcionário' in _vc_export.columns:
-                        _vc_rename['Funcionário'] = 'Vendedor'
-                    if _pv_ctr_col and _pv_ctr_col in _vc_export.columns:
-                        _vc_rename[_pv_ctr_col] = 'Data'
-                    if 'Total Contrato (R$)' in _vc_export.columns:
-                        _vc_rename['Total Contrato (R$)'] = 'Valor Contrato (R$)'
-                    _vc_export = _vc_export.rename(columns=_vc_rename)
-
-                    # Título e cabeçalho informativo
-                    _vc_ncols = len(_vc_export.columns)
-                    ws5.merge_range(0, 0, 0, max(_vc_ncols - 1, 1),
-                        'VENDAS / CONTRATOS — DETALHAMENTO',
-                        wb.add_format({'bold': True, 'font_color': '#1F4788', 'font_size': 13,
-                                       'font_name': 'Calibri', 'align': 'center'}))
-                    ws5.write(1, 0,
-                        f'Vendedor: {_pv_vendedor}  |  Região: {_pv_regiao}  |  Período: {_pv_periodo}  |  '
-                        f'Total: {len(_vc_export)} contratos  |  Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
-                        wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9, 'font_name': 'Calibri'}))
-
-                    # Cabeçalho das colunas
-                    ws5.set_row(3, 20)
-                    for c_idx, col in enumerate(_vc_export.columns):
-                        ws5.write(3, c_idx, str(col), fmt_header)
-                        _w = 30 if col in ('Cliente',) else (18 if col in ('Data', 'Vendedor', 'Valor Contrato (R$)') else 20)
-                        ws5.set_column(c_idx, c_idx, _w)
-
-                    # Dados — detecta tipo de cada coluna para formatar adequadamente
-                    fmt_vc_data = wb.add_format({'border': 1, 'font_name': 'Calibri', 'font_size': 9,
-                                                  'num_format': 'DD/MM/YYYY'})
-                    for r_idx, (_, row) in enumerate(_vc_export.iterrows(), start=4):
-                        for c_idx, col in enumerate(_vc_export.columns):
-                            _val = row[col]
-                            if col == 'Data':
-                                _dt = pd.to_datetime(_val, errors='coerce')
-                                ws5.write(r_idx, c_idx, _dt.to_pydatetime() if pd.notnull(_dt) else '', fmt_vc_data)
-                            elif col == 'Valor Contrato (R$)':
-                                ws5.write(r_idx, c_idx, float(_val) if pd.notnull(_val) else 0, fmt_moeda)
-                            elif isinstance(_val, (int, float)) and pd.notnull(_val):
-                                ws5.write(r_idx, c_idx, _val, fmt_num)
-                            else:
-                                ws5.write(r_idx, c_idx, str(_val) if pd.notnull(_val) else '', fmt_text)
-
-                    # Linha de total
-                    _vc_tot_row = len(_vc_export) + 4
-                    _vc_val_col_idx = list(_vc_export.columns).index('Valor Contrato (R$)') \
-                        if 'Valor Contrato (R$)' in _vc_export.columns else None
-                    ws5.write(_vc_tot_row, 0, '', fmt_text_bold)
-                    if _vc_val_col_idx is not None and _vc_val_col_idx > 0:
-                        ws5.merge_range(_vc_tot_row, 1, _vc_tot_row, _vc_val_col_idx - 1,
-                                         f'TOTAL — {len(_vc_export)} contratos', fmt_text_bold)
-                        ws5.write(_vc_tot_row, _vc_val_col_idx,
-                                  _vc_export['Valor Contrato (R$)'].sum(), fmt_moeda_bold)
-                    else:
-                        ws5.merge_range(_vc_tot_row, 0, _vc_tot_row, max(_vc_ncols - 1, 1),
-                                         f'TOTAL — {len(_vc_export)} contratos', fmt_text_bold)
-                else:
-                    ws5.write(0, 0, 'Nenhum dado de contrato disponível para o período/filtro selecionado.',
-                               wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 10,
-                                              'font_name': 'Calibri'}))
-
             output.seek(0)
             return output.getvalue()
 
@@ -7433,12 +6984,10 @@ elif menu == "Performance de Vendedores":
             _regiao_sel=_pv_regiao,
             _periodo_sel=_pv_periodo,
             _now_ts=_pv_now,
-            _df_full=df,
-            _ctr_data=_pv_ctr_filtrado,
-            _ctr_col_data=_pv_col_data_contrato
+            _df_full=df
         )
         st.download_button(
-            "📥 Exportar Comparativo (Excel) — 5 abas",
+            "📥 Exportar Comparativo (Excel) — 4 abas",
             _excel_bytes,
             f"performance_vendedores_{_pv_now.strftime('%Y%m%d_%H%M')}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -8090,27 +7639,6 @@ elif menu == "Performance de Vendedores":
                 # Clientes reativados
                 _reat_v = _reativados_vend(_vend)
 
-                # Contratado x Faturado (mês de referência)
-                _contrato_v2 = 0.0
-                if _pv_df_contrato is not None:
-                    try:
-                        _ctr_mes_v2 = _pv_df_contrato.copy()
-                        if _pv_col_data_contrato and _pv_col_data_contrato in _ctr_mes_v2.columns:
-                            _ctr_mes_v2[_pv_col_data_contrato] = pd.to_datetime(
-                                _ctr_mes_v2[_pv_col_data_contrato], errors='coerce'
-                            )
-                            _ctr_mes_v2 = _ctr_mes_v2[
-                                (_ctr_mes_v2[_pv_col_data_contrato].dt.month == _mes_card) &
-                                (_ctr_mes_v2[_pv_col_data_contrato].dt.year == _ano_card)
-                            ]
-                        _contrato_v2 = _ctr_mes_v2[
-                            _ctr_mes_v2['_FuncNorm'] == str(_vend).strip().upper()
-                        ]['_ValorContrato'].sum()
-                    except:
-                        _contrato_v2 = 0.0
-                _perc_real_ctr2 = (_fat_r / _contrato_v2 * 100) if _contrato_v2 > 0 else 0
-                _real_cor2 = "#28A745" if _perc_real_ctr2 >= 100 else ("#F4A261" if _perc_real_ctr2 >= 70 else "#EF4444")
-
                 _cor      = "#28A745" if _perc_m >= 100 else ("#F4A261" if _perc_m >= 70 else "#EF4444")
                 _barra    = min(int(_perc_m), 100)
                 _sinal    = "✅" if _perc_m >= 100 else ("⚠️" if _perc_m >= 70 else "🔴")
@@ -8183,23 +7711,6 @@ elif menu == "Performance de Vendedores":
                     f'<div style="font-size:0.68rem;color:#6C757D;">% posit.</div></div>'
 
                     f'</div></div>'
-
-                    # Contratado x Faturado
-                    f'<div style="background:#F8FAFF;border-radius:8px;padding:8px 6px;border:1px solid #EEF3FC;margin-top:8px;">'
-                    f'<div style="font-size:0.72rem;color:#6C757D;text-align:center;margin-bottom:6px;font-weight:600;">CONTRATO x FATURADO {_label_mes_card}</div>'
-                    f'<div style="display:flex;justify-content:space-around;align-items:center;">'
-
-                    f'<div style="text-align:center;">'
-                    f'<div style="font-size:1.0rem;font-weight:700;color:#1F4788;">R$ {_contrato_v2:,.0f}</div>'
-                    f'<div style="font-size:0.68rem;color:#6C757D;">Contratado</div></div>'
-
-                    f'<div style="font-size:1.2rem;color:#CDD4E0;">|</div>'
-
-                    f'<div style="text-align:center;">'
-                    f'<div style="font-size:1.15rem;font-weight:700;color:{_real_cor2};">{_perc_real_ctr2:.1f}%</div>'
-                    f'<div style="font-size:0.68rem;color:#6C757D;">% Realização</div></div>'
-
-                    f'</div></div>'
                     f'</div>'
                 )
                 with _ci2:
@@ -8233,7 +7744,7 @@ elif menu == "Performance de Vendedores":
             try:
                 _logo_resp = _req_img.get(_logo_url, timeout=5)
                 _logo_pil  = _PilImg.open(_io_img.BytesIO(_logo_resp.content)).convert("RGBA")
-            except:
+            except Exception:
                 _logo_pil = None
 
             # Paleta Medtextil
@@ -8310,26 +7821,6 @@ elif menu == "Performance de Vendedores":
                 _cresc_a = ((_fat_r - _fat_aa) / _fat_aa * 100) if _fat_aa > 0 else 0
                 _reat_v  = _reativados_vend(vendedor)
 
-                # Contratado x Faturado (mês de referência)
-                _contrato_v = 0.0
-                if _pv_df_contrato is not None:
-                    try:
-                        _ctr_mes_v = _pv_df_contrato.copy()
-                        if _pv_col_data_contrato and _pv_col_data_contrato in _ctr_mes_v.columns:
-                            _ctr_mes_v[_pv_col_data_contrato] = pd.to_datetime(
-                                _ctr_mes_v[_pv_col_data_contrato], errors='coerce'
-                            )
-                            _ctr_mes_v = _ctr_mes_v[
-                                (_ctr_mes_v[_pv_col_data_contrato].dt.month == _mes_card) &
-                                (_ctr_mes_v[_pv_col_data_contrato].dt.year == _ano_card)
-                            ]
-                        _contrato_v = _ctr_mes_v[
-                            _ctr_mes_v['_FuncNorm'] == str(vendedor).strip().upper()
-                        ]['_ValorContrato'].sum()
-                    except:
-                        _contrato_v = 0.0
-                _perc_real_ctr = (_fat_r / _contrato_v * 100) if _contrato_v > 0 else 0
-
                 # Meta próximo mês
                 _meta_prox, _meta_prox_lbl = _meta_proximo_mes(vendedor)
                 _mes_prox_nm = _meses_pt[(_mes_card % 12) + 1]
@@ -8355,7 +7846,7 @@ elif menu == "Performance de Vendedores":
                     _lr2 = _req2.get(f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_FOLDER}/logo.png", timeout=5)
                     _logo_b64 = _b64.b64encode(_lr2.content).decode()
                     _logo_tag = f'<img src="data:image/png;base64,{_logo_b64}" style="height:90px;margin-bottom:4px;">'
-                except:
+                except Exception:
                     _logo_tag = '<div style="font-size:48px;font-weight:900;color:#0D234B;">MEDTEXTIL</div>'
 
                 _html = f"""<!DOCTYPE html>
@@ -8566,32 +8057,6 @@ elif menu == "Performance de Vendedores":
     </div>
   </div>
 
-  <!-- ROW 3: Contratado | % Realização -->
-  <div class="grid">
-    <div class="card">
-      <div class="card-top">
-        <div class="card-icon">$</div>
-        <div class="card-label">VALOR CONTRATADO</div>
-      </div>
-      <div class="card-body">
-        <div class="card-val">R$ {_contrato_v:,.0f}</div>
-        <div class="card-sub">no mês de referência</div>
-      </div>
-      <div class="card-dot"></div>
-    </div>
-    <div class="card">
-      <div class="card-top">
-        <div class="card-icon">%</div>
-        <div class="card-label">% REALIZAÇÃO</div>
-      </div>
-      <div class="card-body">
-        <div class="card-val {'green' if _perc_real_ctr>=100 else ('orange' if _perc_real_ctr>=70 else 'red')}">{_perc_real_ctr:.1f}%</div>
-        <div class="card-sub">Faturado / Contratado</div>
-      </div>
-      <div class="card-dot"></div>
-    </div>
-  </div>
-
   <!-- META PRÓXIMO MÊS -->
   <div class="prox-box">
     <div class="card-icon" style="width:70px;height:70px;font-size:34px;">M</div>
@@ -8731,26 +8196,6 @@ elif menu == "Performance de Vendedores":
                 _cresc_m = ((_fat_r - _fat_mes_ant) / _fat_mes_ant * 100) if _fat_mes_ant > 0 else 0
                 _cresc_a = ((_fat_r - _base_meta) / _base_meta * 100) if _base_meta > 0 else 0
 
-                # Contratado x Faturado (mês de referência)
-                _contrato_v3 = 0.0
-                if _pv_df_contrato is not None:
-                    try:
-                        _ctr_mes_v3 = _pv_df_contrato.copy()
-                        if _pv_col_data_contrato and _pv_col_data_contrato in _ctr_mes_v3.columns:
-                            _ctr_mes_v3[_pv_col_data_contrato] = pd.to_datetime(
-                                _ctr_mes_v3[_pv_col_data_contrato], errors='coerce'
-                            )
-                            _ctr_mes_v3 = _ctr_mes_v3[
-                                (_ctr_mes_v3[_pv_col_data_contrato].dt.month == _mes_card) &
-                                (_ctr_mes_v3[_pv_col_data_contrato].dt.year == _ano_card)
-                            ]
-                        _contrato_v3 = _ctr_mes_v3[
-                            _ctr_mes_v3['_FuncNorm'] == str(_vend).strip().upper()
-                        ]['_ValorContrato'].sum()
-                    except:
-                        _contrato_v3 = 0.0
-                _perc_real_ctr3 = (_fat_r / _contrato_v3 * 100) if _contrato_v3 > 0 else 0
-
                 # Clientes sem compra há 60 dias (base do vendedor)
                 _corte60 = _pv_now2 - pd.Timedelta(days=60)
                 _ult_cli = _df_nf_hist[_df_nf_hist["Vendedor"] == _vend].groupby("CPF_CNPJ")["DataEmissao"].max()
@@ -8776,9 +8221,6 @@ elif menu == "Performance de Vendedores":
                     ["Meta atingida (%)", f"{_perc_m:.1f}%"],
                     [f"Crescimento vs {_mes_nome_det.get(_mes_ant2,'')[:3]}/{_ano_ant2}", f"{_cresc_m:+.1f}%"],
                     [f"Crescimento vs {_mes_nome_det.get(_mes_meta,'')[:3]}/{_ano_meta}", f"{_cresc_a:+.1f}%"],
-                    ["", ""],
-                    ["Valor Contratado (mês)", f"R$ {_contrato_v3:,.2f}"],
-                    ["% Realização (Faturado / Contratado)", f"{_perc_real_ctr3:.1f}%"],
                     ["", ""],
                     ["Base total de clientes", str(_base_v)],
                     ["Positivados no mês", str(_posit_v)],
@@ -8829,7 +8271,7 @@ elif menu == "Performance de Vendedores":
                             try:
                                 _ws.cell(_ri3, _ci3, float(_vl))
                                 _ws.cell(_ri3, _ci3).number_format = "R$ #,##0.00"
-                            except: pass
+                            except Exception: pass
 
                 for _ci3, _lg in enumerate([12, 30, 35, 10, 14], 1):
                     _ws.column_dimensions[get_column_letter(_ci3)].width = _lg
@@ -8886,7 +8328,8 @@ elif menu == "Rankings":
             "📥 Exportar Ranking Vendedores",
             to_excel(ranking_vendedores),
             "ranking_vendedores.xlsx",
-            "application/vnd.ms-excel"
+            "application/vnd.ms-excel",
+            key="dl_rank_vendedores"
         )
     
     with tab2:
@@ -8923,7 +8366,8 @@ elif menu == "Rankings":
             "📥 Exportar Ranking Clientes",
             to_excel(ranking_clientes),
             f"ranking_top{top_n}_clientes.xlsx",
-            "application/vnd.ms-excel"
+            "application/vnd.ms-excel",
+            key="dl_rank_clientes"
         )
 
 
@@ -8933,7 +8377,7 @@ elif menu == "Consulta Clientes":
 
     # ── Percentuais adicionais por estado ────────────────────────────────
     _PERC_ESTADO = {
-        'AC': 10, 'RR': 10, 'RO': 10, 'AP': 10,
+        'AC': 6, 'RR': 6, 'RO': 6, 'AP': 6,
         'DF': 5, 'GO': 5,
         'MT': 5, 'MS': 5, 'TO': 5, 'AM': 5,
         'PA': 8,
@@ -8943,7 +8387,7 @@ elif menu == "Consulta Clientes":
     }
     _ESTADOS_OPCOES = [
         'Selecione o Estado',
-        'AC (10%)', 'RR (10%)', 'RO (10%)', 'AP (10%)',
+        'AC (6%)', 'RR (6%)', 'RO (6%)', 'AP (6%)',
         'DF (5%)', 'GO (5%)',
         'MT (5%)', 'MS (5%)', 'TO (5%)', 'AM (5%)',
         'PA (8%)',
@@ -8952,7 +8396,7 @@ elif menu == "Consulta Clientes":
         'PR - Venda Direta (35%)',
     ]
     _ESTADO_KEY_MAP = {
-        'AC (10%)': ('AC', 10), 'RR (10%)': ('RR', 10), 'RO (10%)': ('RO', 10), 'AP (10%)': ('AP', 10),
+        'AC (6%)': ('AC', 6), 'RR (6%)': ('RR', 6), 'RO (6%)': ('RO', 6), 'AP (6%)': ('AP', 6),
         'DF (5%)': ('DF', 5), 'GO (5%)': ('GO', 5),
         'MT (5%)': ('MT', 5), 'MS (5%)': ('MS', 5), 'TO (5%)': ('TO', 5), 'AM (5%)': ('AM', 5),
         'PA (8%)': ('PA', 8),
@@ -9002,7 +8446,7 @@ elif menu == "Consulta Clientes":
                                 _df_tabela = _df_tabela.dropna(how='all')
                                 st.success(f"✅ Usando: Tabela NE (skiprows={skip})")
                                 break
-                    except:
+                    except Exception:
                         continue
             except Exception as e:
                 st.warning(f"Erro ao carregar tabela NE: {e}")
@@ -9102,7 +8546,7 @@ elif menu == "Consulta Clientes":
         # Preço base da tabela
         try:
             _preco_base = float(_prod_row.get(_preco_col, 0))
-        except:
+        except Exception:
             _preco_base = 0.0
 
         # Tabela 3% comissão = preco_base * (1 + perc_adicional/100)
@@ -9175,6 +8619,942 @@ elif menu == "Consulta Clientes":
             st.warning(f"Produto {_cod_sel} não encontrado na tabela.")
         else:
             st.info("Selecione um código de produto para consultar os preços.")
+
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║               ERP — MÓDULO DE PEDIDOS (MVP v1.0)                   ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+# ── Helpers visuais compartilhados pelos módulos ERP ─────────────────────
+
+def _erp_badge(status):
+    """Retorna HTML do badge colorido para cada status."""
+    cfg = {
+        "rascunho":      ("#F1F5F9", "#64748B", "📝 Rascunho"),
+        "devolvido":     ("#FFF7ED", "#C2410C", "↩️ Devolvido"),
+        "enviado":       ("#EFF6FF", "#1D4ED8", "📤 Aguard. Aprovação"),
+        "aprovado":      ("#F0FDF4", "#15803D", "✅ Aprovado"),
+        "em_separacao":  ("#FFF7ED", "#C2410C", "📦 Em Separação"),
+        "faturado":      ("#14532D", "#FFFFFF", "🧾 Faturado"),
+        "cancelado":     ("#FEF2F2", "#B91C1C", "❌ Cancelado"),
+    }
+    bg, cor, label = cfg.get(status, ("#F1F5F9", "#64748B", status.title()))
+    return (f'<span style="background:{bg};color:{cor};padding:3px 10px;'
+            f'border-radius:12px;font-size:0.78rem;font-weight:600;">'
+            f'{label}</span>')
+
+def _erp_kpi(col, label, valor, cor="#1F4788"):
+    """KPI card compacto para os painéis ERP."""
+    with col:
+        st.markdown(
+            f'<div style="background:#F8FAFC;border-left:3px solid {cor};'
+            f'border-radius:8px;padding:10px 14px;margin-bottom:8px;">'
+            f'<div style="font-size:0.72rem;color:#6C757D;">{label}</div>'
+            f'<div style="font-size:1.15rem;font-weight:700;color:{cor};">{valor}</div>'
+            f'</div>', unsafe_allow_html=True
+        )
+
+def _erp_aviso_sem_supabase():
+    st.warning(
+        "⚙️ **Módulo ERP não configurado.**\n\n"
+        "Para ativar o controle de pedidos, configure as credenciais do Supabase "
+        "em `.streamlit/secrets.toml`:\n\n"
+        "```toml\n[supabase]\nurl = \"https://XXXX.supabase.co\"\n"
+        "key = \"eyJ...\"\n```\n\n"
+        "Consulte a documentação do projeto para criar as tabelas necessárias."
+    )
+
+# ── Dados do usuário atual (disponíveis em todos os módulos ERP) ─────────
+_erp_usuario    = st.session_state.get("usuario", {})
+_erp_user_id    = _erp_usuario.get("id", "")
+_erp_user_nome  = _erp_usuario.get("nome", "Usuário")
+_erp_user_tipo  = _erp_usuario.get("tipo", "colaborador")
+_erp_is_gestor  = _erp_user_tipo in ("admin", "administrador", "gestor")
+
+# ══════════════════════════════════════════════════════════════════════════
+# MÓDULO ERP 1 — NOVO PEDIDO ERP
+# ══════════════════════════════════════════════════════════════════════════
+elif menu == "__erp_novo_pedido__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;'
+                'font-size:1.35rem;">🆕 Novo Pedido</h2>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#6C757D;font-size:0.88rem;margin-bottom:16px;">'
+                'Crie um pedido persistente no ERP.</p>', unsafe_allow_html=True)
+
+    if not supa_disponivel():
+        _erp_aviso_sem_supabase()
+    else:
+        # ── Inicializar estado do pedido ──────────────────────────────────
+        if "erp_itens" not in st.session_state:
+            st.session_state.erp_itens = []
+        if "erp_pedido_id" not in st.session_state:
+            st.session_state.erp_pedido_id = None
+        if "erp_numero" not in st.session_state:
+            st.session_state.erp_numero = ""
+
+        # Mostrar número se já salvo
+        if st.session_state.erp_numero:
+            st.info(f"📋 Pedido **{st.session_state.erp_numero}** — Rascunho em edição")
+
+        # ── Seção A: Dados do Cliente ─────────────────────────────────────
+        st.markdown("### 👤 Cliente")
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            _clientes_lista = sorted(df["RazaoSocial"].dropna().unique().tolist())
+            _cli_sel = st.selectbox("Cliente", [""] + _clientes_lista,
+                                    key="erp_cliente_sel")
+        _dc = {}
+        if _cli_sel:
+            _row = df[df["RazaoSocial"] == _cli_sel].iloc[0]
+            _dc = {
+                "razao_social": _row.get("RazaoSocial", ""),
+                "cpf_cnpj":     _row.get("CPF_CNPJ", ""),
+                "cidade":       _row.get("Cidade", ""),
+                "estado":       _row.get("Estado", ""),
+                "vendedor":     _row.get("Vendedor", ""),
+            }
+            # Verificar inadimplência
+            if planilhas_disponiveis.get("inadimplencia"):
+                _df_inad_check = carregar_planilha_github(
+                    planilhas_disponiveis["inadimplencia"]["url"])
+                if _df_inad_check is not None:
+                    _df_inad_check.columns = _df_inad_check.columns.str.upper()
+                    _cnpj_col = next(
+                        (c for c in _df_inad_check.columns
+                         if "CPF" in c or "CNPJ" in c or "DOCUM" in c), None)
+                    if _cnpj_col and _dc.get("cpf_cnpj"):
+                        _inad_cli = _df_inad_check[
+                            _df_inad_check[_cnpj_col].astype(str).str.strip()
+                            == str(_dc["cpf_cnpj"]).strip()
+                        ]
+                        if not _inad_cli.empty:
+                            st.warning(
+                                f"⚠️ **Cliente com títulos em aberto** — "
+                                f"{len(_inad_cli)} título(s) encontrado(s). "
+                                "Verifique antes de enviar o pedido."
+                            )
+        with _c2:
+            _repr = st.text_input("Representante",
+                                  value=_dc.get("vendedor", _erp_user_nome),
+                                  key="erp_repr")
+        _c3, _c4, _c5 = st.columns(3)
+        with _c3:
+            _cnpj  = st.text_input("CNPJ", value=_dc.get("cpf_cnpj", ""),
+                                   key="erp_cnpj")
+        with _c4:
+            _ie    = st.text_input("Inscrição Estadual", key="erp_ie")
+        with _c5:
+            _fone  = st.text_input("Telefone", key="erp_fone")
+        _c6, _c7 = st.columns(2)
+        with _c6:
+            _email = st.text_input("E-mail NF-e", key="erp_email")
+        with _c7:
+            _end   = st.text_input(
+                "Endereço",
+                value=f"{_dc.get('cidade','')}/{_dc.get('estado','')}" if _dc else "",
+                key="erp_end")
+        _obs_cli = st.text_area("Observação do cliente", key="erp_obs_cli",
+                                height=70)
+        st.markdown("---")
+
+        # ── Seção B: Dados do Pedido ──────────────────────────────────────
+        st.markdown("### 📋 Pedido")
+        _p1, _p2, _p3, _p4 = st.columns(4)
+        with _p1:
+            _tab_preco = st.text_input("Tabela de Preço", key="erp_tab_preco")
+        with _p2:
+            _frete = st.selectbox("Tipo de Frete", ["CIF", "FOB"],
+                                  key="erp_frete")
+        with _p3:
+            _data_venda = st.date_input("Data da Venda",
+                                        value=pd.Timestamp.now(),
+                                        key="erp_data_venda")
+        with _p4:
+            _cond_pag = st.text_input("Condições de Pagamento",
+                                      key="erp_cond_pag")
+        st.markdown("---")
+
+        # ── Seção C: Itens ────────────────────────────────────────────────
+        st.markdown("### 🛒 Adicionar Produto")
+        _df_prod = None
+        if planilhas_disponiveis.get("produtos_agrupados"):
+            _df_prod = carregar_planilha_github(
+                planilhas_disponiveis["produtos_agrupados"]["url"])
+            if _df_prod is not None:
+                _df_prod.columns = _df_prod.columns.str.upper()
+
+        _pa, _pb, _pc, _pd = st.columns([2, 1, 1, 1])
+        with _pa:
+            _busca_tipo = st.radio("Buscar por:", ["Código", "Descrição"],
+                                   horizontal=True, key="erp_busca_tipo")
+            if _busca_tipo == "Código" and _df_prod is not None:
+                _cods = [""] + sorted(
+                    _df_prod["ID_COD"].dropna().astype(str).unique().tolist())
+                _cod_sel_erp = st.selectbox("Código", _cods,
+                                            key="erp_cod_sel")
+            elif _busca_tipo == "Código":
+                _cod_sel_erp = st.text_input("Código", key="erp_cod_txt")
+            else:
+                _desc_busca = st.text_input("Descrição", key="erp_desc_busca")
+                _cod_sel_erp = ""
+
+        _prod_info = {}
+        if _df_prod is not None:
+            if _busca_tipo == "Código" and _cod_sel_erp:
+                _mask = _df_prod["ID_COD"].astype(str) == str(_cod_sel_erp)
+                if _mask.any():
+                    _pr = _df_prod[_mask].iloc[0]
+                    _prod_info = {
+                        "codigo":    str(_pr.get("ID_COD", "")),
+                        "descricao": str(_pr.get("NOME_PRODUTO",
+                                        _pr.get("DESCRICAO",
+                                        _pr.get("PRODUTO", "")))),
+                        "peso":      str(_pr.get("GRAMATURA", "")),
+                        "cx_embarque": str(_pr.get("CX_EMB", "")),
+                        "preco_ref": float(_pr.get("PRECO", 0) or 0),
+                    }
+            elif _busca_tipo == "Descrição" and _desc_busca:
+                _mask = _df_prod.apply(
+                    lambda r: _desc_busca.upper() in str(r).upper(), axis=1)
+                if _mask.any():
+                    _pr = _df_prod[_mask].iloc[0]
+                    _prod_info = {
+                        "codigo":    str(_pr.get("ID_COD", "")),
+                        "descricao": str(_pr.get("NOME_PRODUTO",
+                                        _pr.get("DESCRICAO",
+                                        _pr.get("PRODUTO", "")))),
+                        "peso":      str(_pr.get("GRAMATURA", "")),
+                        "cx_embarque": str(_pr.get("CX_EMB", "")),
+                        "preco_ref": float(_pr.get("PRECO", 0) or 0),
+                    }
+
+        with _pb:
+            _qtd_erp = st.number_input("Quantidade", min_value=1, value=1,
+                                       step=1, key="erp_qtd")
+        with _pc:
+            _preco_ref_erp = _prod_info.get("preco_ref", 0.0)
+            # Sugerir último preço praticado com o cliente
+            _preco_hist = 0.0
+            if _cli_sel and _prod_info.get("codigo"):
+                _mask_hist = (
+                    (df["RazaoSocial"] == _cli_sel) &
+                    (df["CodigoProduto"].astype(str) == str(_prod_info["codigo"]))
+                )
+                if _mask_hist.any():
+                    _preco_hist = float(
+                        df[_mask_hist]["PrecoUnit"].dropna().iloc[-1])
+            _val_sug = _preco_hist if _preco_hist > 0 else _preco_ref_erp
+            _vunit_erp = st.number_input("Valor Unit. (R$)",
+                                         min_value=0.0,
+                                         value=round(_val_sug, 2),
+                                         step=0.01, key="erp_vunit",
+                                         format="%.2f")
+            # Alerta de preço abaixo da referência
+            if _preco_ref_erp > 0 and _vunit_erp < _preco_ref_erp:
+                _perc_desc = ((_preco_ref_erp - _vunit_erp) / _preco_ref_erp) * 100
+                st.caption(f"⚠️ {_perc_desc:.1f}% abaixo da tabela")
+        with _pd:
+            _comiss_erp = calcular_comissao(_vunit_erp, _preco_ref_erp) \
+                          if _preco_ref_erp > 0 else "—"
+            st.markdown(f"**Comissão**<br>{_comiss_erp}",
+                        unsafe_allow_html=True)
+
+        if st.button("➕ Adicionar Item", key="erp_add_item",
+                     use_container_width=True):
+            if not _prod_info:
+                st.error("Selecione um produto antes de adicionar.")
+            elif _vunit_erp <= 0:
+                st.error("Valor unitário deve ser maior que zero.")
+            else:
+                _alerta_preco = (
+                    _preco_ref_erp > 0 and _vunit_erp < _preco_ref_erp)
+                st.session_state.erp_itens.append({
+                    "codigo":           _prod_info.get("codigo", ""),
+                    "descricao":        _prod_info.get("descricao", ""),
+                    "peso":             _prod_info.get("peso", ""),
+                    "cx_embarque":      _prod_info.get("cx_embarque", ""),
+                    "quantidade":       int(_qtd_erp),
+                    "valor_unit":       round(float(_vunit_erp), 2),
+                    "preco_ref":        round(_preco_ref_erp, 2),
+                    "preco_historico":  round(_preco_hist, 2),
+                    "comissao":         _comiss_erp,
+                    "total":            round(float(_vunit_erp) * int(_qtd_erp), 2),
+                    "alerta_preco_baixo": _alerta_preco,
+                })
+                st.rerun()
+
+        # ── Tabela de itens adicionados ───────────────────────────────────
+        if st.session_state.erp_itens:
+            st.markdown("#### Itens do Pedido")
+            _df_itens_erp = pd.DataFrame(st.session_state.erp_itens)
+            _df_show = _df_itens_erp[[
+                "codigo", "descricao", "peso", "quantidade",
+                "valor_unit", "preco_ref", "comissao", "total"
+            ]].copy()
+            _df_show.columns = [
+                "Código", "Produto", "Gramatura", "Qtde",
+                "Valor Unit.", "Preço Ref.", "Comissão", "Total"
+            ]
+            st.dataframe(_df_show, use_container_width=True, hide_index=True)
+
+            _tot_erp = _df_itens_erp["total"].sum()
+            _m1, _m2, _m3 = st.columns(3)
+            with _m1:
+                st.metric("Itens", len(st.session_state.erp_itens))
+            with _m2:
+                st.metric("Total do Pedido", f"R$ {_tot_erp:,.2f}")
+            with _m3:
+                _n_alertas = sum(
+                    1 for i in st.session_state.erp_itens
+                    if i.get("alerta_preco_baixo"))
+                if _n_alertas:
+                    st.metric("⚠️ Itens c/ desconto", _n_alertas)
+
+            _obs_ped = st.text_area("Observação do Pedido",
+                                    key="erp_obs_ped", height=80)
+
+            _btn1, _btn2, _btn3 = st.columns(3)
+
+            # Montar dicts para salvar
+            def _montar_dados_cliente_erp():
+                return {
+                    "razao_social": _cli_sel,
+                    "cpf_cnpj":     _cnpj,
+                    "ie":           _ie,
+                    "cidade":       _dc.get("cidade", ""),
+                    "estado":       _dc.get("estado", ""),
+                    "telefone":     _fone,
+                    "email":        _email,
+                    "endereco":     _end,
+                    "representante":_repr,
+                    "obs_cliente":  _obs_cli,
+                }
+
+            def _montar_dados_pedido_erp():
+                return {
+                    "numero":         st.session_state.erp_numero,
+                    "tabela_preco":   _tab_preco,
+                    "tipo_frete":     _frete,
+                    "data_venda":     str(_data_venda),
+                    "cond_pagto":     _cond_pag,
+                    "estado_comissao": _dc.get("estado", ""),
+                }
+
+            with _btn1:
+                if st.button("💾 Salvar Rascunho", use_container_width=True,
+                             key="erp_salvar_rascunho"):
+                    if not _cli_sel:
+                        st.error("Selecione um cliente.")
+                    else:
+                        with st.spinner("Salvando..."):
+                            _pid, _num = salvar_pedido(
+                                _montar_dados_cliente_erp(),
+                                _montar_dados_pedido_erp(),
+                                st.session_state.erp_itens,
+                                _obs_ped,
+                                status="rascunho",
+                                usuario_id=_erp_user_id,
+                                usuario_nome=_erp_user_nome,
+                                pedido_id=st.session_state.erp_pedido_id,
+                            )
+                        if _pid:
+                            st.session_state.erp_pedido_id = _pid
+                            st.session_state.erp_numero    = _num
+                            st.success(
+                                f"✅ Rascunho salvo — **{_num}**")
+                        else:
+                            st.error(
+                                "❌ Erro ao salvar. Verifique a conexão "
+                                "com o Supabase.")
+
+            with _btn2:
+                if st.button("📤 Enviar para Aprovação",
+                             use_container_width=True,
+                             type="primary",
+                             key="erp_enviar_aprovacao"):
+                    if not _cli_sel:
+                        st.error("Selecione um cliente.")
+                    elif not st.session_state.erp_itens:
+                        st.error("Adicione ao menos um item.")
+                    else:
+                        _confirmar = True
+                        if _n_alertas > 0:
+                            st.warning(
+                                f"⚠️ {_n_alertas} item(s) com preço abaixo "
+                                "da tabela. Confirme o envio abaixo.")
+                            _confirmar = st.checkbox(
+                                "Confirmo o envio com preços abaixo da tabela",
+                                key="erp_confirma_envio")
+                        if _confirmar:
+                            with st.spinner("Enviando..."):
+                                _pid, _num = salvar_pedido(
+                                    _montar_dados_cliente_erp(),
+                                    _montar_dados_pedido_erp(),
+                                    st.session_state.erp_itens,
+                                    _obs_ped,
+                                    status="enviado",
+                                    usuario_id=_erp_user_id,
+                                    usuario_nome=_erp_user_nome,
+                                    pedido_id=st.session_state.erp_pedido_id,
+                                )
+                            if _pid:
+                                st.session_state.erp_pedido_id = None
+                                st.session_state.erp_numero    = ""
+                                st.session_state.erp_itens     = []
+                                st.success(
+                                    f"✅ Pedido **{_num}** enviado para "
+                                    "aprovação!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Erro ao enviar o pedido.")
+
+            with _btn3:
+                if st.button("🗑️ Limpar", use_container_width=True,
+                             key="erp_limpar"):
+                    st.session_state.erp_itens     = []
+                    st.session_state.erp_pedido_id = None
+                    st.session_state.erp_numero    = ""
+                    st.rerun()
+        else:
+            st.info("Nenhum item adicionado ainda.")
+
+# ══════════════════════════════════════════════════════════════════════════
+# MÓDULO ERP 2 — MEUS PEDIDOS
+# ══════════════════════════════════════════════════════════════════════════
+elif menu == "__erp_meus_pedidos__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;'
+                'font-size:1.35rem;">📋 Meus Pedidos</h2>', unsafe_allow_html=True)
+
+    if not supa_disponivel():
+        _erp_aviso_sem_supabase()
+    else:
+        # Filtros
+        _fc1, _fc2, _fc3 = st.columns(3)
+        with _fc1:
+            _status_filtro_mp = st.selectbox(
+                "Status", ["Todos", "rascunho", "enviado", "aprovado",
+                           "em_separacao", "faturado", "cancelado"],
+                key="erp_mp_status")
+        with _fc2:
+            _cli_filtro_mp = st.text_input("Cliente (busca)", key="erp_mp_cli")
+        with _fc3:
+            _periodo_mp = st.selectbox(
+                "Período", ["Todos", "Últimos 7 dias", "Últimos 30 dias",
+                            "Últimos 90 dias"],
+                key="erp_mp_periodo")
+
+        # Buscar pedidos
+        _filtros_mp = {}
+        if not _erp_is_gestor:
+            _filtros_mp["criado_por_id"] = _erp_user_id
+        if _status_filtro_mp != "Todos":
+            _filtros_mp["status"] = _status_filtro_mp
+
+        _pedidos_mp = supa_select("pedidos", filtros=_filtros_mp,
+                                  ordem="criado_em.desc", limite=200)
+
+        # Filtro cliente (client-side)
+        if _cli_filtro_mp:
+            _pedidos_mp = [
+                p for p in _pedidos_mp
+                if _cli_filtro_mp.lower() in
+                p.get("cliente_razao_social", "").lower()
+            ]
+
+        # Filtro período
+        if _periodo_mp != "Todos":
+            _dias_mp = {"Últimos 7 dias": 7,
+                        "Últimos 30 dias": 30,
+                        "Últimos 90 dias": 90}[_periodo_mp]
+            _corte_mp = pd.Timestamp.now() - pd.Timedelta(days=_dias_mp)
+            _pedidos_mp = [
+                p for p in _pedidos_mp
+                if pd.to_datetime(p.get("criado_em", "")) >= _corte_mp
+            ]
+
+        # KPIs
+        _total_mp  = len(_pedidos_mp)
+        _valor_mp  = sum(float(p.get("valor_total", 0) or 0)
+                         for p in _pedidos_mp)
+        _abertos_mp = sum(1 for p in _pedidos_mp
+                          if p.get("status") not in ("faturado", "cancelado"))
+        _k1, _k2, _k3 = st.columns(3)
+        _erp_kpi(_k1, "Total de Pedidos", str(_total_mp))
+        _erp_kpi(_k2, "Valor Total", f"R$ {_valor_mp:,.2f}", "#15803D")
+        _erp_kpi(_k3, "Em Aberto", str(_abertos_mp), "#C2410C")
+
+        # Listagem
+        if not _pedidos_mp:
+            st.info("Nenhum pedido encontrado com os filtros selecionados.")
+        else:
+            for _p in _pedidos_mp:
+                _status_p  = _p.get("status", "rascunho")
+                _num_p     = _p.get("numero", "—")
+                _cli_p     = _p.get("cliente_razao_social", "—")
+                _val_p     = float(_p.get("valor_total", 0) or 0)
+                _criado_p  = _p.get("criado_em", "")[:10]
+                _id_p      = _p.get("id", "")
+
+                with st.expander(
+                    f"{_num_p}  ·  {_cli_p}  ·  R$ {_val_p:,.2f}  ·  "
+                    f"{_criado_p}", expanded=False
+                ):
+                    st.markdown(_erp_badge(_status_p), unsafe_allow_html=True)
+                    st.markdown(f"**Representante:** {_p.get('representante','—')}")
+                    st.markdown(f"**Frete:** {_p.get('tipo_frete','—')}  "
+                                f"**Pagamento:** {_p.get('cond_pagto','—')}")
+
+                    # Ações por status
+                    _ba, _bb, _bc = st.columns(3)
+                    with _ba:
+                        if _status_p == "rascunho":
+                            if st.button("✏️ Editar", key=f"erp_edit_{_id_p}",
+                                         use_container_width=True):
+                                st.session_state.erp_pedido_id = _id_p
+                                st.session_state.erp_numero    = _num_p
+                                st.session_state.erp_itens     = supa_select(
+                                    "itens_pedido",
+                                    filtros={"pedido_id": _id_p})
+                                st.session_state.menu_option = \
+                                    "__erp_novo_pedido__"
+                                st.rerun()
+                    with _bb:
+                        if _status_p == "rascunho":
+                            if st.button("📤 Enviar", key=f"erp_env_{_id_p}",
+                                         use_container_width=True):
+                                mudar_status_pedido(
+                                    _id_p, "enviado",
+                                    _erp_user_id, _erp_user_nome,
+                                    status_anterior="rascunho")
+                                st.rerun()
+                    with _bc:
+                        if _status_p in ("rascunho", "enviado"):
+                            if st.button("❌ Cancelar",
+                                         key=f"erp_canc_{_id_p}",
+                                         use_container_width=True):
+                                _mot = st.text_input(
+                                    "Motivo do cancelamento",
+                                    key=f"erp_mot_{_id_p}")
+                                if _mot:
+                                    mudar_status_pedido(
+                                        _id_p, "cancelado",
+                                        _erp_user_id, _erp_user_nome,
+                                        observacao=_mot,
+                                        status_anterior=_status_p)
+                                    st.rerun()
+
+                    # Itens do pedido
+                    _itens_p = supa_select("itens_pedido",
+                                           filtros={"pedido_id": _id_p})
+                    if _itens_p:
+                        _df_itens_p = pd.DataFrame(_itens_p)[[
+                            "codigo_produto", "descricao", "quantidade",
+                            "valor_unit", "comissao_perc", "total"
+                        ]]
+                        _df_itens_p.columns = [
+                            "Código", "Produto", "Qtde",
+                            "Valor Unit.", "Comissão", "Total"
+                        ]
+                        st.dataframe(_df_itens_p, use_container_width=True,
+                                     hide_index=True)
+
+                    # Histórico de status
+                    _hist_p = supa_select("historico_status",
+                                          filtros={"pedido_id": _id_p},
+                                          ordem="criado_em.asc")
+                    if _hist_p:
+                        st.markdown("**Histórico:**")
+                        for _h in _hist_p:
+                            _ts = _h.get("criado_em", "")[:16].replace("T", " ")
+                            _obs_h = f" — {_h['observacao']}" \
+                                     if _h.get("observacao") else ""
+                            st.caption(
+                                f"🕐 {_ts}  |  "
+                                f"{_h.get('status_anterior','—')} → "
+                                f"{_h.get('status_novo','—')}  |  "
+                                f"{_h.get('usuario_nome','?')}{_obs_h}"
+                            )
+
+                    # PDF
+                    if st.button("📄 Gerar PDF", key=f"erp_pdf_{_id_p}",
+                                 use_container_width=True):
+                        try:
+                            _dados_cli_pdf = {
+                                "representante": _p.get("representante",""),
+                                "razao_social":  _p.get("cliente_razao_social",""),
+                                "cnpj":          _p.get("cliente_cpf_cnpj",""),
+                                "ie":            _p.get("cliente_ie",""),
+                                "telefone":      _p.get("cliente_telefone",""),
+                                "email":         _p.get("cliente_email_nfe",""),
+                                "endereco":      _p.get("cliente_endereco",""),
+                                "obs_cliente":   _p.get("obs_cliente",""),
+                            }
+                            _dados_ped_pdf = {
+                                "numero":        _num_p,
+                                "tabela_preco":  _p.get("tabela_preco",""),
+                                "tipo_frete":    _p.get("tipo_frete",""),
+                                "data_venda":    str(_p.get("data_venda",""))[:10],
+                                "condicoes_pagto": _p.get("cond_pagto",""),
+                            }
+                            _itens_pdf = [
+                                {
+                                    "codigo":     i.get("codigo_produto",""),
+                                    "descricao":  i.get("descricao",""),
+                                    "peso":       i.get("gramatura",""),
+                                    "cx_embarque":i.get("cx_embarque",""),
+                                    "quantidade": i.get("quantidade",0),
+                                    "valor_unit": i.get("valor_unit",0),
+                                    "total":      i.get("total",0),
+                                    "comissao":   i.get("comissao_perc",""),
+                                }
+                                for i in _itens_p
+                            ]
+                            _pdf_bytes = gerar_pdf_pedido(
+                                _dados_cli_pdf, _dados_ped_pdf,
+                                _itens_pdf, _p.get("obs_pedido",""))
+                            st.download_button(
+                                "📥 Baixar PDF",
+                                data=_pdf_bytes,
+                                file_name=f"Pedido_{_num_p}.pdf",
+                                mime="application/pdf",
+                                key=f"erp_dl_pdf_{_id_p}",
+                            )
+                        except Exception as _e_pdf2:
+                            st.error(f"Erro ao gerar PDF: {_e_pdf2}")
+
+# ══════════════════════════════════════════════════════════════════════════
+# MÓDULO ERP 3 — FILA DE APROVAÇÃO (somente gestor/admin)
+# ══════════════════════════════════════════════════════════════════════════
+elif menu == "__erp_fila_aprovacao__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;'
+                'font-size:1.35rem;">⏳ Fila de Aprovação</h2>',
+                unsafe_allow_html=True)
+
+    if not supa_disponivel():
+        _erp_aviso_sem_supabase()
+    elif not _erp_is_gestor:
+        st.error("Acesso restrito a gestores e administradores.")
+    else:
+        _enviados = supa_select("pedidos", filtros={"status": "enviado"},
+                                ordem="criado_em.asc", limite=500)
+
+        # KPIs
+        _tot_fila = len(_enviados)
+        _val_fila = sum(float(p.get("valor_total", 0) or 0)
+                        for p in _enviados)
+        _urgentes = 0
+        for _pf in _enviados:
+            try:
+                _dias_fila = (
+                    pd.Timestamp.now() -
+                    pd.to_datetime(_pf.get("criado_em",""))
+                ).days
+                if _dias_fila >= 2:
+                    _urgentes += 1
+            except Exception:
+                pass
+
+        _kf1, _kf2, _kf3 = st.columns(3)
+        _erp_kpi(_kf1, "Aguardando Aprovação", str(_tot_fila))
+        _erp_kpi(_kf2, "Valor Total na Fila",
+                 f"R$ {_val_fila:,.2f}", "#15803D")
+        _erp_kpi(_kf3, "⚠️ Urgentes (+48h)", str(_urgentes), "#C2410C")
+
+        if not _enviados:
+            st.success("✅ Nenhum pedido aguardando aprovação.")
+        else:
+            for _pf in _enviados:
+                _id_f   = _pf.get("id", "")
+                _num_f  = _pf.get("numero", "—")
+                _cli_f  = _pf.get("cliente_razao_social", "—")
+                _vend_f = _pf.get("criado_por_nome", "—")
+                _val_f  = float(_pf.get("valor_total", 0) or 0)
+                try:
+                    _dias_f = (
+                        pd.Timestamp.now() -
+                        pd.to_datetime(_pf.get("criado_em",""))
+                    ).days
+                except Exception:
+                    _dias_f = 0
+
+                _urgente_f = _dias_f >= 2
+                _titulo_f = (
+                    f"{'🔴 ' if _urgente_f else ''}{_num_f}  ·  "
+                    f"{_cli_f}  ·  {_vend_f}  ·  "
+                    f"R$ {_val_f:,.2f}  ·  {_dias_f}d na fila"
+                )
+
+                with st.expander(_titulo_f, expanded=_urgente_f):
+                    _itens_f = supa_select("itens_pedido",
+                                           filtros={"pedido_id": _id_f})
+                    if _itens_f:
+                        _df_f = pd.DataFrame(_itens_f)[[
+                            "codigo_produto", "descricao", "quantidade",
+                            "valor_unit", "preco_ref", "comissao_perc", "total"
+                        ]]
+                        _df_f.columns = [
+                            "Código","Produto","Qtde","Valor Unit.",
+                            "Preço Ref.","Comissão","Total"
+                        ]
+                        # Destacar itens com alerta
+                        st.dataframe(_df_f, use_container_width=True,
+                                     hide_index=True)
+
+                    _obs_fila = _pf.get("obs_pedido","") or \
+                                _pf.get("obs_cliente","")
+                    if _obs_fila:
+                        st.info(f"📝 Obs: {_obs_fila}")
+
+                    _af1, _af2, _af3 = st.columns(3)
+                    with _af1:
+                        if st.button("✅ Aprovar", key=f"erp_apr_{_id_f}",
+                                     use_container_width=True, type="primary"):
+                            mudar_status_pedido(
+                                _id_f, "aprovado",
+                                _erp_user_id, _erp_user_nome,
+                                observacao="Aprovado pelo gestor",
+                                status_anterior="enviado")
+                            st.success(f"Pedido {_num_f} aprovado!")
+                            st.rerun()
+                    with _af2:
+                        _mot_dev = st.text_input(
+                            "Motivo (devolução)", key=f"erp_mot_dev_{_id_f}",
+                            placeholder="Ex: Preço abaixo do mínimo...")
+                        if st.button("↩️ Devolver", key=f"erp_dev_{_id_f}",
+                                     use_container_width=True):
+                            if not _mot_dev:
+                                st.error("Informe o motivo da devolução.")
+                            else:
+                                mudar_status_pedido(
+                                    _id_f, "rascunho",
+                                    _erp_user_id, _erp_user_nome,
+                                    observacao=_mot_dev,
+                                    status_anterior="enviado")
+                                st.warning(f"Pedido {_num_f} devolvido.")
+                                st.rerun()
+                    with _af3:
+                        _mot_canc_f = st.text_input(
+                            "Motivo (cancelamento)", key=f"erp_mot_cf_{_id_f}")
+                        if st.button("❌ Cancelar", key=f"erp_cf_{_id_f}",
+                                     use_container_width=True):
+                            if not _mot_canc_f:
+                                st.error("Informe o motivo.")
+                            else:
+                                mudar_status_pedido(
+                                    _id_f, "cancelado",
+                                    _erp_user_id, _erp_user_nome,
+                                    observacao=_mot_canc_f,
+                                    status_anterior="enviado")
+                                st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════
+# MÓDULO ERP 4 — TODOS OS PEDIDOS (somente gestor/admin)
+# ══════════════════════════════════════════════════════════════════════════
+elif menu == "__erp_todos_pedidos__":
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;'
+                'font-size:1.35rem;">🗂️ Todos os Pedidos</h2>',
+                unsafe_allow_html=True)
+
+    if not supa_disponivel():
+        _erp_aviso_sem_supabase()
+    elif not _erp_is_gestor:
+        st.error("Acesso restrito a gestores e administradores.")
+    else:
+        # Filtros
+        _ft1, _ft2, _ft3, _ft4 = st.columns(4)
+        with _ft1:
+            _st_todos = st.selectbox(
+                "Status",
+                ["Todos", "rascunho", "enviado", "aprovado",
+                 "em_separacao", "faturado", "cancelado"],
+                key="erp_tp_status")
+        with _ft2:
+            _vend_todos = st.text_input("Vendedor", key="erp_tp_vend")
+        with _ft3:
+            _cli_todos  = st.text_input("Cliente",  key="erp_tp_cli")
+        with _ft4:
+            _per_todos  = st.selectbox(
+                "Período",
+                ["Todos", "Últimos 7 dias", "Últimos 30 dias",
+                 "Últimos 90 dias"],
+                key="erp_tp_periodo")
+
+        _filtros_tp = {}
+        if _st_todos != "Todos":
+            _filtros_tp["status"] = _st_todos
+
+        _todos_ped = supa_select("pedidos", filtros=_filtros_tp,
+                                 ordem="criado_em.desc", limite=500)
+
+        if _vend_todos:
+            _todos_ped = [
+                p for p in _todos_ped
+                if _vend_todos.lower() in
+                p.get("criado_por_nome", "").lower()
+            ]
+        if _cli_todos:
+            _todos_ped = [
+                p for p in _todos_ped
+                if _cli_todos.lower() in
+                p.get("cliente_razao_social", "").lower()
+            ]
+        if _per_todos != "Todos":
+            _dias_tp = {"Últimos 7 dias": 7,
+                        "Últimos 30 dias": 30,
+                        "Últimos 90 dias": 90}[_per_todos]
+            _corte_tp = pd.Timestamp.now() - pd.Timedelta(days=_dias_tp)
+            _todos_ped = [
+                p for p in _todos_ped
+                if pd.to_datetime(p.get("criado_em","")) >= _corte_tp
+            ]
+
+        # KPIs por status
+        _contadores = {}
+        _valores    = {}
+        for _p in _todos_ped:
+            _s = _p.get("status","")
+            _contadores[_s] = _contadores.get(_s, 0) + 1
+            _valores[_s]    = _valores.get(_s, 0.0) + \
+                              float(_p.get("valor_total", 0) or 0)
+
+        _status_order = ["rascunho","enviado","aprovado",
+                         "em_separacao","faturado","cancelado"]
+        _cols_kpi_tp  = st.columns(len(_status_order))
+        for _ci, _s in enumerate(_status_order):
+            _cnt = _contadores.get(_s, 0)
+            _val = _valores.get(_s, 0.0)
+            _cor_tp = {
+                "rascunho":"#64748B","enviado":"#1D4ED8",
+                "aprovado":"#15803D","em_separacao":"#C2410C",
+                "faturado":"#14532D","cancelado":"#B91C1C",
+            }.get(_s, "#1F4788")
+            _erp_kpi(_cols_kpi_tp[_ci],
+                     _s.replace("_"," ").title(),
+                     f"{_cnt}  ·  R$ {_val:,.0f}", _cor_tp)
+
+        st.markdown("---")
+
+        # Exportar Excel
+        if _todos_ped:
+            _df_export_tp = pd.DataFrame([{
+                "Número":     p.get("numero",""),
+                "Status":     p.get("status",""),
+                "Cliente":    p.get("cliente_razao_social",""),
+                "Vendedor":   p.get("criado_por_nome",""),
+                "Valor":      float(p.get("valor_total",0) or 0),
+                "Frete":      p.get("tipo_frete",""),
+                "Pagamento":  p.get("cond_pagto",""),
+                "Data":       str(p.get("criado_em",""))[:10],
+            } for p in _todos_ped])
+            st.download_button(
+                "📥 Exportar Excel",
+                data=to_excel(_df_export_tp),
+                file_name="todos_pedidos.xlsx",
+                mime="application/vnd.ms-excel",
+                key="dl_erp_todos_pedidos",
+            )
+
+        # Listagem
+        for _pt in _todos_ped:
+            _id_t   = _pt.get("id","")
+            _num_t  = _pt.get("numero","—")
+            _cli_t  = _pt.get("cliente_razao_social","—")
+            _vnd_t  = _pt.get("criado_por_nome","—")
+            _val_t  = float(_pt.get("valor_total",0) or 0)
+            _sts_t  = _pt.get("status","")
+            _dat_t  = str(_pt.get("criado_em",""))[:10]
+
+            with st.expander(
+                f"{_num_t}  ·  {_cli_t}  ·  {_vnd_t}  ·  "
+                f"R$ {_val_t:,.2f}  ·  {_dat_t}",
+                expanded=False
+            ):
+                st.markdown(_erp_badge(_sts_t), unsafe_allow_html=True)
+                _at1, _at2, _at3, _at4 = st.columns(4)
+                with _at1:
+                    if _sts_t == "aprovado":
+                        if st.button("📦 Em Separação",
+                                     key=f"erp_sep_{_id_t}",
+                                     use_container_width=True):
+                            mudar_status_pedido(
+                                _id_t, "em_separacao",
+                                _erp_user_id, _erp_user_nome,
+                                status_anterior="aprovado")
+                            st.rerun()
+                with _at2:
+                    if _sts_t in ("aprovado","em_separacao"):
+                        _nf_num = st.text_input("Nº NF (opcional)",
+                                                key=f"erp_nf_{_id_t}")
+                        if st.button("🧾 Marcar Faturado",
+                                     key=f"erp_fat_{_id_t}",
+                                     use_container_width=True,
+                                     type="primary"):
+                            mudar_status_pedido(
+                                _id_t, "faturado",
+                                _erp_user_id, _erp_user_nome,
+                                observacao=f"NF: {_nf_num}" if _nf_num else "",
+                                status_anterior=_sts_t)
+                            if _nf_num:
+                                supa_update("pedidos", _id_t,
+                                            {"numero_nf": _nf_num})
+                            st.rerun()
+                with _at3:
+                    if _sts_t not in ("faturado","cancelado"):
+                        _mot_t = st.text_input("Motivo cancelamento",
+                                               key=f"erp_mot_t_{_id_t}")
+                        if st.button("❌ Cancelar", key=f"erp_ct_{_id_t}",
+                                     use_container_width=True):
+                            if not _mot_t:
+                                st.error("Informe o motivo.")
+                            else:
+                                mudar_status_pedido(
+                                    _id_t, "cancelado",
+                                    _erp_user_id, _erp_user_nome,
+                                    observacao=_mot_t,
+                                    status_anterior=_sts_t)
+                                st.rerun()
+                with _at4:
+                    _itens_t = supa_select("itens_pedido",
+                                           filtros={"pedido_id": _id_t})
+                    if _itens_t:
+                        try:
+                            _pdf_t = gerar_pdf_pedido(
+                                {
+                                    "representante": _pt.get("representante",""),
+                                    "razao_social":  _pt.get("cliente_razao_social",""),
+                                    "cnpj":          _pt.get("cliente_cpf_cnpj",""),
+                                    "ie":            _pt.get("cliente_ie",""),
+                                    "telefone":      _pt.get("cliente_telefone",""),
+                                    "email":         _pt.get("cliente_email_nfe",""),
+                                    "endereco":      _pt.get("cliente_endereco",""),
+                                    "obs_cliente":   _pt.get("obs_cliente",""),
+                                },
+                                {
+                                    "numero":          _num_t,
+                                    "tabela_preco":    _pt.get("tabela_preco",""),
+                                    "tipo_frete":      _pt.get("tipo_frete",""),
+                                    "data_venda":      str(_pt.get("data_venda",""))[:10],
+                                    "condicoes_pagto": _pt.get("cond_pagto",""),
+                                },
+                                [{
+                                    "codigo":     i.get("codigo_produto",""),
+                                    "descricao":  i.get("descricao",""),
+                                    "peso":       i.get("gramatura",""),
+                                    "cx_embarque":i.get("cx_embarque",""),
+                                    "quantidade": i.get("quantidade",0),
+                                    "valor_unit": i.get("valor_unit",0),
+                                    "total":      i.get("total",0),
+                                    "comissao":   i.get("comissao_perc",""),
+                                } for i in _itens_t],
+                                _pt.get("obs_pedido","")
+                            )
+                            st.download_button(
+                                "📄 PDF",
+                                data=_pdf_t,
+                                file_name=f"Pedido_{_num_t}.pdf",
+                                mime="application/pdf",
+                                key=f"erp_dl_t_{_id_t}",
+                            )
+                        except Exception:
+                            st.caption("PDF indisponível")
 
 st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
