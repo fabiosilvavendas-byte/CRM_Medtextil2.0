@@ -881,97 +881,80 @@ _USUARIOS_LEGADO = {
     },
 }
 
-def _render_tela_login(modo="email", show_error=False, msg_erro=""):
-    """Renderiza tela de login — modo 'email' (Supabase) ou 'senha' (legado)."""
+def check_password():
+    """
+    Sistema de autenticação simples e direto.
+    — Supabase configurado: login com e-mail + senha individual.
+    — Sem Supabase: senha compartilhada legada (admin123 / colaborador123).
+    """
+    # Já autenticado — retorna imediatamente
+    if st.session_state.get("password_correct"):
+        return True
+
+    # ── Cabeçalho visual ─────────────────────────────────────────────────
     st.markdown("""
-    <div style="max-width:420px;margin:60px auto 0 auto;background:#FFFFFF;
-                border-radius:16px;padding:40px 36px;
+    <div style="max-width:420px;margin:40px auto 0 auto;background:#FFFFFF;
+                border-radius:16px;padding:36px;
                 box-shadow:0 8px 32px rgba(31,71,136,0.12);
-                border-top:4px solid #1F4788;">
-        <div style="text-align:center;margin-bottom:10px;">
-            <img src="https://i.imgur.com/gt3rgyL.png" height="52"
-                 style="border-radius:8px;" onerror="this.style.display='none'"/>
-        </div>
-        <div style="text-align:center;font-size:1.4rem;font-weight:700;
-                    color:#4A7BC8;margin-bottom:4px;">Medtextil ERP</div>
-        <div style="text-align:center;font-size:0.85rem;color:#6C757D;
-                    margin-bottom:8px;">Dashboard Comercial 2.0</div>
+                border-top:4px solid #1F4788;text-align:center;">
+        <img src="https://i.imgur.com/gt3rgyL.png" height="52"
+             style="border-radius:8px;margin-bottom:10px;"
+             onerror="this.style.display='none'"/>
+        <div style="font-size:1.4rem;font-weight:700;color:#4A7BC8;">
+            Medtextil ERP</div>
+        <div style="font-size:0.85rem;color:#6C757D;margin-top:4px;">
+            Dashboard Comercial 2.0</div>
     </div>
     """, unsafe_allow_html=True)
 
     col_l, col_c, col_r = st.columns([1, 2, 1])
     with col_c:
         st.markdown("<br>", unsafe_allow_html=True)
-        if modo == "email":
-            st.text_input("✉️ E-mail", key="login_email",
-                          placeholder="seu@email.com.br")
-            st.text_input("🔑 Senha", type="password", key="login_senha",
-                          placeholder="Digite sua senha...")
+
+        if supa_disponivel():
+            # ── MODO SUPABASE: e-mail + senha individual ──────────────────
+            email = st.text_input("✉️ E-mail", placeholder="seu@email.com.br",
+                                  key="sb_email")
+            senha = st.text_input("🔑 Senha", type="password",
+                                  placeholder="Digite sua senha...",
+                                  key="sb_senha")
+            if st.button("Entrar →", use_container_width=True,
+                         type="primary", key="btn_entrar_sb"):
+                if not email or not senha:
+                    st.error("Preencha e-mail e senha.")
+                else:
+                    reg = autenticar_usuario(email.strip().lower(), senha)
+                    if reg:
+                        perfil = reg.get("perfil", "vendedor")
+                        st.session_state["password_correct"] = True
+                        st.session_state["usuario"] = {
+                            "id":      reg.get("id", ""),
+                            "email":   reg.get("email", email),
+                            "nome":    reg.get("nome", email),
+                            "tipo":    perfil,
+                            "modulos": _PERFIL_MODULOS.get(
+                                perfil, _MODULOS_COLABORADOR),
+                        }
+                        st.rerun()
+                    else:
+                        st.error("❌ E-mail ou senha incorretos.")
         else:
-            st.text_input("🔑 Senha de acesso", type="password",
-                          key="password_input",
-                          placeholder="Digite sua senha...")
-        if st.button("Entrar →", use_container_width=True,
-                     type="primary", key="btn_login_enter"):
-            st.session_state["_login_tentativa"] = True
-        if show_error:
-            st.error(msg_erro or "Credenciais inválidas. Tente novamente.")
+            # ── MODO LEGADO: senha compartilhada ──────────────────────────
+            senha = st.text_input("🔑 Senha de acesso", type="password",
+                                  placeholder="Digite sua senha...",
+                                  key="leg_senha")
+            if st.button("Entrar →", use_container_width=True,
+                         type="primary", key="btn_entrar_leg"):
+                if not senha:
+                    st.error("Digite a senha.")
+                elif senha in _USUARIOS_LEGADO:
+                    st.session_state["password_correct"] = True
+                    st.session_state["usuario"] = _USUARIOS_LEGADO[senha]
+                    st.rerun()
+                else:
+                    st.error("❌ Senha incorreta.")
 
-def check_password():
-    """
-    Sistema de autenticação dual.
-    — Se o Supabase estiver configurado: login com e-mail + senha individual.
-    — Caso contrário: fallback com senha compartilhada (legado).
-    """
-    # Já autenticado
-    if st.session_state.get("password_correct"):
-        return True
-
-    usa_supabase = supa_disponivel()
-    show_error = st.session_state.pop("_login_erro", False)
-    msg_erro   = st.session_state.pop("_login_msg", "")
-
-    if usa_supabase:
-        # ── Modo Supabase ─────────────────────────────────────────────────
-        _render_tela_login(modo="email", show_error=show_error, msg_erro=msg_erro)
-        tentativa = st.session_state.pop("_login_tentativa", False)
-        if tentativa:
-            email = st.session_state.get("login_email", "").strip().lower()
-            senha = st.session_state.get("login_senha", "")
-            reg = autenticar_usuario(email, senha)
-            if reg:
-                perfil = reg.get("perfil", "vendedor")
-                st.session_state["password_correct"] = True
-                st.session_state["usuario"] = {
-                    "id":      reg.get("id", ""),
-                    "email":   reg.get("email", email),
-                    "nome":    reg.get("nome", email),
-                    "tipo":    perfil,
-                    "modulos": _PERFIL_MODULOS.get(perfil, _MODULOS_COLABORADOR),
-                }
-                st.rerun()
-            else:
-                st.session_state["_login_erro"] = True
-                st.session_state["_login_msg"]  = "E-mail ou senha incorretos."
-                st.rerun()
-        return False
-
-    else:
-        # ── Modo legado (senha compartilhada) ─────────────────────────────
-        # Ler a senha ANTES de renderizar (Streamlit preserva no session_state)
-        _senha_digitada = st.session_state.get("password_input", "")
-        tentativa = st.session_state.pop("_login_tentativa", False)
-        _render_tela_login(modo="senha", show_error=show_error, msg_erro=msg_erro)
-        if tentativa and _senha_digitada:
-            if _senha_digitada in _USUARIOS_LEGADO:
-                st.session_state["password_correct"] = True
-                st.session_state["usuario"] = _USUARIOS_LEGADO[_senha_digitada]
-                st.rerun()
-            else:
-                st.session_state["_login_erro"] = True
-                st.session_state["_login_msg"]  = "Senha incorreta. Use admin123 ou colaborador123."
-                st.rerun()
-        return False
+    return False
 
 # ====================== PROCESSAMENTO DE DADOS ======================
 def calcular_prazo_historico(data_emissao, data_vencimento_str):
