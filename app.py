@@ -928,13 +928,13 @@ def check_password():
         return True
 
     usa_supabase = supa_disponivel()
-    tentativa = st.session_state.pop("_login_tentativa", False)
     show_error = st.session_state.pop("_login_erro", False)
     msg_erro   = st.session_state.pop("_login_msg", "")
 
     if usa_supabase:
         # ── Modo Supabase ─────────────────────────────────────────────────
         _render_tela_login(modo="email", show_error=show_error, msg_erro=msg_erro)
+        tentativa = st.session_state.pop("_login_tentativa", False)
         if tentativa:
             email = st.session_state.get("login_email", "").strip().lower()
             senha = st.session_state.get("login_senha", "")
@@ -958,16 +958,18 @@ def check_password():
 
     else:
         # ── Modo legado (senha compartilhada) ─────────────────────────────
+        # Ler a senha ANTES de renderizar (Streamlit preserva no session_state)
+        _senha_digitada = st.session_state.get("password_input", "")
+        tentativa = st.session_state.pop("_login_tentativa", False)
         _render_tela_login(modo="senha", show_error=show_error, msg_erro=msg_erro)
-        if tentativa:
-            senha = st.session_state.get("password_input", "")
-            if senha in _USUARIOS_LEGADO:
+        if tentativa and _senha_digitada:
+            if _senha_digitada in _USUARIOS_LEGADO:
                 st.session_state["password_correct"] = True
-                st.session_state["usuario"] = _USUARIOS_LEGADO[senha]
+                st.session_state["usuario"] = _USUARIOS_LEGADO[_senha_digitada]
                 st.rerun()
             else:
                 st.session_state["_login_erro"] = True
-                st.session_state["_login_msg"]  = "Senha incorreta."
+                st.session_state["_login_msg"]  = "Senha incorreta. Use admin123 ou colaborador123."
                 st.rerun()
         return False
 
