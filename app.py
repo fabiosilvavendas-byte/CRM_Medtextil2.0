@@ -2612,8 +2612,11 @@ _ALIAS_DISPLAY = {
 _menu_display = _ALIAS_DISPLAY.get(menu, menu)
 
 # Módulos especiais que não precisam de verificação de permissão
-_MENU_ESPECIAIS = {"__novo_pedido__", "__historico_cliente__", "Consulta Clientes", "Rankings"}
-
+_MENU_ESPECIAIS = {
+    "__novo_pedido__", "__historico_cliente__", "Consulta Clientes", "Rankings",
+    "__erp_novo_pedido__", "__erp_meus_pedidos__",
+    "__erp_fila_aprovacao__", "__erp_todos_pedidos__",
+}
 st.markdown(f"""
 <div style="font-size:0.74rem;color:#ADB5BD;margin-bottom:14px;
             padding-bottom:10px;border-bottom:1px solid #F0F2F5;">
