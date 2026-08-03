@@ -923,7 +923,7 @@ def check_password():
                 if not email or not senha:
                     st.error("Preencha e-mail e senha.")
                 else:
-                    st.info(f"DEBUG — hash calculado: {_hash_senha(senha)}")
+                    
                     reg = autenticar_usuario(email.strip().lower(), senha)
                     if reg:
                         perfil = reg.get("perfil", "vendedor")
