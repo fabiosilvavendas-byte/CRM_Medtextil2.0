@@ -3167,10 +3167,14 @@ elif menu == "Positivação":
             st.info("ℹ️ Nenhum produto encontrado. Ajuste os filtros acima.")
         else:
             # Fonte de dados: exclusivamente CONSULTA_VENDEDORES.xlsx (df).
-            # Quantidade Vendida = soma de Quantidade | Faturamento = soma de TotalProduto
+            # ValorItem = PrecoUnit * Quantidade (TotalProduto é o total da NOTA inteira,
+            # repetido em cada linha de produto — somá-lo direto infla o faturamento
+            # sempre que a nota tem mais de um produto). Mesmo padrão já usado em
+            # Performance de Vendedores > Resultado por Produto.
+            _prod_fat['ValorItem'] = _prod_fat['PrecoUnit'] * _prod_fat['Quantidade']
             _prod_agrup = _prod_fat.groupby(['CodigoProduto', 'NomeProduto']).agg(
                 Quantidade=('Quantidade', 'sum'),
-                TotalProduto=('TotalProduto', 'sum')
+                TotalProduto=('ValorItem', 'sum')
             ).reset_index()
 
             if _fp_ordem == "Faturamento (Maior)":
