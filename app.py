@@ -3147,8 +3147,9 @@ elif menu == "Positivação":
                 ["Faturamento (Maior)", "Quantidade (Maior)", "Nome (A-Z)"],
                 key="fp_ordem_posit")
 
-        # Base: apenas NF Venda — NF Dev.Venda excluída
-        _prod_fat = df[df['TipoMov'] == 'NF Venda'].copy()
+        # Base: NF Venda e NF Dev.Venda (devolução é descontada por produto,
+        # mesma regra do "Faturamento Líquido" usado nos demais relatórios do sistema)
+        _prod_fat = df[df['TipoMov'].isin(['NF Venda', 'NF Dev.Venda'])].copy()
         _prod_fat['DataEmissao'] = pd.to_datetime(_prod_fat['DataEmissao'], errors='coerce').dt.normalize()
 
         # Aplicar filtros de data
@@ -3171,9 +3172,13 @@ elif menu == "Positivação":
             # repetido em cada linha de produto — somá-lo direto infla o faturamento
             # sempre que a nota tem mais de um produto). Mesmo padrão já usado em
             # Performance de Vendedores > Resultado por Produto.
-            _prod_fat['ValorItem'] = _prod_fat['PrecoUnit'] * _prod_fat['Quantidade']
+            # Sinal negativo para NF Dev.Venda, para descontar devoluções do produto
+            # (mesma regra de sinal já usada em Valor_Real).
+            _sinal = _prod_fat['TipoMov'].apply(lambda t: 1 if t == 'NF Venda' else -1)
+            _prod_fat['ValorItem'] = _prod_fat['PrecoUnit'] * _prod_fat['Quantidade'] * _sinal
+            _prod_fat['QtdItem'] = _prod_fat['Quantidade'] * _sinal
             _prod_agrup = _prod_fat.groupby(['CodigoProduto', 'NomeProduto']).agg(
-                Quantidade=('Quantidade', 'sum'),
+                Quantidade=('QtdItem', 'sum'),
                 TotalProduto=('ValorItem', 'sum')
             ).reset_index()
 
