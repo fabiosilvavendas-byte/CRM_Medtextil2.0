@@ -5220,11 +5220,34 @@ elif menu == "Pedidos Pendentes":
                 how='left'
             )
 
+            # Tabela de embarque (unidades por caixa) da Atadura Farma — validada com foto da MED MAIS,
+            # usada porque a coluna CX_EMB de Produtos_Agrupados não está preenchida para esses códigos.
+            # Larguras 1,00 e 1,20 usam o mesmo fator; larguras 1,50 e 1,80 usam o mesmo fator (regra confirmada).
+            _EMBARQUE_ATADURA_FARMA = {
+                'A': {8: 125, 10: 110, 12: 85, 15: 80, 20: 70, 30: 45},   # larguras 1,00 / 1,20
+                'B': {8: 110, 10: 90, 12: 80, 15: 70, 20: 60, 30: 35},    # larguras 1,50 / 1,80
+            }
+
+            def _embarque_atadura_farma(descricao):
+                m = _re_prod.search(r'(\d+)\s*X\s*1,(\d+)', str(descricao or '').upper())
+                if not m:
+                    return None
+                comprimento = int(m.group(1))
+                largura = m.group(2)
+                grupo = 'A' if largura in ('00', '20') else 'B' if largura in ('50', '80') else None
+                if grupo is None:
+                    return None
+                return _EMBARQUE_ATADURA_FARMA[grupo].get(comprimento)
+
             # Converter unidades → caixas (ceil, evitar div/0)
             def _calc_caixas(row):
                 try:
-                    cx = float(row[_cx_col])
-                    if cx <= 0 or pd.isna(cx):
+                    _desc_linha = str(row.get('Descricao', '')).upper()
+                    if 'ATADURA' in _desc_linha and 'HOSPITALAR' not in _desc_linha:
+                        cx = _embarque_atadura_farma(_desc_linha)
+                    else:
+                        cx = float(row[_cx_col])
+                    if cx is None or cx <= 0 or pd.isna(cx):
                         return None
                     return math.ceil(float(row['QtdPendente']) / cx)
                 except Exception:
