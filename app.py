@@ -5044,28 +5044,37 @@ elif menu == "Pedidos Pendentes":
         'atadura_hospitalar': {'nome': 'Atadura Hospitalar',                       'recurso': 'pessoas',  'taxa_unit': 10.0,   'default': 2, 'unidade_cap': 'cx'},
         'gaze_pacote_geral':  {'nome': 'Gaze não estéril pacote',                  'recurso': 'pessoas',  'taxa_unit': 10.0,   'default': 3, 'unidade_cap': 'cx'},
         'gaze_pacote_105gr':  {'nome': 'Gaze não estéril pacote 105gr (09 fios)',  'recurso': 'pessoas',  'taxa_unit': 8.0,    'default': 3, 'unidade_cap': 'cx'},
-        'gaze_esteril_pct10': {'nome': 'Gaze estéril pct 10',                      'recurso': 'modo',
-                                'modos': {'1 máq. grande + 1 pequena': 100.0, '2 máq. pequenas': 65.0},
-                                'default': '1 máq. grande + 1 pequena', 'unidade_cap': 'cx'},
+        'gaze_esteril_pct10': {'nome': 'Gaze estéril pct 10',                      'recurso': 'maquinas_2tipos',
+                                'taxa_grande': 67.5, 'taxa_pequena': 32.5,
+                                'default_grande': 1, 'default_pequena': 1, 'unidade_cap': 'cx'},
         'gaze_rolo_queijo':   {'nome': 'Gaze em rolo (queijo/circular)',           'recurso': 'pessoas',  'taxa_unit': 29.0,   'default': 1, 'unidade_cap': 'cx'},
         'gaze_esteril_50x91': {'nome': 'Gaze estéril 11 Fios (50x91)',             'recurso': 'pessoas',  'taxa_unit': 2.0,    'default': 1, 'unidade_cap': 'cx'},
     }
     FARDO_PARA_CAIXA = 2  # 1 fardo de Atadura Farma = 2 caixas (para comparar com CAIXAS_NECESSARIAS)
 
     def carregar_config_producao():
-        """Lê pessoas/máquinas/modo salvos no Supabase; usa o default de TAXAS_PRODUCAO se não houver registro."""
-        cfg = {k: v['default'] for k, v in TAXAS_PRODUCAO.items()}
+        """Lê pessoas/máquinas salvos no Supabase; usa o default de TAXAS_PRODUCAO se não houver registro."""
+        cfg = {}
+        for k, v in TAXAS_PRODUCAO.items():
+            if v['recurso'] == 'maquinas_2tipos':
+                cfg[k] = {'grande': v['default_grande'], 'pequena': v['default_pequena']}
+            else:
+                cfg[k] = v['default']
         if supa_disponivel():
             for reg in supa_select("producao_capacidade"):
                 linha = reg.get('linha')
                 if linha in cfg:
                     val = reg.get('valor')
-                    if TAXAS_PRODUCAO[linha]['recurso'] != 'modo':
+                    if TAXAS_PRODUCAO[linha]['recurso'] == 'maquinas_2tipos':
                         try:
-                            val = int(float(val))
+                            cfg[linha] = json.loads(val)
                         except Exception:
                             continue
-                    cfg[linha] = val
+                    else:
+                        try:
+                            cfg[linha] = int(float(val))
+                        except Exception:
+                            continue
         return cfg
 
     def salvar_config_producao(linha, valor, usuario_nome=None):
@@ -5073,8 +5082,9 @@ elif menu == "Pedidos Pendentes":
         if not supa_disponivel():
             return False
         existentes = supa_select("producao_capacidade", filtros={"linha": linha})
+        valor_txt = json.dumps(valor) if isinstance(valor, dict) else str(valor)
         dados = {
-            "linha": linha, "valor": str(valor),
+            "linha": linha, "valor": valor_txt,
             "atualizado_em": datetime.now().isoformat(),
             "atualizado_por": usuario_nome or "",
         }
@@ -5085,8 +5095,10 @@ elif menu == "Pedidos Pendentes":
     def capacidade_dia(linha_key, cfg):
         """Capacidade diária na unidade nativa da linha (cx, exceto Atadura Farma que é fd)."""
         info = TAXAS_PRODUCAO[linha_key]
-        if info['recurso'] == 'modo':
-            return info['modos'].get(cfg.get(linha_key, info['default']), 0.0)
+        if info['recurso'] == 'maquinas_2tipos':
+            valores = cfg.get(linha_key, {'grande': info['default_grande'], 'pequena': info['default_pequena']})
+            return (float(valores.get('grande', 0)) * info['taxa_grande']
+                    + float(valores.get('pequena', 0)) * info['taxa_pequena'])
         return float(cfg.get(linha_key, info['default'])) * info['taxa_unit']
 
     def identificar_linha_producao(descricao, gramatura=None):
@@ -5140,6 +5152,18 @@ elif menu == "Pedidos Pendentes":
                 contados += 1
         return atual
 
+    def adicionar_dias_semana(data_inicio, dias):
+        """Avança N dias, contando só segunda–sexta (usado por linhas que não produzem aos sábados)."""
+        atual = data_inicio
+        contados = 0
+        while contados < dias:
+            atual += timedelta(days=1)
+            if atual.weekday() < 5:  # 0=segunda ... 4=sexta
+                contados += 1
+        return atual
+
+    LINHAS_APENAS_DIAS_SEMANA = {'campo_45x50'}  # produção não roda aos sábados nessa linha
+
     # ── Painel de variáveis de capacidade (pessoas/máquinas/modo) ──────────
     st.markdown("**⚙️ Variáveis de Capacidade Produtiva**")
     st.caption("Ajuste pessoas ou máquinas por linha — a previsão abaixo recalcula na hora.")
@@ -5151,12 +5175,17 @@ elif menu == "Pedidos Pendentes":
     for _i, _linha_key in enumerate(_linhas_prod):
         _info = TAXAS_PRODUCAO[_linha_key]
         with _cols_prod[_i % 3]:
-            if _info['recurso'] == 'modo':
-                _opcoes = list(_info['modos'].keys())
-                _idx_atual = _opcoes.index(_cfg_prod[_linha_key]) if _cfg_prod[_linha_key] in _opcoes else 0
-                _cfg_editado[_linha_key] = st.selectbox(
-                    _info['nome'], _opcoes, index=_idx_atual, key=f"cfg_prod_{_linha_key}"
+            if _info['recurso'] == 'maquinas_2tipos':
+                _val_atual = _cfg_prod.get(_linha_key, {'grande': _info['default_grande'], 'pequena': _info['default_pequena']})
+                _qtd_g = st.number_input(
+                    f"{_info['nome']} (máq. grande)", min_value=0,
+                    value=int(_val_atual.get('grande', _info['default_grande'])), step=1, key=f"cfg_prod_{_linha_key}_grande"
                 )
+                _qtd_p = st.number_input(
+                    f"{_info['nome']} (máq. pequena)", min_value=0,
+                    value=int(_val_atual.get('pequena', _info['default_pequena'])), step=1, key=f"cfg_prod_{_linha_key}_pequena"
+                )
+                _cfg_editado[_linha_key] = {'grande': _qtd_g, 'pequena': _qtd_p}
             else:
                 _cfg_editado[_linha_key] = st.number_input(
                     f"{_info['nome']} ({_info['recurso']})",
@@ -5322,12 +5351,13 @@ elif menu == "Pedidos Pendentes":
                 _df_linha = _ordenar_fila(_df_linha, _ordem_salva)
 
                 _acumulado, _dias_lista, _data_lista = 0.0, [], []
+                _func_data = adicionar_dias_semana if _linha_key_iter in LINHAS_APENAS_DIAS_SEMANA else adicionar_dias_uteis
                 for _, _linha_row in _df_linha.iterrows():
                     _cx_item = _linha_row['CAIXAS_NECESSARIAS']
                     _acumulado += _cx_item if pd.notna(_cx_item) else 0
                     _dias = math.ceil(_acumulado / _cap_linha) if pd.notna(_cap_linha) and _cap_linha > 0 else None
                     _dias_lista.append(_dias)
-                    _data_lista.append(adicionar_dias_uteis(_hoje, _dias) if _dias is not None else None)
+                    _data_lista.append(_func_data(_hoje, _dias) if _dias is not None else None)
                 _df_linha['DIAS_PRODUCAO'] = _dias_lista
                 _df_linha['DATA_PREVISTA'] = _data_lista
                 _filas_por_linha[_linha_key_iter] = _df_linha
