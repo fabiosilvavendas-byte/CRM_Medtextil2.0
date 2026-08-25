@@ -5296,8 +5296,9 @@ elif menu == "Pedidos Pendentes":
 
                 _acumulado, _dias_lista, _data_lista = 0.0, [], []
                 for _, _linha_row in _df_linha.iterrows():
-                    _acumulado += (_linha_row['CAIXAS_NECESSARIAS'] or 0)
-                    _dias = math.ceil(_acumulado / _cap_linha) if _cap_linha else None
+                    _cx_item = _linha_row['CAIXAS_NECESSARIAS']
+                    _acumulado += _cx_item if pd.notna(_cx_item) else 0
+                    _dias = math.ceil(_acumulado / _cap_linha) if pd.notna(_cap_linha) and _cap_linha > 0 else None
                     _dias_lista.append(_dias)
                     _data_lista.append(adicionar_dias_uteis(_hoje, _dias) if _dias is not None else None)
                 _df_linha['DIAS_PRODUCAO'] = _dias_lista
