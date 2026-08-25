@@ -5029,29 +5029,103 @@ elif menu == "Pedidos Pendentes":
     st.caption("Converte unidades pendentes em caixas e estima datas de conclusão com base na capacidade diária de cada produto.")
 
     import math
+    import re as _re_prod
+    import unicodedata as _unicodedata_prod
     from datetime import date, timedelta
 
-    # Capacidade produtiva por produto (caixas/dia) — match por substring
-    CAPACIDADE_PROD = {
-        "CAMPO OPERATORIO 45X50": 80,
-        "CAMPO OPERATÓRIO 25X28 C2": 23,
-        "CAMPO OPERATÓRIO 25X28 C5": 20,
-        "GAZE NÃO ESTERIL": 17,
-        "GAZE ESTERIL": 80,
-        "ATADURA FARMA": 18,
-        "ATADURA CONJUGADA": 15,
-        "GAZE CIRCULAR": 50,
+    # ====================== CAPACIDADE PRODUTIVA — VARIÁVEIS EDITÁVEIS ======================
+    # Taxa unitária de cada linha é regra de negócio fixa (validada com a diretoria).
+    # Só o número de pessoas/máquinas (e o modo da Gaze Estéril) é editável e fica salvo.
+    TAXAS_PRODUCAO = {
+        'campo_45x50':        {'nome': 'Campo 45x50',                             'recurso': 'pessoas',  'taxa_unit': 25.0,   'default': 7, 'unidade_cap': 'cx'},
+        'campo_25x28_c5':     {'nome': 'Campo 25x28 c/5',                          'recurso': 'pessoas',  'taxa_unit': 37 / 7, 'default': 7, 'unidade_cap': 'cx'},
+        'campo_25x28_c2':     {'nome': 'Campo 25x28 c/2',                          'recurso': 'pessoas',  'taxa_unit': 3.5,    'default': 2, 'unidade_cap': 'cx'},
+        'atadura_farma':      {'nome': 'Atadura Farma',                            'recurso': 'maquinas', 'taxa_unit': 15.0,   'default': 2, 'unidade_cap': 'fd'},
+        'atadura_hospitalar': {'nome': 'Atadura Hospitalar',                       'recurso': 'pessoas',  'taxa_unit': 10.0,   'default': 2, 'unidade_cap': 'cx'},
+        'gaze_pacote_geral':  {'nome': 'Gaze não estéril pacote',                  'recurso': 'pessoas',  'taxa_unit': 10.0,   'default': 3, 'unidade_cap': 'cx'},
+        'gaze_pacote_105gr':  {'nome': 'Gaze não estéril pacote 105gr (09 fios)',  'recurso': 'pessoas',  'taxa_unit': 8.0,    'default': 3, 'unidade_cap': 'cx'},
+        'gaze_esteril_pct10': {'nome': 'Gaze estéril pct 10',                      'recurso': 'modo',
+                                'modos': {'1 máq. grande + 1 pequena': 100.0, '2 máq. pequenas': 65.0},
+                                'default': '1 máq. grande + 1 pequena', 'unidade_cap': 'cx'},
+        'gaze_rolo_queijo':   {'nome': 'Gaze em rolo (queijo/circular)',           'recurso': 'pessoas',  'taxa_unit': 29.0,   'default': 1, 'unidade_cap': 'cx'},
     }
+    FARDO_PARA_CAIXA = 2  # 1 fardo de Atadura Farma = 2 caixas (para comparar com CAIXAS_NECESSARIAS)
 
-    def identificar_capacidade(descricao):
-        """Match por substring, case-insensitive."""
-        if not descricao or str(descricao).lower() == 'nan':
-            return None, "SEM CAPACIDADE"
-        desc_upper = str(descricao).upper().strip()
-        for chave, cap in CAPACIDADE_PROD.items():
-            if chave.upper() in desc_upper:
-                return cap, chave
-        return None, "SEM CAPACIDADE"
+    def carregar_config_producao():
+        """Lê pessoas/máquinas/modo salvos no Supabase; usa o default de TAXAS_PRODUCAO se não houver registro."""
+        cfg = {k: v['default'] for k, v in TAXAS_PRODUCAO.items()}
+        if supa_disponivel():
+            for reg in supa_select("producao_capacidade"):
+                linha = reg.get('linha')
+                if linha in cfg:
+                    val = reg.get('valor')
+                    if TAXAS_PRODUCAO[linha]['recurso'] != 'modo':
+                        try:
+                            val = int(float(val))
+                        except Exception:
+                            continue
+                    cfg[linha] = val
+        return cfg
+
+    def salvar_config_producao(linha, valor, usuario_nome=None):
+        """Salva (upsert) uma variável de capacidade no Supabase."""
+        if not supa_disponivel():
+            return False
+        existentes = supa_select("producao_capacidade", filtros={"linha": linha})
+        dados = {
+            "linha": linha, "valor": str(valor),
+            "atualizado_em": datetime.now().isoformat(),
+            "atualizado_por": usuario_nome or "",
+        }
+        if existentes:
+            return supa_update("producao_capacidade", linha, dados, id_col="linha")
+        return supa_insert("producao_capacidade", dados) is not None
+
+    def capacidade_dia(linha_key, cfg):
+        """Capacidade diária na unidade nativa da linha (cx, exceto Atadura Farma que é fd)."""
+        info = TAXAS_PRODUCAO[linha_key]
+        if info['recurso'] == 'modo':
+            return info['modos'].get(cfg.get(linha_key, info['default']), 0.0)
+        return float(cfg.get(linha_key, info['default'])) * info['taxa_unit']
+
+    def identificar_linha_producao(descricao, gramatura=None):
+        """
+        Identifica a linha de produção (Módulo A) a partir da descrição do produto.
+        Retorna a chave de TAXAS_PRODUCAO, ou None se o produto está fora do escopo
+        definido (ex.: Gaze Estéril 11 Fios / 50x91).
+        """
+        d = _unicodedata_prod.normalize('NFKD', str(descricao or '')).encode('ascii', 'ignore').decode('ascii').upper()
+
+        if 'ATADURA' in d:
+            return 'atadura_hospitalar' if 'HOSPITALAR' in d else 'atadura_farma'
+
+        if any(x in d for x in ['CAMPO OPERATORIO', 'CAMPO OP']):
+            if '45X50' in d or '45 X 50' in d:
+                return 'campo_45x50'
+            if '25X28' in d or '25 X 28' in d:
+                if 'PCT 2' in d or _re_prod.search(r'\bC\s*2\b', d):
+                    return 'campo_25x28_c2'
+                return 'campo_25x28_c5'
+            return None
+
+        if 'CIRCULAR' in d or 'QUEIJO' in d:
+            return 'gaze_rolo_queijo'
+
+        if 'NAO ESTERIL' in d or 'PACOTE' in d:
+            gram = str(gramatura or '').replace(',', '.').strip()
+            fios_09 = bool(_re_prod.search(r'\b0?9\s*F', d))
+            try:
+                is_105 = abs(float(gram) - 105) < 1
+            except Exception:
+                is_105 = False
+            return 'gaze_pacote_105gr' if (is_105 and fios_09) else 'gaze_pacote_geral'
+
+        if 'ESTERIL' in d:
+            if 'PCT 10' in d or _re_prod.search(r'\b13\s*F', d):
+                return 'gaze_esteril_pct10'
+            return None  # ex.: 11 Fios / 50x91 — fora do escopo definido
+
+        return None
 
     def adicionar_dias_uteis(data_inicio, dias):
         """Avança N dias úteis (seg–sáb), ignorando domingo."""
@@ -5062,6 +5136,41 @@ elif menu == "Pedidos Pendentes":
             if atual.weekday() != 6:  # 6 = domingo
                 contados += 1
         return atual
+
+    # ── Painel de variáveis de capacidade (pessoas/máquinas/modo) ──────────
+    st.markdown("**⚙️ Variáveis de Capacidade Produtiva**")
+    st.caption("Ajuste pessoas ou máquinas por linha — a previsão abaixo recalcula na hora.")
+
+    _cfg_prod = carregar_config_producao()
+    _cfg_editado = {}
+    _linhas_prod = list(TAXAS_PRODUCAO.keys())
+    _cols_prod = st.columns(3)
+    for _i, _linha_key in enumerate(_linhas_prod):
+        _info = TAXAS_PRODUCAO[_linha_key]
+        with _cols_prod[_i % 3]:
+            if _info['recurso'] == 'modo':
+                _opcoes = list(_info['modos'].keys())
+                _idx_atual = _opcoes.index(_cfg_prod[_linha_key]) if _cfg_prod[_linha_key] in _opcoes else 0
+                _cfg_editado[_linha_key] = st.selectbox(
+                    _info['nome'], _opcoes, index=_idx_atual, key=f"cfg_prod_{_linha_key}"
+                )
+            else:
+                _cfg_editado[_linha_key] = st.number_input(
+                    f"{_info['nome']} ({_info['recurso']})",
+                    min_value=0, value=int(_cfg_prod[_linha_key]), step=1, key=f"cfg_prod_{_linha_key}"
+                )
+
+    if st.button("💾 Salvar variáveis de produção", key="salvar_cfg_prod"):
+        _usuario_nome_cfg = st.session_state.get('usuario_nome', '')
+        _ok_salvar = all(
+            salvar_config_producao(k, v, _usuario_nome_cfg) for k, v in _cfg_editado.items()
+        )
+        if _ok_salvar:
+            st.success("✅ Variáveis de produção salvas.")
+        else:
+            st.warning("⚠️ Não foi possível salvar no Supabase (verifique a conexão). Os valores acima continuam valendo só para esta sessão.")
+
+    st.markdown("---")
 
     # Carregar produtos_agrupados para obter CX_EMB e PRECO via ID_COD
     _df_prod_prev = None
@@ -5089,6 +5198,7 @@ elif menu == "Pedidos Pendentes":
         _cx_col    = next((c for c in _df_prod_prev.columns if 'CX_EMB' in c), None)
         _preco_col = next((c for c in _df_prod_prev.columns if 'PRECO' in c or 'PREÇO' in c), None)
         _desc_col  = next((c for c in _df_prod_prev.columns if 'DESCRI' in c or 'GRUPO' in c), None)
+        _gram_col  = next((c for c in _df_prod_prev.columns if 'GRAMATUR' in c), None)
 
         if not _cx_col or not _preco_col:
             st.warning(f"⚠️ Colunas CX_EMB ou PRECO não encontradas. Colunas disponíveis: {_df_prod_prev.columns.tolist()}")
@@ -5098,7 +5208,7 @@ elif menu == "Pedidos Pendentes":
             _df_base['COD_N'] = _df_base['CodigoProduto'].apply(_norm_cod)
 
             # Merge com produtos
-            _cols_merge = ['ID_COD_N', _cx_col, _preco_col] + ([_desc_col] if _desc_col else [])
+            _cols_merge = ['ID_COD_N', _cx_col, _preco_col] + ([_desc_col] if _desc_col else []) + ([_gram_col] if _gram_col else [])
             _df_prod_merge = _df_prod_prev[_cols_merge].drop_duplicates(subset=['ID_COD_N'])
             _df_merge = _df_base.merge(
                 _df_prod_merge,
@@ -5119,32 +5229,88 @@ elif menu == "Pedidos Pendentes":
 
             _df_merge['CAIXAS_NECESSARIAS'] = _df_merge.apply(_calc_caixas, axis=1)
 
-            # Identificar capacidade produtiva
-            _desc_vals = _df_merge[_desc_col].tolist() if _desc_col else [''] * len(_df_merge)
-            _caps = [identificar_capacidade(d) for d in _desc_vals]
-            _df_merge['CAPACIDADE_DIA']  = [c[0] for c in _caps]
-            _df_merge['GRUPO_PROD']      = [c[1] for c in _caps]
+            # Identificar linha de produção e capacidade diária dinâmica (pessoas/máquinas configurados acima)
+            def _linha_e_capacidade(row):
+                desc_ref = row.get(_desc_col, '') if _desc_col else ''
+                gram_ref = row.get(_gram_col, '') if _gram_col else ''
+                linha_key = identificar_linha_producao(desc_ref if desc_ref else row.get('Descricao', ''), gram_ref)
+                if linha_key is None:
+                    return pd.Series([None, None, 'SEM CAPACIDADE'])
+                cap = capacidade_dia(linha_key, _cfg_editado)
+                if TAXAS_PRODUCAO[linha_key]['unidade_cap'] == 'fd':
+                    cap = cap * FARDO_PARA_CAIXA  # converte fardos/dia → caixas/dia para comparar com CAIXAS_NECESSARIAS
+                return pd.Series([linha_key, cap if cap > 0 else None, TAXAS_PRODUCAO[linha_key]['nome']])
 
-            # Calcular dias de produção (ceil, paralelo por produto)
-            def _calc_dias(row):
-                try:
-                    if row['CAPACIDADE_DIA'] is None or row['CAIXAS_NECESSARIAS'] is None:
-                        return None
-                    return math.ceil(row['CAIXAS_NECESSARIAS'] / row['CAPACIDADE_DIA'])
-                except Exception:
-                    return None
+            _df_merge[['LINHA_KEY', 'CAPACIDADE_DIA', 'GRUPO_PROD']] = _df_merge.apply(_linha_e_capacidade, axis=1)
+            _df_merge['PEDIDO_ITEM_ID'] = _df_merge['NumeroPedido'].astype(str) + '||' + _df_merge['CodigoProduto'].astype(str)
 
-            _df_merge['DIAS_PRODUCAO'] = _df_merge.apply(_calc_dias, axis=1)
+            # ── Fila de priorização por linha de produção ────────────────
+            def carregar_prioridades():
+                """Lê a ordem manual salva por linha. Retorna {linha_key: [pedido_item_id, ...]}."""
+                prioridades = {}
+                if supa_disponivel():
+                    for reg in supa_select("producao_prioridade"):
+                        try:
+                            prioridades[reg['linha']] = json.loads(reg.get('ordem') or '[]')
+                        except Exception:
+                            prioridades[reg['linha']] = []
+                return prioridades
 
-            # Calcular data prevista
+            def salvar_prioridade(linha_key, ordem_lista, usuario_nome=None):
+                if not supa_disponivel():
+                    return False
+                existentes = supa_select("producao_prioridade", filtros={"linha": linha_key})
+                dados = {
+                    "linha": linha_key, "ordem": json.dumps(ordem_lista),
+                    "atualizado_em": datetime.now().isoformat(),
+                    "atualizado_por": usuario_nome or "",
+                }
+                if existentes:
+                    return supa_update("producao_prioridade", linha_key, dados, id_col="linha")
+                return supa_insert("producao_prioridade", dados) is not None
+
+            def _ordenar_fila(df_linha, ordem_manual):
+                """Prioridade manual salva primeiro (na ordem salva); resto por data de emissão."""
+                df_linha = df_linha.copy()
+                df_linha['_DATA_ORD'] = pd.to_datetime(df_linha['DataEmissao'], errors='coerce')
+                df_linha = df_linha.sort_values('_DATA_ORD', na_position='last')
+                if not ordem_manual:
+                    return df_linha
+                ordem_pos = {pid: i for i, pid in enumerate(ordem_manual)}
+                df_com_ordem = df_linha[df_linha['PEDIDO_ITEM_ID'].isin(ordem_pos)].copy()
+                df_com_ordem['_ORD'] = df_com_ordem['PEDIDO_ITEM_ID'].map(ordem_pos)
+                df_com_ordem = df_com_ordem.sort_values('_ORD')
+                df_sem_ordem = df_linha[~df_linha['PEDIDO_ITEM_ID'].isin(ordem_pos)]
+                return pd.concat([df_com_ordem, df_sem_ordem], ignore_index=True)
+
+            _prioridades_salvas = carregar_prioridades()
             _hoje = date.today()
+            _partes_calculadas = []
+            _filas_por_linha = {}
 
-            def _calc_data(dias):
-                if dias is None or pd.isna(dias):
-                    return None
-                return adicionar_dias_uteis(_hoje, int(dias))
+            for _linha_key_iter in [k for k in _df_merge['LINHA_KEY'].dropna().unique()]:
+                _df_linha = _df_merge[_df_merge['LINHA_KEY'] == _linha_key_iter].copy()
+                _cap_linha = _df_linha['CAPACIDADE_DIA'].iloc[0]
+                _ordem_salva = _prioridades_salvas.get(_linha_key_iter, [])
+                _df_linha = _ordenar_fila(_df_linha, _ordem_salva)
 
-            _df_merge['DATA_PREVISTA'] = _df_merge['DIAS_PRODUCAO'].apply(_calc_data)
+                _acumulado, _dias_lista, _data_lista = 0.0, [], []
+                for _, _linha_row in _df_linha.iterrows():
+                    _acumulado += (_linha_row['CAIXAS_NECESSARIAS'] or 0)
+                    _dias = math.ceil(_acumulado / _cap_linha) if _cap_linha else None
+                    _dias_lista.append(_dias)
+                    _data_lista.append(adicionar_dias_uteis(_hoje, _dias) if _dias is not None else None)
+                _df_linha['DIAS_PRODUCAO'] = _dias_lista
+                _df_linha['DATA_PREVISTA'] = _data_lista
+                _filas_por_linha[_linha_key_iter] = _df_linha
+                _partes_calculadas.append(_df_linha)
+
+            _df_sem_linha = _df_merge[_df_merge['LINHA_KEY'].isna()].copy()
+            _df_sem_linha['DIAS_PRODUCAO'] = None
+            _df_sem_linha['DATA_PREVISTA'] = None
+            _partes_calculadas.append(_df_sem_linha)
+
+            _df_merge = pd.concat(_partes_calculadas, ignore_index=True) if _partes_calculadas else _df_merge
             _df_merge['PREVISAO_FORMATADA'] = _df_merge.apply(
                 lambda r: f"{r['DATA_PREVISTA'].strftime('%d/%m/%Y')} ({int(r['DIAS_PRODUCAO'])} dias)"
                 if r['DATA_PREVISTA'] is not None else "SEM CAPACIDADE",
@@ -5220,6 +5386,47 @@ elif menu == "Pedidos Pendentes":
                 'VALOR_TOTAL':        'Faturamento',
             })
             st.dataframe(_df_show, use_container_width=True, height=380)
+
+            # ── Fila de Priorização por Produto ────────────────────────
+            st.markdown("---")
+            st.markdown("**🔀 Fila de Priorização por Produto**")
+            st.caption("Use as setas para mudar a ordem de produção. A previsão de todos os pedidos abaixo recalcula na hora.")
+
+            _nome_usuario_fila = st.session_state.get('usuario_nome', '')
+
+            for _linha_key_ui, _df_linha_ui in _filas_por_linha.items():
+                _nome_linha_ui = TAXAS_PRODUCAO[_linha_key_ui]['nome']
+                with st.expander(f"{_nome_linha_ui} — {len(_df_linha_ui)} pedido(s) na fila"):
+                    _ids_ordem = _df_linha_ui['PEDIDO_ITEM_ID'].tolist()
+                    _cab1, _cab2, _cab3, _cab4, _cab5, _cab6 = st.columns([0.5, 0.5, 3, 1.2, 1, 1.5])
+                    _cab3.markdown("**Cliente / Pedido**")
+                    _cab4.markdown("**Caixas**")
+                    _cab5.markdown("**Dias**")
+                    _cab6.markdown("**Previsão**")
+                    for _pos, (_, _item) in enumerate(_df_linha_ui.iterrows()):
+                        _c1, _c2, _c3, _c4, _c5, _c6 = st.columns([0.5, 0.5, 3, 1.2, 1, 1.5])
+                        _item_id = _item['PEDIDO_ITEM_ID']
+                        with _c1:
+                            if st.button("↑", key=f"fila_up_{_linha_key_ui}_{_item_id}", disabled=(_pos == 0)):
+                                _nova_ordem = _ids_ordem.copy()
+                                _nova_ordem[_pos - 1], _nova_ordem[_pos] = _nova_ordem[_pos], _nova_ordem[_pos - 1]
+                                salvar_prioridade(_linha_key_ui, _nova_ordem, _nome_usuario_fila)
+                                st.rerun()
+                        with _c2:
+                            if st.button("↓", key=f"fila_down_{_linha_key_ui}_{_item_id}", disabled=(_pos == len(_ids_ordem) - 1)):
+                                _nova_ordem = _ids_ordem.copy()
+                                _nova_ordem[_pos + 1], _nova_ordem[_pos] = _nova_ordem[_pos], _nova_ordem[_pos + 1]
+                                salvar_prioridade(_linha_key_ui, _nova_ordem, _nome_usuario_fila)
+                                st.rerun()
+                        with _c3:
+                            st.write(f"**{_pos + 1}.** {_item.get('Cliente', '')} — Pedido {_item.get('NumeroPedido', '')}")
+                        with _c4:
+                            st.write(f"{_item.get('CAIXAS_NECESSARIAS') or '—'}")
+                        with _c5:
+                            st.write(f"{_item.get('DIAS_PRODUCAO') or '—'}")
+                        with _c6:
+                            _dp_ui = _item.get('DATA_PREVISTA')
+                            st.write(_dp_ui.strftime('%d/%m/%Y') if _dp_ui is not None else '—')
 
             # ── Downloads ───────────────────────────────────────────────
             def _gerar_relatorio_previsao(df_merge, df_prod_prev, cx_col, preco_col, desc_col):
