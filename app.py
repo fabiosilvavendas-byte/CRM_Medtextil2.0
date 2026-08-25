@@ -5048,6 +5048,7 @@ elif menu == "Pedidos Pendentes":
                                 'modos': {'1 máq. grande + 1 pequena': 100.0, '2 máq. pequenas': 65.0},
                                 'default': '1 máq. grande + 1 pequena', 'unidade_cap': 'cx'},
         'gaze_rolo_queijo':   {'nome': 'Gaze em rolo (queijo/circular)',           'recurso': 'pessoas',  'taxa_unit': 29.0,   'default': 1, 'unidade_cap': 'cx'},
+        'gaze_esteril_50x91': {'nome': 'Gaze estéril 11 Fios (50x91)',             'recurso': 'pessoas',  'taxa_unit': 2.0,    'default': 1, 'unidade_cap': 'cx'},
     }
     FARDO_PARA_CAIXA = 2  # 1 fardo de Atadura Farma = 2 caixas (para comparar com CAIXAS_NECESSARIAS)
 
@@ -5123,7 +5124,9 @@ elif menu == "Pedidos Pendentes":
         if 'ESTERIL' in d:
             if 'PCT 10' in d or _re_prod.search(r'\b13\s*F', d):
                 return 'gaze_esteril_pct10'
-            return None  # ex.: 11 Fios / 50x91 — fora do escopo definido
+            if '50X91' in d or '50 X 91' in d or _re_prod.search(r'\b11\s*F', d):
+                return 'gaze_esteril_50x91'
+            return None
 
         return None
 
@@ -5233,7 +5236,8 @@ elif menu == "Pedidos Pendentes":
             def _linha_e_capacidade(row):
                 desc_ref = row.get(_desc_col, '') if _desc_col else ''
                 gram_ref = row.get(_gram_col, '') if _gram_col else ''
-                linha_key = identificar_linha_producao(desc_ref if desc_ref else row.get('Descricao', ''), gram_ref)
+                _desc_pedido = row.get('Descricao', '')
+                linha_key = identificar_linha_producao(_desc_pedido if _desc_pedido else desc_ref, gram_ref)
                 if linha_key is None:
                     return pd.Series([None, None, 'SEM CAPACIDADE'])
                 cap = capacidade_dia(linha_key, _cfg_editado)
