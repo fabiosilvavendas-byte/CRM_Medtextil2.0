@@ -1475,41 +1475,47 @@ def formatar_numero_br(valor, casas=0):
 
 @st.cache_data(ttl=3600)
 def processar_inadimplencia(df):
-    """Processa dados de inadimplência"""
-    # Padronizar nomes das colunas
-    # Tentar várias variações de nomes de colunas
-    rename_map = {
+    df = df.copy()
+    
+    # Mapeamento unificado de colunas
+    colunas_map = {
+        'N_Doc': 'Boleto',
+        'NºDoc': 'Boleto',
+        'Nº Doc': 'Boleto',
+        'N° Doc': 'Boleto',
         'Funcionário': 'Vendedor',
         'Razão Social': 'Cliente',
-        'N_Doc': 'NumeroDoc',
-        'N Doc': 'NumeroDoc',
-        'NDoc': 'NumeroDoc',
-        'Numero Doc': 'NumeroDoc',
         'Dt.Vencimento': 'DataVencimento',
-        'Dt Vencimento': 'DataVencimento',
-        'Data Vencimento': 'DataVencimento',
         'Vr.Líquido': 'ValorLiquido',
-        'Vr Líquido': 'ValorLiquido',
-        'Valor Líquido': 'ValorLiquido',
-        'Valor Liquido': 'ValorLiquido',
         'Conta/Caixa': 'Banco',
-        'Conta Caixa': 'Banco',
         'UF': 'Estado'
     }
     
-    df = df.rename(columns=rename_map)
+    # Renomeia as colunas que existirem na planilha
+    df = df.rename(columns={k: v for k, v in colunas_map.items() if k in df.columns})
     
-    # Converter data de vencimento
-    df['DataVencimento'] = pd.to_datetime(df['DataVencimento'], errors='coerce')
-    
-    # Calcular dias de atraso
-    hoje = pd.Timestamp.now()
-    df['DiasAtraso'] = (hoje - df['DataVencimento']).dt.days
-    df['DiasAtraso'] = df['DiasAtraso'].apply(lambda x: max(0, x))  # Não mostrar valores negativos
-    
-    # Classificar inadimplência
-    def classificar_inadimplencia(dias):
-        if dias == 0:
+    # Garantia extra para capturar a coluna do boleto caso tenha outro nome
+    if 'Boleto' not in df.columns:
+        cols_doc = [c for c in df.columns if 'DOC' in c.upper() or 'BOLETO' in c.upper() or 'NUMERO' in c.upper()]
+        if cols_doc:
+            df['Boleto'] = df[cols_doc[0]]
+        else:
+            df['Boleto'] = '-'
+
+    # Tratamento de datas e cálculo de dias de atraso
+    if 'DataVencimento' in df.columns:
+        df['DataVencimento'] = pd.to_datetime(df['DataVencimento'], errors='coerce')
+        hoje = pd.Timestamp.now().normalize()
+        df['DiasAtraso'] = (hoje - df['DataVencimento']).dt.days.fillna(0).astype(int)
+    else:
+        df['DiasAtraso'] = 0
+
+    if 'ValorLiquido' in df.columns:
+        df['ValorLiquido'] = pd.to_numeric(df['ValorLiquido'], errors='coerce').fillna(0)
+
+    # Classificação por faixa de atraso
+    def classificar_faixa(dias):
+        if dias <= 0:
             return 'A Vencer'
         elif dias <= 30:
             return '1-30 dias'
@@ -1519,11 +1525,10 @@ def processar_inadimplencia(df):
             return '61-90 dias'
         else:
             return 'Acima de 90 dias'
-    
-    df['FaixaAtraso'] = df['DiasAtraso'].apply(classificar_inadimplencia)
-    
-    return df
 
+    df['FaixaAtraso'] = df['DiasAtraso'].apply(classificar_faixa)
+
+    return df
 
 # ====================== PROPOSTA PDF (HISTÓRICO DE CLIENTE) ======================
 def gerar_proposta_pdf_historico(cliente_info_dict, historico_df, vendas_resumo):
@@ -3256,7 +3261,14 @@ elif menu == "Inadimplência":
     if df_inadimplencia is not None and len(df_inadimplencia) > 0:
         df_inadimplencia = processar_inadimplencia(df_inadimplencia)
         
-        
+        # Garantia de tratamento para coluna de boleto
+        if 'Boleto' not in df_inadimplencia.columns:
+            cols_doc = [c for c in df_inadimplencia.columns if 'DOC' in c.upper() or 'BOLETO' in c.upper() or 'NUMERO' in c.upper()]
+            if cols_doc:
+                df_inadimplencia['Boleto'] = df_inadimplencia[cols_doc[0]]
+            else:
+                df_inadimplencia['Boleto'] = '-'
+
         # ========== FILTROS ==========
         st.subheader("🔍 Filtros")
         col_f1, col_f2 = st.columns(2)
@@ -3333,11 +3345,8 @@ elif menu == "Inadimplência":
 
         with col7:
             st.markdown("**👤 Top Vendedores**")
-            if 'NumeroDoc' not in df_inad_filtrado.columns:
-                possiveis_nomes = [col for col in df_inad_filtrado.columns if 'DOC' in col.upper() or 'NUMERO' in col.upper()]
-                df_inad_filtrado['NumeroDoc'] = df_inad_filtrado[possiveis_nomes[0]] if possiveis_nomes else 1
             inad_por_vendedor = df_inad_filtrado.groupby('Vendedor').agg(
-                {'ValorLiquido': 'sum', 'NumeroDoc': 'count'}).reset_index()
+                {'ValorLiquido': 'sum', 'Boleto': 'count'}).reset_index()
             inad_por_vendedor.columns = ['Vendedor', 'Valor', 'QtdTitulos']
             inad_por_vendedor = inad_por_vendedor.sort_values('Valor', ascending=False).head(10)
             fig_vend_inad = px.bar(inad_por_vendedor, x='Valor', y='Vendedor', orientation='h',
@@ -3357,55 +3366,53 @@ elif menu == "Inadimplência":
             st.plotly_chart(fig_est_inad, use_container_width=True)
         
         st.markdown("---")
-        
-        # ========== TABELA DETALHADA ==========
+
+        # ========== TABELA DETALHADA E DOWNLOAD EXCEL ==========
         st.subheader("📋 Detalhamento dos Títulos")
+
+        # Inclui o Boleto como primeira coluna
+        colunas_ordem = ['Boleto', 'Cliente', 'Vendedor', 'DataVencimento', 'ValorLiquido', 'DiasAtraso', 'FaixaAtraso', 'Banco', 'Estado']
+        cols_presentes = [c for c in colunas_ordem if c in df_inad_filtrado.columns]
         
-        # Preparar dados para exibição
-        df_detalhado = df_inad_filtrado[[
-            'Vendedor', 'Cliente', 'NumeroDoc', 'DataVencimento', 
-            'ValorLiquido', 'DiasAtraso', 'FaixaAtraso', 'Banco', 'Estado'
-        ]].copy()
-        
-        # Formatar data
-        df_detalhado['DataVencimento'] = df_detalhado['DataVencimento'].dt.strftime('%d/%m/%Y')
-        
-        # Formatar valores para exibição
-        df_detalhado_display = df_detalhado.copy()
-        df_detalhado_display['ValorLiquido'] = df_detalhado_display['ValorLiquido'].apply(
-            lambda x: formatar_moeda(x) if pd.notnull(x) else "R$ 0,00"
-        )
-        
-        # Renomear colunas
-        df_detalhado_display = df_detalhado_display.rename(columns={
-            'Vendedor': 'Vendedor',
-            'Cliente': 'Cliente',
-            'NumeroDoc': 'Nº Documento',
-            'DataVencimento': 'Vencimento',
-            'ValorLiquido': 'Valor em Aberto',
-            'DiasAtraso': 'Dias Atraso',
-            'FaixaAtraso': 'Faixa',
-            'Banco': 'Banco',
+        df_export = df_inad_filtrado[cols_presentes].copy()
+
+        renomear_colunas = {
+            'Boleto': 'Nº Boleto / Doc',
+            'DataVencimento': 'Data de Vencimento',
+            'ValorLiquido': 'Valor Líquido (R$)',
+            'DiasAtraso': 'Dias em Atraso',
+            'FaixaAtraso': 'Faixa de Atraso',
+            'Banco': 'Banco / Caixas',
             'Estado': 'UF'
-        })
-        
-        # Ordenar por dias de atraso (maior para menor)
-        df_detalhado_display = df_detalhado_display.sort_values('Dias Atraso', ascending=False)
-        
-        st.dataframe(df_detalhado_display, use_container_width=True, height=400)
-        
-        # Botão de download
-        _nome_inad = (
-            f"{vendedor_inad_filtro.upper().replace(' ', '_')}_INADIMPLENCIA.xlsx"
-            if vendedor_inad_filtro != 'Todos'
-            else "RELATORIO_INADIMPLENCIA.xlsx"
-        )
+        }
+
+        # Formatação para exibição na tela
+        df_exibir = df_export.copy()
+        if 'DataVencimento' in df_exibir.columns:
+            df_exibir['DataVencimento'] = pd.to_datetime(df_exibir['DataVencimento']).dt.strftime('%d/%m/%Y')
+        if 'ValorLiquido' in df_exibir.columns:
+            df_exibir['ValorLiquido'] = df_exibir['ValorLiquido'].apply(lambda x: f"R$ {formatar_numero_br(x, 2)}")
+            
+        df_exibir = df_exibir.rename(columns=renomear_colunas)
+
+        st.dataframe(df_exibir, use_container_width=True, hide_index=True)
+
+        # Preparação do arquivo Excel mantendo o número do boleto
+        df_excel = df_export.rename(columns=renomear_colunas)
+        if 'Data de Vencimento' in df_excel.columns:
+            df_excel['Data de Vencimento'] = pd.to_datetime(df_excel['Data de Vencimento']).dt.strftime('%d/%m/%Y')
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_excel.to_excel(writer, index=False, sheet_name='Inadimplencia')
+        excel_data = output.getvalue()
+
         st.download_button(
-            "📥 Exportar Relatório Completo",
-            to_excel(df_detalhado),
-            _nome_inad,
-            "application/vnd.ms-excel",
-            key="dl_inad_completo"
+            label="📥 Baixar Relatório em Excel (.xlsx)",
+            data=excel_data,
+            file_name=f"Relatorio_Inadimplencia_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
         )
 
 # ====================== CLIENTES SEM COMPRA ======================
