@@ -8857,7 +8857,7 @@ elif menu == "Consulta Clientes":
 
     # ── Campo de código do produto ────────────────────────────────────────
     _codigos_lista = [''] + sorted(_df_tabela[_cod_col].dropna().astype(str).unique().tolist())
-    _cc1, _cc2, _cc3 = st.columns([1, 2, 1])
+    _cc1, _cc2, _cc3, _cc4 = st.columns([1, 2, 1, 1])
     with _cc1:
         _cod_sel = st.selectbox("Código do Produto", _codigos_lista,
                                 key="cc_codigo", label_visibility="visible")
@@ -8893,6 +8893,15 @@ elif menu == "Consulta Clientes":
             if _gv and _gv.lower() not in ('nan', '0', '0.0', ''):
                 _gramatura = _gv
 
+        # Caixa de Embarque
+        _cx_col = next((c for c in _cols
+                        if 'CX_EMB' in c or 'CAIXA' in c or 'EMBARQUE' in c), None)
+        _cx_embarque = ''
+        if _cx_col:
+            _cxv = str(_prod_row.get(_cx_col, '')).strip()
+            if _cxv and _cxv.lower() not in ('nan', ''):
+                _cx_embarque = _cxv
+
         with _cc2:
             st.text_input("Descrição", value=_descricao, disabled=True,
                           key=f"cc_desc_{_cod_sel}")
@@ -8900,6 +8909,10 @@ elif menu == "Consulta Clientes":
         with _cc3:
             st.text_input("Gramatura", value=_gramatura, disabled=True,
                           key=f"cc_gram_{_cod_sel}")
+
+        with _cc4:
+            st.text_input("Caixa de Embarque", value=_cx_embarque, disabled=True,
+                          key=f"cc_cx_{_cod_sel}")
 
         # Preço base da tabela
         try:
