@@ -844,13 +844,13 @@ _MODULOS_ADMIN = [
     "Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra",
     "Histórico", "Pedidos Pendentes", "Rankings",
     "Performance de Vendedores", "Consulta Clientes",
-    "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos",
+    "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos", "Comissões",
 ]
 _MODULOS_GESTOR = [
     "Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra",
     "Histórico", "Pedidos Pendentes", "Rankings",
     "Performance de Vendedores", "Consulta Clientes",
-    "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos",
+    "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos", "Comissões",
 ]
 _MODULOS_VENDEDOR = [
     "Histórico", "Consulta Clientes", "Meus Pedidos",
@@ -2024,6 +2024,7 @@ _CATEGORIAS_NAV = {
     "RELATÓRIOS E ATENÇÃO": [
         "Pedidos Pendentes",
         "Inadimplência",
+        "Comissões",
     ],
     "CONSULTAS RÁPIDAS": [
         "Tabela de Preços",
@@ -2048,6 +2049,7 @@ _ICONES_NAV = {
     "Novo Pedido":"📝","Tabela de Preços":"＄","Histórico do Cliente":"◷",
     "Novo Pedido ERP":"🆕","Meus Pedidos":"📋",
     "Fila de Aprovação":"⏳","Todos os Pedidos":"🗂️",
+    "Comissões":"💵",
 }
 
 if 'menu_option' not in st.session_state:
@@ -9876,6 +9878,232 @@ elif menu == "__erp_todos_pedidos__":
                             )
                         except Exception:
                             st.caption("PDF indisponível")
+
+# ══════════════════════════════════════════════════════════════════════════
+# MÓDULO COMISSÕES — consolidado de comissão a pagar (PIX) por representante
+# Módulo independente: não lê nem grava em nenhuma outra planilha/tabela.
+# Fontes: COMISSOES_VENDAS_*.xlsx, BOLETOS_EMITIDOS_*.xlsx, BOLETOS_PAGOS_*.xlsx
+# (lidas do GitHub; o sufixo de data no nome do arquivo é ignorado).
+# ══════════════════════════════════════════════════════════════════════════
+elif menu == "Comissões":
+    import re as _com_re
+
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;'
+                'font-size:1.35rem;">💵 Comissões — Consolidado a Pagar</h2>',
+                unsafe_allow_html=True)
+    st.caption("Consolidação de comissões liberadas para pagamento via PIX. "
+               "Não integra com banco — apenas confere e totaliza.")
+
+    # Representantes com liberação por FATURADO (contam no faturamento,
+    # independente do boleto estar pago). Todos os demais só liberam na
+    # liquidação do boleto correspondente.
+    _COM_REPS_FATURADO = {"MARIO JR", "DANILO", "MALCA"}
+
+    def _com_nome_base(nome):
+        """'MARIO JR - PE/PB/RN' -> 'MARIO JR'"""
+        if not isinstance(nome, str) or not nome.strip():
+            return ""
+        return nome.split(" - ")[0].strip().upper()
+
+    def _com_chave_documento(doc):
+        """Documento da comissão (ex.: 6793.0) -> chave de 6 dígitos ('006793')."""
+        if pd.isna(doc):
+            return None
+        try:
+            s = str(int(round(float(doc))))
+        except (ValueError, TypeError):
+            return None
+        return s[-6:].zfill(6)
+
+    def _com_parse_titulo(valor):
+        """Nº Doc do boleto (float 1006793.1 ou str '01006793.1BPBP') ->
+        (chave de 6 dígitos, nº da parcela)."""
+        if pd.isna(valor):
+            return None, None
+        if isinstance(valor, float):
+            s = f"{valor:.1f}"
+        else:
+            s = str(valor).strip()
+        m = _com_re.match(r"^0*(\d+)\.(\d)", s)
+        if not m:
+            return None, None
+        base, parcela = m.group(1), m.group(2)
+        return base[-6:].zfill(6), parcela
+
+    def _com_processar(df_com, df_emit, df_pago):
+        """Recebe os 3 DataFrames já lidos dos uploads e devolve
+        (com_agg, bol_agg). Não lê nada do GitHub."""
+        # ── Comissões: agrupa por Documento+Vendedor (uma venda tem várias
+        # linhas de produto) e calcula a chave de vínculo com o boleto ──
+        com = df_com.dropna(subset=["Documento"]).copy()
+        com["_chave"] = com["Documento"].apply(_com_chave_documento)
+        com["_rep_base"] = com["Vendedor"].apply(_com_nome_base)
+        com_agg = (com.groupby(["Documento", "Vendedor", "_rep_base", "_chave"],
+                                dropna=False)
+                      .agg(DtVenda=("DtVenda", "first"),
+                           Cliente=("Cliente", "first"),
+                           ValorComissao=("Vl Comissão", "sum"))
+                      .reset_index())
+
+        # ── Boletos: junta emitidos + pagos, um registro por parcela (chave+parcela) ──
+        partes = [d for d in (df_emit, df_pago) if d is not None and not d.empty]
+        bol = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame(
+            columns=["Nº Doc", "Funcionário", "Dt.Emissão", "Dt.Baixa", "Vr.Líquido"])
+        if not bol.empty:
+            bol[["_chave", "_parcela"]] = bol["Nº Doc"].apply(
+                lambda v: pd.Series(_com_parse_titulo(v)))
+            bol = bol.dropna(subset=["_chave", "_parcela"])
+            bol_agg = (bol.sort_values("Dt.Baixa", na_position="last")
+                          .groupby(["_chave", "_parcela"], dropna=False)
+                          .agg(Funcionario=("Funcionário", "first"),
+                               DtEmissao=("Dt.Emissão", "first"),
+                               DtBaixa=("Dt.Baixa", "first"),
+                               VrLiquido=("Vr.Líquido", "first"))
+                          .reset_index())
+        else:
+            bol_agg = pd.DataFrame(columns=["_chave", "_parcela", "Funcionario",
+                                             "DtEmissao", "DtBaixa", "VrLiquido"])
+        return com_agg, bol_agg
+
+    # ── Upload manual dos 3 arquivos (nada é lido do GitHub neste módulo) ──
+    st.markdown("#### 📤 Envie as planilhas do período")
+    _up_com = st.file_uploader("Comissões (COMISSOES_VENDAS)",
+                                type=["xlsx", "xls"], key="com_up_comissoes")
+    _up_emit = st.file_uploader("Boletos Emitidos (BOLETOS_EMITIDOS)",
+                                 type=["xlsx", "xls"], key="com_up_emitidos")
+    _up_pago = st.file_uploader("Boletos Pagos (BOLETOS_PAGOS)",
+                                 type=["xlsx", "xls"], key="com_up_pagos")
+
+    _faltando = []
+    if _up_com is None:
+        _faltando.append("Comissões")
+    if _up_emit is None and _up_pago is None:
+        _faltando.append("Boletos (Emitidos e/ou Pagos)")
+    if _faltando:
+        st.info("Envie os arquivos acima para calcular: " + ", ".join(_faltando))
+        st.stop()
+
+    try:
+        _df_com_raw = pd.read_excel(_up_com)
+        _df_emit_raw = pd.read_excel(_up_emit) if _up_emit is not None else None
+        _df_pago_raw = pd.read_excel(_up_pago) if _up_pago is not None else None
+    except Exception as _e:
+        st.error(f"❌ Não consegui ler um dos arquivos enviados: {_e}")
+        st.stop()
+
+    _com_agg, _bol_agg = _com_processar(_df_com_raw, _df_emit_raw, _df_pago_raw)
+
+    # ── Reconciliação: liga cada comissão às parcelas do boleto, rateia o
+    # valor entre elas e aplica a regra de liberação de cada representante ──
+    @st.cache_data(ttl=3600)
+    def _com_reconciliar(com_agg, bol_agg):
+        linhas = []
+        bol_por_chave = {k: v for k, v in bol_agg.groupby("_chave")} if not bol_agg.empty else {}
+        for _, row in com_agg.iterrows():
+            chave = row["_chave"]
+            parcelas = bol_por_chave.get(chave)
+            rep_base = row["_rep_base"]
+            por_faturado = rep_base in _COM_REPS_FATURADO
+            valor_total_cent = int(round(row["ValorComissao"] * 100))
+
+            if parcelas is None or parcelas.empty:
+                # Nenhum boleto localizado para este documento
+                linhas.append({
+                    "Documento": row["Documento"], "Vendedor": row["Vendedor"],
+                    "RepBase": rep_base, "Cliente": row["Cliente"],
+                    "Parcela": None, "ValorComissao": row["ValorComissao"],
+                    "DtBase": row["DtVenda"] if por_faturado else pd.NaT,
+                    "Liberado": bool(por_faturado),
+                    "Divergencia": "BOLETO NÃO LOCALIZADO",
+                })
+                continue
+
+            n = len(parcelas)
+            base_cent = valor_total_cent // n
+            resto = valor_total_cent - base_cent * n
+            for i, (_, p) in enumerate(parcelas.sort_values("_parcela").iterrows()):
+                valor_parcela = (base_cent + (resto if i == n - 1 else 0)) / 100.0
+                if por_faturado:
+                    dt_base, liberado = row["DtVenda"], True
+                else:
+                    dt_base = p["DtBaixa"]
+                    liberado = pd.notna(p["DtBaixa"])
+                divergencia = None
+                if not por_faturado and not liberado:
+                    divergencia = "AGUARDANDO LIQUIDAÇÃO DO BOLETO"
+                linhas.append({
+                    "Documento": row["Documento"], "Vendedor": row["Vendedor"],
+                    "RepBase": rep_base, "Cliente": row["Cliente"],
+                    "Parcela": p["_parcela"], "ValorComissao": valor_parcela,
+                    "DtBase": dt_base, "Liberado": liberado,
+                    "Divergencia": divergencia,
+                })
+        return pd.DataFrame(linhas)
+
+    _com_recon = _com_reconciliar(_com_agg, _bol_agg)
+
+    # ── Filtros ───────────────────────────────────────────────────────────
+    with st.expander("⚙️ Filtros do Módulo", expanded=True):
+        _c1, _c2, _c3 = st.columns([1, 1, 1.4])
+        with _c1:
+            _com_de = st.date_input("De", value=datetime.today().replace(day=1),
+                                     key="com_de")
+        with _c2:
+            _com_ate = st.date_input("Até", value=datetime.today(), key="com_ate")
+        with _c3:
+            _com_reps = ["Todos"] + sorted(
+                [r for r in _com_recon["RepBase"].dropna().unique() if r])
+            _com_rep_sel = st.selectbox("Vendedor", _com_reps, key="com_rep")
+
+    _com_de_ts = pd.Timestamp(_com_de)
+    _com_ate_ts = pd.Timestamp(_com_ate) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+
+    _df = _com_recon.copy()
+    if _com_rep_sel != "Todos":
+        _df = _df[_df["RepBase"] == _com_rep_sel]
+
+    _no_periodo = _df["DtBase"].notna() & _df["DtBase"].between(_com_de_ts, _com_ate_ts)
+    _df_liberado = _df[_df["Liberado"] & _no_periodo]
+    _df_pendente = _df[(~_df["Liberado"]) | (~_no_periodo & _df["Liberado"])]
+    _df_divergencia = _df[_df["Divergencia"].notna()]
+
+    # ── Cards de resumo ──────────────────────────────────────────────────
+    _tot_liberado = _df_liberado["ValorComissao"].sum()
+    _tot_pendente = _df[~_df["Liberado"]]["ValorComissao"].sum()
+    _qtd_diverg = _df_divergencia["Documento"].nunique()
+
+    _k1, _k2, _k3 = st.columns(3)
+    _k1.metric("💰 Total a pagar (PIX) no período", f"R$ {formatar_numero_br(_tot_liberado, 2)}")
+    _k2.metric("⏳ Comissão pendente (não liberada)", f"R$ {formatar_numero_br(_tot_pendente, 2)}")
+    _k3.metric("⚠️ Documentos com divergência", f"{_qtd_diverg}")
+
+    st.markdown("---")
+
+    # ── Consolidado por representante ───────────────────────────────────
+    st.markdown("#### Consolidado por representante")
+    if _df_liberado.empty:
+        st.info("Nenhuma comissão liberada para pagamento no período/filtro selecionado.")
+    else:
+        _resumo = (_df_liberado.groupby("Vendedor", dropna=False)["ValorComissao"]
+                   .sum().reset_index().sort_values("ValorComissao", ascending=False))
+        _resumo["Total a Pagar (PIX)"] = _resumo["ValorComissao"].apply(
+            lambda v: f"R$ {formatar_numero_br(v, 2)}")
+        st.dataframe(_resumo[["Vendedor", "Total a Pagar (PIX)"]],
+                     use_container_width=True, hide_index=True)
+
+    # ── Divergências ─────────────────────────────────────────────────────
+    st.markdown("#### Divergências para conferência")
+    if _df_divergencia.empty:
+        st.success("Nenhuma divergência encontrada no filtro atual.")
+    else:
+        _dv = _df_divergencia[["Documento", "Vendedor", "Cliente", "Parcela",
+                                "ValorComissao", "Divergencia"]].copy()
+        _dv["Documento"] = _dv["Documento"].apply(lambda x: f"{int(x)}" if pd.notna(x) else "")
+        _dv["ValorComissao"] = _dv["ValorComissao"].apply(
+            lambda v: f"R$ {formatar_numero_br(v, 2)}")
+        _dv.columns = ["Documento", "Vendedor", "Cliente", "Parcela",
+                       "Valor Comissão", "Motivo"]
+        st.dataframe(_dv, use_container_width=True, hide_index=True)
 
 st.markdown("""
 <hr style="border-color:#E9ECEF;margin-top:32px;margin-bottom:12px;">
