@@ -859,12 +859,15 @@ _MODULOS_COLABORADOR = [
     "Inadimplência", "Histórico", "Pedidos Pendentes", "Consulta Clientes",
 ]
 
+_MODULOS_FINANCEIRO = _MODULOS_COLABORADOR + ["Comissões"]
+
 _PERFIL_MODULOS = {
     "admin":        _MODULOS_ADMIN,
     "administrador":_MODULOS_ADMIN,
     "gestor":       _MODULOS_GESTOR,
     "vendedor":     _MODULOS_VENDEDOR,
     "colaborador":  _MODULOS_COLABORADOR,
+    "financeiro":   _MODULOS_FINANCEIRO,
 }
 
 # Fallback legado — removido quando todos estiverem no Supabase
