@@ -7631,7 +7631,6 @@ elif menu == "Performance de Vendedores":
         else:
             _dir_ini = _dir_datas.min().normalize()
             _dir_fim = _dir_datas.max().normalize()
-            _dir_mes_ini = max(_dir_fim.replace(day=1), _dir_ini)
             _dir_ano = pd.DateOffset(years=1)
 
             # Base com os mesmos filtros de vendedor/estado, sem filtro de data
@@ -7651,6 +7650,7 @@ elif menu == "Performance de Vendedores":
                 _dir_b = _dir_b[_dir_b['Vendedor'] == _dir_vend]
             _dir_bv = _dir_b[_dir_b['TipoMov'] == 'NF Venda']
 
+            # ── Funções auxiliares ──────────────────────────────────────
             def _dir_calc(d1, d2):
                 _p = _dir_b[(_dir_b['DataEmissao'] >= d1) & (_dir_b['DataEmissao'] <= d2)]
                 _nu = obter_notas_unicas(_p)
@@ -7665,7 +7665,7 @@ elif menu == "Performance de Vendedores":
                 _rec3 = set(_antes[_antes['DataEmissao'] >= (d1 - pd.DateOffset(months=3))]['CPF_CNPJ'].dropna())
                 _base = _dir_bv[_dir_bv['DataEmissao'] <= d2]['CPF_CNPJ'].nunique()
                 _top10 = 0.0
-                if _bruto > 0 and 'CPF_CNPJ' in _nv.columns:
+                if _bruto > 0:
                     _top10 = float(_nv.groupby('CPF_CNPJ')['TotalProduto'].sum().nlargest(10).sum()) / _bruto * 100
                 return {
                     'liq': _bruto - _dev, 'bruto': _bruto, 'dev': _dev,
@@ -7679,18 +7679,11 @@ elif menu == "Performance de Vendedores":
                     'top10': _top10, 'set': _cli, 'nu': _nu,
                 }
 
-            _dir_janelas = [("Período filtrado", _dir_ini, _dir_fim)]
-            if _dir_mes_ini > _dir_ini:
-                _dir_janelas.append((f"Mês de referência ({_dir_fim.strftime('%m/%Y')})", _dir_mes_ini, _dir_fim))
+            def _dir_pct(a, b):
+                return None if not b else (a - b) / abs(b) * 100
 
-            _dir_linhas = [
-                ('Faturamento líquido', 'liq', 'R$'), ('Faturamento bruto', 'bruto', 'R$'),
-                ('Devoluções', 'dev', 'R$'), ('Devoluções % do bruto', 'dev_pct', '%'),
-                ('Clientes positivados', 'cli', 'n'), ('Clientes novos', 'novos', 'n'),
-                ('Clientes reativados (3m+)', 'reat', 'n'), ('Base de clientes', 'base', 'n'),
-                ('Positivação % da base', 'posit', '%'), ('Notas fiscais', 'notas', 'n'),
-                ('Ticket médio por cliente', 'ticket', 'R$'), ('Top 10 clientes % do bruto', 'top10', '%'),
-            ]
+            def _dir_txt_pct(v):
+                return "n/d" if v is None else f"{v:+.1f}%"
 
             def _dir_fmt(v, tp):
                 if tp == 'R$':
@@ -7699,68 +7692,47 @@ elif menu == "Performance de Vendedores":
                     return f"{v:.1f}%"
                 return formatar_numero_br(v, 0)
 
-            def _dir_var(a, b, tp):
+            def _dir_var_txt(a, b, tp):
                 if tp == '%':
                     return f"{a - b:+.1f} p.p."
-                if b == 0:
-                    return "n/d"
-                return f"{(a - b) / abs(b) * 100:+.1f}%"
+                return _dir_txt_pct(_dir_pct(a, b))
 
-            _dir_res = {}
-            _dir_export = []
-            for _nome, _j1, _j2 in _dir_janelas:
-                _atu = _dir_calc(_j1, _j2)
-                _ant = _dir_calc(_j1 - _dir_ano, _j2 - _dir_ano)
-                _perd = len(_ant['set'] - _atu['set'])
-                _dir_res[_nome] = (_atu, _ant, _perd, _j1, _j2)
+            # ── Cálculos: período total e mês a mês ─────────────────────
+            _atu_p = _dir_calc(_dir_ini, _dir_fim)
+            _ant_p = _dir_calc(_dir_ini - _dir_ano, _dir_fim - _dir_ano)
+            _perd_p = len(_ant_p['set'] - _atu_p['set'])
 
-                st.markdown(f"##### {_nome}")
-                st.caption(
-                    f"Atual: {_j1.strftime('%d/%m/%Y')} a {_j2.strftime('%d/%m/%Y')}  ·  "
-                    f"Ano anterior: {(_j1 - _dir_ano).strftime('%d/%m/%Y')} a {(_j2 - _dir_ano).strftime('%d/%m/%Y')}"
-                )
-                _kc = st.columns(4)
-                _kc[0].metric("Faturamento líquido", _dir_fmt(_atu['liq'], 'R$'), _dir_var(_atu['liq'], _ant['liq'], 'R$'))
-                _kc[1].metric("Clientes positivados", _dir_fmt(_atu['cli'], 'n'), _dir_var(_atu['cli'], _ant['cli'], 'n'))
-                _kc[2].metric("Positivação da base", _dir_fmt(_atu['posit'], '%'), _dir_var(_atu['posit'], _ant['posit'], '%'))
-                _kc[3].metric("Ticket médio", _dir_fmt(_atu['ticket'], 'R$'), _dir_var(_atu['ticket'], _ant['ticket'], 'R$'))
-
-                _tab_rows = []
-                for _rot, _chv, _tp in _dir_linhas:
-                    _tab_rows.append({
-                        'Indicador': _rot,
-                        'Atual': _dir_fmt(_atu[_chv], _tp),
-                        'Ano anterior': _dir_fmt(_ant[_chv], _tp),
-                        'Variação': _dir_var(_atu[_chv], _ant[_chv], _tp),
-                    })
-                _tab_rows.append({
-                    'Indicador': 'Clientes perdidos (compraram no ano anterior e não agora)',
-                    'Atual': formatar_numero_br(_perd, 0), 'Ano anterior': '—', 'Variação': '—',
+            _dir_meses = sorted(_dir_datas.dt.to_period('M').unique())
+            _mensal = []
+            for _per in _dir_meses:
+                _j1 = max(_per.start_time.normalize(), _dir_ini)
+                _j2 = min(_per.end_time.normalize(), _dir_fim)
+                _a = _dir_calc(_j1, _j2)
+                _b = _dir_calc(_j1 - _dir_ano, _j2 - _dir_ano)
+                _mensal.append({
+                    'mes': _per.strftime('%m/%Y'),
+                    'liq': _a['liq'], 'liq_a': _b['liq'],
+                    'liq_v': (_a['liq'] - _b['liq']) if _b['liq'] else None,
+                    'liq_p': _dir_pct(_a['liq'], _b['liq']),
+                    'cli': _a['cli'], 'cli_a': _b['cli'],
+                    'cli_v': (_a['cli'] - _b['cli']) if _b['cli'] else None,
+                    'cli_p': _dir_pct(_a['cli'], _b['cli']),
+                    'posit': _a['posit'], 'ticket': _a['ticket'],
+                    'novos': _a['novos'], 'reat': _a['reat'], 'dev_pct': _a['dev_pct'],
                 })
-                _df_tab = pd.DataFrame(_tab_rows)
-                st.dataframe(_df_tab, use_container_width=True, hide_index=True)
-                _df_exp = _df_tab.copy()
-                _df_exp.insert(0, 'Janela', _nome)
-                _dir_export.append(_df_exp)
+            _total_row = {
+                'mes': 'TOTAL',
+                'liq': _atu_p['liq'], 'liq_a': _ant_p['liq'],
+                'liq_v': (_atu_p['liq'] - _ant_p['liq']) if _ant_p['liq'] else None,
+                'liq_p': _dir_pct(_atu_p['liq'], _ant_p['liq']),
+                'cli': _atu_p['cli'], 'cli_a': _ant_p['cli'],
+                'cli_v': (_atu_p['cli'] - _ant_p['cli']) if _ant_p['cli'] else None,
+                'cli_p': _dir_pct(_atu_p['cli'], _ant_p['cli']),
+                'posit': _atu_p['posit'], 'ticket': _atu_p['ticket'],
+                'novos': _atu_p['novos'], 'reat': _atu_p['reat'], 'dev_pct': _atu_p['dev_pct'],
+            }
 
-            # ── Gráfico: faturamento líquido atual x ano anterior ──
-            _g_x, _g_y, _g_c = [], [], []
-            for _nome, (_atu, _ant, _perd, _j1, _j2) in _dir_res.items():
-                _g_x += [_nome, _nome]
-                _g_y += [_ant['liq'], _atu['liq']]
-                _g_c += ['Ano anterior', 'Atual']
-            _fig_dir = px.bar(
-                pd.DataFrame({'Janela': _g_x, 'Faturamento líquido (R$)': _g_y, 'Referência': _g_c}),
-                x='Janela', y='Faturamento líquido (R$)', color='Referência', barmode='group',
-                title='Faturamento líquido — Atual x Ano anterior',
-                color_discrete_sequence=CORES_INST
-            )
-            _fig_dir = aplicar_layout_grafico(_fig_dir, height=340)
-            st.plotly_chart(_fig_dir, use_container_width=True)
-
-            # ── Estados e Vendedores (período filtrado) ──
-            _atu_p, _ant_p, _perd_p, _j1p, _j2p = _dir_res["Período filtrado"]
-
+            # ── Estados e vendedores ────────────────────────────────────
             def _dir_comp(col):
                 _a = _atu_p['nu'].groupby(col)['Valor_Real'].sum().rename('Atual')
                 _b = _ant_p['nu'].groupby(col)['Valor_Real'].sum().rename('Ano anterior')
@@ -7770,6 +7742,159 @@ elif menu == "Performance de Vendedores":
                     lambda r: (r['Var. R$'] / abs(r['Ano anterior']) * 100) if r['Ano anterior'] else None, axis=1)
                 return _m
 
+            _dir_est = _dir_comp('Estado')
+            _dir_ven = _dir_comp('Vendedor') if _dir_vend == 'Todos' else None
+
+            # ── Destaques e alertas: lista de (nível, texto) ────────────
+            _dst = []
+            _dst.append((
+                'ok' if _atu_p['liq'] >= _ant_p['liq'] else 'bad',
+                f"Faturamento líquido de {_dir_fmt(_atu_p['liq'], 'R$')} "
+                f"({_dir_var_txt(_atu_p['liq'], _ant_p['liq'], 'R$')}) contra "
+                f"{_dir_fmt(_ant_p['liq'], 'R$')} no mesmo intervalo do ano anterior."
+            ))
+            _dst.append((
+                'ok' if _atu_p['cli'] >= _ant_p['cli'] else 'warn',
+                f"{_dir_fmt(_atu_p['cli'], 'n')} clientes positivados "
+                f"({_dir_var_txt(_atu_p['cli'], _ant_p['cli'], 'n')}): "
+                f"{_dir_fmt(_atu_p['novos'], 'n')} novos e {_dir_fmt(_atu_p['reat'], 'n')} reativados."
+            ))
+            _dst.append((
+                'warn' if _perd_p > _atu_p['novos'] else 'ok',
+                f"{formatar_numero_br(_perd_p, 0)} clientes do ano anterior não voltaram a comprar "
+                f"(contra {formatar_numero_br(_atu_p['novos'], 0)} clientes novos)."
+            ))
+            if _atu_p['dev_pct'] > 5 or _atu_p['dev_pct'] > _ant_p['dev_pct'] + 1:
+                _dst.append(('warn', f"Devoluções em {_atu_p['dev_pct']:.1f}% do bruto "
+                                     f"(ano anterior: {_ant_p['dev_pct']:.1f}%)."))
+            if _atu_p['top10'] > 50:
+                _dst.append(('warn', f"Concentração: os 10 maiores clientes somam "
+                                     f"{_atu_p['top10']:.1f}% do faturamento bruto."))
+            if len(_dir_est) > 0 and _dir_est['Var. R$'].min() < 0:
+                _pior = _dir_est.nsmallest(1, 'Var. R$').iloc[0]
+                _dst.append(('bad', f"Maior queda por estado: {_pior['Estado']} "
+                                    f"({_dir_fmt(_pior['Var. R$'], 'R$')})."))
+            if _dir_ven is not None and len(_dir_ven) > 0 and _dir_ven['Var. R$'].max() > 0:
+                _melhor = _dir_ven.nlargest(1, 'Var. R$').iloc[0]
+                _dst.append(('ok', f"Maior crescimento por vendedor: {_melhor['Vendedor']} "
+                                   f"(+{_dir_fmt(_melhor['Var. R$'], 'R$')})."))
+
+            # ══════════════ TELA ══════════════
+            st.caption(
+                f"Período analisado: {_dir_ini.strftime('%d/%m/%Y')} a {_dir_fim.strftime('%d/%m/%Y')}  ·  "
+                f"Comparado com: {(_dir_ini - _dir_ano).strftime('%d/%m/%Y')} a "
+                f"{(_dir_fim - _dir_ano).strftime('%d/%m/%Y')}"
+            )
+
+            def _dir_card(col, label, valor, atual, ant, tp, icon, cor, inverso=False):
+                if tp == '%':
+                    _d = atual - ant
+                    _txt = f"{_d:+.1f} p.p."
+                else:
+                    _pc = _dir_pct(atual, ant)
+                    _d = _pc
+                    _txt = None if _pc is None else f"{_pc:+.1f}%"
+                if _txt is None:
+                    _dh = '<div style="color:#8A96A8;font-size:0.78rem;margin-top:6px;">sem base de comparação</div>'
+                else:
+                    _bom = (_d <= 0) if inverso else (_d >= 0)
+                    _cd = "#10B981" if _bom else "#EF4444"
+                    _seta = "▲" if _d >= 0 else "▼"
+                    _dh = (f'<div style="color:{_cd};font-size:0.78rem;font-weight:600;margin-top:6px;">'
+                           f'{_seta} {_txt} vs ano anterior</div>')
+                with col:
+                    st.markdown(
+                        f'<div class="kpi-card" style="border-left:4px solid {cor};">'
+                        f'<div class="kpi-top"><span class="kpi-label">{label}</span>'
+                        f'<span class="kpi-icon">{icon}</span></div>'
+                        f'<div class="kpi-value">{valor}</div>{_dh}</div>',
+                        unsafe_allow_html=True)
+
+            _k1 = st.columns(4)
+            _dir_card(_k1[0], "Faturamento líquido", _dir_fmt(_atu_p['liq'], 'R$'), _atu_p['liq'], _ant_p['liq'], 'R$', "💰", "#1F4788")
+            _dir_card(_k1[1], "Clientes positivados", _dir_fmt(_atu_p['cli'], 'n'), _atu_p['cli'], _ant_p['cli'], 'n', "👥", "#28A745")
+            _dir_card(_k1[2], "Positivação da base", _dir_fmt(_atu_p['posit'], '%'), _atu_p['posit'], _ant_p['posit'], '%', "🎯", "#2E86AB")
+            _dir_card(_k1[3], "Ticket médio", _dir_fmt(_atu_p['ticket'], 'R$'), _atu_p['ticket'], _ant_p['ticket'], 'R$', "🧾", "#F4A261")
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _k2 = st.columns(4)
+            _dir_card(_k2[0], "Clientes novos", _dir_fmt(_atu_p['novos'], 'n'), _atu_p['novos'], _ant_p['novos'], 'n', "🆕", "#1B5E8A")
+            _dir_card(_k2[1], "Clientes reativados", _dir_fmt(_atu_p['reat'], 'n'), _atu_p['reat'], _ant_p['reat'], 'n', "🔄", "#9B59B6")
+            with _k2[2]:
+                st.markdown(
+                    f'<div class="kpi-card" style="border-left:4px solid #EF4444;">'
+                    f'<div class="kpi-top"><span class="kpi-label">Clientes perdidos</span>'
+                    f'<span class="kpi-icon">📉</span></div>'
+                    f'<div class="kpi-value">{formatar_numero_br(_perd_p, 0)}</div>'
+                    f'<div style="color:#8A96A8;font-size:0.78rem;margin-top:6px;">compraram no ano anterior e não agora</div></div>',
+                    unsafe_allow_html=True)
+            _dir_card(_k2[3], "Devoluções (% do bruto)", _dir_fmt(_atu_p['dev_pct'], '%'), _atu_p['dev_pct'], _ant_p['dev_pct'], '%', "↩️", "#C2410C", inverso=True)
+
+            st.markdown("---")
+
+            # Gráfico 1: faturamento mês a mês + variação %
+            _mx = [m['mes'] for m in _mensal]
+            _fig_m = go.Figure()
+            _fig_m.add_bar(x=_mx, y=[m['liq'] for m in _mensal], name='Atual', marker_color='#1F4788')
+            _fig_m.add_bar(x=_mx, y=[m['liq_a'] for m in _mensal], name='Ano anterior', marker_color='#A8C4E8')
+            _fig_m.add_trace(go.Scatter(
+                x=_mx, y=[m['liq_p'] for m in _mensal], name='Variação %', yaxis='y2',
+                mode='lines+markers', line=dict(color='#F4A261', width=2), connectgaps=False))
+            _fig_m = aplicar_layout_grafico(_fig_m, height=380)
+            _fig_m.update_layout(
+                title='Faturamento líquido mês a mês — Atual x Ano anterior', barmode='group',
+                yaxis2=dict(title='Variação %', overlaying='y', side='right', showgrid=False, ticksuffix='%'),
+                legend=dict(orientation='h', y=1.12))
+            st.plotly_chart(_fig_m, use_container_width=True)
+
+            # Gráfico 2: clientes positivados mês a mês
+            _fig_c = go.Figure()
+            _fig_c.add_bar(x=_mx, y=[m['cli'] for m in _mensal], name='Atual', marker_color='#28A745')
+            _fig_c.add_bar(x=_mx, y=[m['cli_a'] for m in _mensal], name='Ano anterior', marker_color='#B8E0C8')
+            _fig_c = aplicar_layout_grafico(_fig_c, height=320)
+            _fig_c.update_layout(title='Clientes positivados mês a mês — Atual x Ano anterior',
+                                 barmode='group', legend=dict(orientation='h', y=1.12))
+            st.plotly_chart(_fig_c, use_container_width=True)
+
+            # Gráfico 3: variação por Estado (verde alta / vermelho queda)
+            if len(_dir_est) > 0:
+                _est_g = _dir_est.reindex(_dir_est['Var. R$'].abs().sort_values(ascending=False).index).head(15)
+                _est_g = _est_g.sort_values('Var. R$')
+                _fig_e = go.Figure(go.Bar(
+                    x=_est_g['Var. R$'], y=_est_g['Estado'], orientation='h',
+                    marker_color=['#10B981' if v >= 0 else '#EF4444' for v in _est_g['Var. R$']]))
+                _fig_e = aplicar_layout_grafico(_fig_e, height=380)
+                _fig_e.update_layout(title='Variação de faturamento por Estado (R$) vs ano anterior')
+                st.plotly_chart(_fig_e, use_container_width=True)
+
+            # Destaques em faixas coloridas
+            st.markdown("##### Destaques e Alertas")
+            _cores_dst = {'ok': ('#F0FDF4', '#10B981'), 'warn': ('#FFFBEB', '#F59E0B'), 'bad': ('#FEF2F2', '#EF4444')}
+            for _nv, _tx in _dst:
+                _bg, _bd = _cores_dst[_nv]
+                st.markdown(
+                    f'<div style="background:{_bg};border-left:4px solid {_bd};border-radius:8px;'
+                    f'padding:10px 14px;margin-bottom:6px;font-size:0.88rem;color:#1F2937;">{_tx}</div>',
+                    unsafe_allow_html=True)
+
+            # Tabelas recolhidas
+            with st.expander("Ver tabela completa (mês a mês)", expanded=False):
+                _tb = []
+                for _m in _mensal + [_total_row]:
+                    _tb.append({
+                        'Mês': _m['mes'],
+                        'Fat. atual': _dir_fmt(_m['liq'], 'R$'),
+                        'Fat. ano ant.': _dir_fmt(_m['liq_a'], 'R$'),
+                        'Var. R$': 'n/d' if _m['liq_v'] is None else _dir_fmt(_m['liq_v'], 'R$'),
+                        'Var. %': _dir_txt_pct(_m['liq_p']),
+                        'Clientes': _m['cli'], 'Clientes ano ant.': _m['cli_a'],
+                        'Var. clientes %': _dir_txt_pct(_m['cli_p']),
+                        'Positivação': _dir_fmt(_m['posit'], '%'),
+                        'Ticket': _dir_fmt(_m['ticket'], 'R$'),
+                        'Novos': _m['novos'], 'Reativados': _m['reat'],
+                        'Devoluções %': _dir_fmt(_m['dev_pct'], '%'),
+                    })
+                st.dataframe(pd.DataFrame(_tb), use_container_width=True, hide_index=True)
+
             def _dir_show(_m):
                 _s = _m.copy()
                 for _c in ['Atual', 'Ano anterior', 'Var. R$']:
@@ -7777,55 +7902,231 @@ elif menu == "Performance de Vendedores":
                 _s['Var. %'] = _s['Var. %'].apply(lambda v: "n/d" if pd.isna(v) else f"{v:+.1f}%")
                 return _s
 
-            _dir_est = _dir_comp('Estado')
-            _dir_ven = _dir_comp('Vendedor') if _dir_vend == 'Todos' else None
-            _dir_c1, _dir_c2 = st.columns(2)
-            with _dir_c1:
-                st.markdown("##### Top 5 Estados (faturamento atual)")
-                st.dataframe(_dir_show(_dir_est.nlargest(5, 'Atual')), use_container_width=True, hide_index=True)
-            with _dir_c2:
-                st.markdown("##### 5 maiores quedas por Estado (R$)")
-                st.dataframe(_dir_show(_dir_est.nsmallest(5, 'Var. R$')), use_container_width=True, hide_index=True)
-            if _dir_ven is not None:
-                st.markdown("##### Top 5 Vendedores por crescimento (R$)")
-                st.dataframe(_dir_show(_dir_ven.nlargest(5, 'Var. R$')), use_container_width=True, hide_index=True)
+            with st.expander("Ver Estados e Vendedores", expanded=False):
+                _dc1, _dc2 = st.columns(2)
+                with _dc1:
+                    st.markdown("**Top 5 Estados (faturamento atual)**")
+                    st.dataframe(_dir_show(_dir_est.nlargest(5, 'Atual')), use_container_width=True, hide_index=True)
+                with _dc2:
+                    st.markdown("**5 maiores quedas por Estado (R$)**")
+                    st.dataframe(_dir_show(_dir_est.nsmallest(5, 'Var. R$')), use_container_width=True, hide_index=True)
+                if _dir_ven is not None:
+                    st.markdown("**Top 5 Vendedores por crescimento (R$)**")
+                    st.dataframe(_dir_show(_dir_ven.nlargest(5, 'Var. R$')), use_container_width=True, hide_index=True)
 
-            # ── Destaques e alertas (regras automáticas) ──
-            _dst = []
-            _v_liq = _dir_var(_atu_p['liq'], _ant_p['liq'], 'R$')
-            _dst.append(
-                f"Faturamento líquido de {_dir_fmt(_atu_p['liq'], 'R$')} ({_v_liq}) contra "
-                f"{_dir_fmt(_ant_p['liq'], 'R$')} no mesmo intervalo do ano anterior."
-            )
-            _dst.append(
-                f"{_dir_fmt(_atu_p['cli'], 'n')} clientes positivados ({_dir_var(_atu_p['cli'], _ant_p['cli'], 'n')}), "
-                f"sendo {_dir_fmt(_atu_p['novos'], 'n')} novos e {_dir_fmt(_atu_p['reat'], 'n')} reativados; "
-                f"{formatar_numero_br(_perd_p, 0)} clientes do ano anterior não voltaram a comprar."
-            )
-            _dst.append(
-                f"Positivação de {_atu_p['posit']:.1f}% da base ({_dir_var(_atu_p['posit'], _ant_p['posit'], '%')}); "
-                f"ticket médio de {_dir_fmt(_atu_p['ticket'], 'R$')} ({_dir_var(_atu_p['ticket'], _ant_p['ticket'], 'R$')})."
-            )
-            if _atu_p['dev_pct'] > 5 or _atu_p['dev_pct'] > _ant_p['dev_pct'] + 1:
-                _dst.append(f"⚠️ Atenção às devoluções: {_atu_p['dev_pct']:.1f}% do bruto (ano anterior: {_ant_p['dev_pct']:.1f}%).")
-            if _atu_p['top10'] > 50:
-                _dst.append(f"⚠️ Concentração: os 10 maiores clientes respondem por {_atu_p['top10']:.1f}% do faturamento bruto.")
-            if len(_dir_est) > 0 and _dir_est['Var. R$'].min() < 0:
-                _pior = _dir_est.nsmallest(1, 'Var. R$').iloc[0]
-                _dst.append(f"⚠️ Maior queda por estado: {_pior['Estado']} ({_dir_fmt(_pior['Var. R$'], 'R$')}).")
-            if _dir_ven is not None and len(_dir_ven) > 0 and _dir_ven['Var. R$'].max() > 0:
-                _melhor = _dir_ven.nlargest(1, 'Var. R$').iloc[0]
-                _dst.append(f"Maior crescimento por vendedor: {_melhor['Vendedor']} (+{_dir_fmt(_melhor['Var. R$'], 'R$')}).")
+            # ══════════════ EXCEL ══════════════
+            def _dir_gerar_excel():
+                from xlsxwriter.utility import xl_rowcol_to_cell
+                _out = io.BytesIO()
+                with pd.ExcelWriter(_out, engine='xlsxwriter') as _wr:
+                    _wb = _wr.book
+                    _f_tit = _wb.add_format({'bold': True, 'font_size': 14, 'font_color': '#1F4788'})
+                    _f_sub = _wb.add_format({'italic': True, 'font_color': '#6C757D', 'font_size': 9})
+                    _f_hdr = _wb.add_format({'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
+                                             'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+                    _f_txt = _wb.add_format({'border': 1})
+                    _f_moeda = _wb.add_format({'border': 1, 'num_format': 'R$ #,##0.00'})
+                    _f_int = _wb.add_format({'border': 1, 'num_format': '#,##0'})
+                    _f_pct = _wb.add_format({'border': 1, 'num_format': '0.0%', 'align': 'right'})
+                    _f_pp = _wb.add_format({'border': 1, 'num_format': '0.0"%"', 'align': 'right'})
+                    _f_nd = _wb.add_format({'border': 1, 'align': 'right', 'font_color': '#8A96A8', 'italic': True})
+                    _f_aux = _wb.add_format({'font_color': '#ADB5BD', 'num_format': '0.0%'})
+                    _f_b_txt = _wb.add_format({'border': 1, 'bold': True, 'bg_color': '#EEF3FC'})
+                    _f_b_moeda = _wb.add_format({'border': 1, 'bold': True, 'bg_color': '#EEF3FC', 'num_format': 'R$ #,##0.00'})
+                    _f_b_int = _wb.add_format({'border': 1, 'bold': True, 'bg_color': '#EEF3FC', 'num_format': '#,##0'})
+                    _f_b_pct = _wb.add_format({'border': 1, 'bold': True, 'bg_color': '#EEF3FC', 'num_format': '0.0%', 'align': 'right'})
+                    _f_b_pp = _wb.add_format({'border': 1, 'bold': True, 'bg_color': '#EEF3FC', 'num_format': '0.0"%"', 'align': 'right'})
+                    _f_verde = _wb.add_format({'font_color': '#15803D'})
+                    _f_verm = _wb.add_format({'font_color': '#B91C1C'})
 
-            st.markdown("##### Destaques e Alertas")
-            for _t in _dst:
-                st.markdown(f"- {_t}")
+                    _periodo_txt = (
+                        f"Período: {_dir_ini.strftime('%d/%m/%Y')} a {_dir_fim.strftime('%d/%m/%Y')}  |  "
+                        f"Comparado com: {(_dir_ini - _dir_ano).strftime('%d/%m/%Y')} a "
+                        f"{(_dir_fim - _dir_ano).strftime('%d/%m/%Y')}  |  "
+                        f"Vendedor: {_dir_vend}  |  Estado: {_dir_reg}")
+
+                    def _pct_cell(ws, r, c, v, fmt):
+                        if v is None:
+                            ws.write_string(r, c, 'n/d', _f_nd)
+                        else:
+                            ws.write_number(r, c, v / 100.0, fmt)
+
+                    def _cond_verde_verm(ws, r1, c, r2):
+                        _rng = f"{xl_rowcol_to_cell(r1, c)}:{xl_rowcol_to_cell(r2, c)}"
+                        _p = xl_rowcol_to_cell(r1, c)
+                        ws.conditional_format(_rng, {'type': 'formula', 'criteria': f'=AND(ISNUMBER({_p}),{_p}>0)', 'format': _f_verde})
+                        ws.conditional_format(_rng, {'type': 'formula', 'criteria': f'=AND(ISNUMBER({_p}),{_p}<0)', 'format': _f_verm})
+
+                    # ── Aba 1: Resumo ──
+                    _ws1 = _wb.add_worksheet('Resumo')
+                    _ws1.set_column(0, 0, 38)
+                    _ws1.set_column(1, 3, 22)
+                    _ws1.write(0, 0, 'VISÃO DIRETORIA — RESUMO EXECUTIVO', _f_tit)
+                    _ws1.write(1, 0, _periodo_txt, _f_sub)
+                    for _i, _h in enumerate(['Indicador', 'Atual', 'Ano anterior', 'Variação']):
+                        _ws1.write(3, _i, _h, _f_hdr)
+                    _linhas_res = [
+                        ('Faturamento líquido', 'liq', 'R$'), ('Faturamento bruto', 'bruto', 'R$'),
+                        ('Devoluções', 'dev', 'R$'), ('Devoluções % do bruto', 'dev_pct', '%'),
+                        ('Clientes positivados', 'cli', 'n'), ('Clientes novos', 'novos', 'n'),
+                        ('Clientes reativados (3m+)', 'reat', 'n'), ('Base de clientes', 'base', 'n'),
+                        ('Positivação % da base', 'posit', '%'), ('Notas fiscais', 'notas', 'n'),
+                        ('Ticket médio por cliente', 'ticket', 'R$'), ('Top 10 clientes % do bruto', 'top10', '%'),
+                    ]
+                    _r = 4
+                    for _rot, _chv, _tp in _linhas_res:
+                        _ws1.write(_r, 0, _rot, _f_txt)
+                        _ws1.write(_r, 1, _dir_fmt(_atu_p[_chv], _tp), _f_txt)
+                        _ws1.write(_r, 2, _dir_fmt(_ant_p[_chv], _tp), _f_txt)
+                        _ws1.write(_r, 3, _dir_var_txt(_atu_p[_chv], _ant_p[_chv], _tp), _f_txt)
+                        _r += 1
+                    _ws1.write(_r, 0, 'Clientes perdidos', _f_txt)
+                    _ws1.write(_r, 1, formatar_numero_br(_perd_p, 0), _f_txt)
+                    _ws1.write(_r, 2, '—', _f_txt)
+                    _ws1.write(_r, 3, '—', _f_txt)
+                    _r += 2
+                    _ws1.write(_r, 0, 'DESTAQUES E ALERTAS', _f_tit)
+                    _r += 1
+                    _fills = {'ok': '#DCFCE7', 'warn': '#FEF3C7', 'bad': '#FEE2E2'}
+                    for _nv, _tx in _dst:
+                        _fmt_d = _wb.add_format({'bg_color': _fills[_nv], 'text_wrap': True, 'valign': 'vcenter', 'border': 1})
+                        _ws1.merge_range(_r, 0, _r, 3, _tx, _fmt_d)
+                        _ws1.set_row(_r, 32)
+                        _r += 1
+
+                    # ── Aba 2: Mês a Mês ──
+                    _ws2 = _wb.add_worksheet('Mês a Mês')
+                    _ws2.write(0, 0, 'MÊS A MÊS — ATUAL x MESMO MÊS DO ANO ANTERIOR', _f_tit)
+                    _ws2.write(1, 0, _periodo_txt, _f_sub)
+                    _cols2 = ['Mês', 'Faturamento atual', 'Faturamento ano ant.', 'Var. R$', 'Var. %',
+                              'Clientes atual', 'Clientes ano ant.', 'Var. clientes', 'Var. % clientes',
+                              'Positivação %', 'Ticket médio', 'Novos', 'Reativados', 'Devoluções %', 'Aux. gráfico']
+                    _ws2.set_row(2, 30)
+                    for _i, _h in enumerate(_cols2):
+                        _ws2.write(2, _i, _h, _f_hdr)
+                    _ws2.set_column(0, 0, 12)
+                    _ws2.set_column(1, 3, 20)
+                    _ws2.set_column(4, 14, 15)
+                    _r0 = 3
+                    for _i, _m in enumerate(_mensal):
+                        _rr = _r0 + _i
+                        _ws2.write_string(_rr, 0, _m['mes'], _f_txt)
+                        _ws2.write_number(_rr, 1, _m['liq'], _f_moeda)
+                        _ws2.write_number(_rr, 2, _m['liq_a'], _f_moeda)
+                        if _m['liq_v'] is None:
+                            _ws2.write_string(_rr, 3, 'n/d', _f_nd)
+                        else:
+                            _ws2.write_number(_rr, 3, _m['liq_v'], _f_moeda)
+                        _pct_cell(_ws2, _rr, 4, _m['liq_p'], _f_pct)
+                        _ws2.write_number(_rr, 5, _m['cli'], _f_int)
+                        _ws2.write_number(_rr, 6, _m['cli_a'], _f_int)
+                        if _m['cli_v'] is None:
+                            _ws2.write_string(_rr, 7, 'n/d', _f_nd)
+                        else:
+                            _ws2.write_number(_rr, 7, _m['cli_v'], _f_int)
+                        _pct_cell(_ws2, _rr, 8, _m['cli_p'], _f_pct)
+                        _ws2.write_number(_rr, 9, _m['posit'] / 100.0, _f_pct)
+                        _ws2.write_number(_rr, 10, _m['ticket'], _f_moeda)
+                        _ws2.write_number(_rr, 11, _m['novos'], _f_int)
+                        _ws2.write_number(_rr, 12, _m['reat'], _f_int)
+                        _ws2.write_number(_rr, 13, _m['dev_pct'] / 100.0, _f_pct)
+                        if _m['liq_p'] is None:
+                            _ws2.write_formula(_rr, 14, '=NA()', _f_aux, '#N/A')
+                        else:
+                            _ws2.write_number(_rr, 14, _m['liq_p'] / 100.0, _f_aux)
+                    _rl = _r0 + len(_mensal) - 1
+                    _rt = _rl + 1
+                    _t = _total_row
+                    _ws2.write_string(_rt, 0, 'TOTAL', _f_b_txt)
+                    _ws2.write_number(_rt, 1, _t['liq'], _f_b_moeda)
+                    _ws2.write_number(_rt, 2, _t['liq_a'], _f_b_moeda)
+                    if _t['liq_v'] is None:
+                        _ws2.write_string(_rt, 3, 'n/d', _f_nd)
+                    else:
+                        _ws2.write_number(_rt, 3, _t['liq_v'], _f_b_moeda)
+                    _pct_cell(_ws2, _rt, 4, _t['liq_p'], _f_b_pct)
+                    _ws2.write_number(_rt, 5, _t['cli'], _f_b_int)
+                    _ws2.write_number(_rt, 6, _t['cli_a'], _f_b_int)
+                    if _t['cli_v'] is None:
+                        _ws2.write_string(_rt, 7, 'n/d', _f_nd)
+                    else:
+                        _ws2.write_number(_rt, 7, _t['cli_v'], _f_b_int)
+                    _pct_cell(_ws2, _rt, 8, _t['cli_p'], _f_b_pct)
+                    _ws2.write_number(_rt, 9, _t['posit'] / 100.0, _f_b_pct)
+                    _ws2.write_number(_rt, 10, _t['ticket'], _f_b_moeda)
+                    _ws2.write_number(_rt, 11, _t['novos'], _f_b_int)
+                    _ws2.write_number(_rt, 12, _t['reat'], _f_b_int)
+                    _ws2.write_number(_rt, 13, _t['dev_pct'] / 100.0, _f_b_pct)
+
+                    for _c in (3, 4, 7, 8):
+                        _cond_verde_verm(_ws2, _r0, _c, _rl)
+                    _ws2.conditional_format(_r0, 1, _rl, 1, {'type': 'data_bar', 'bar_color': '#8FB4E3'})
+
+                    # Gráfico 1: colunas (atual x ano ant.) + linha de variação %
+                    _ch1 = _wb.add_chart({'type': 'column'})
+                    _ch1.add_series({'name': 'Atual', 'categories': ['Mês a Mês', _r0, 0, _rl, 0],
+                                     'values': ['Mês a Mês', _r0, 1, _rl, 1], 'fill': {'color': '#1F4788'}})
+                    _ch1.add_series({'name': 'Ano anterior', 'categories': ['Mês a Mês', _r0, 0, _rl, 0],
+                                     'values': ['Mês a Mês', _r0, 2, _rl, 2], 'fill': {'color': '#A8C4E8'}})
+                    _ln1 = _wb.add_chart({'type': 'line'})
+                    _ln1.add_series({'name': 'Variação %', 'categories': ['Mês a Mês', _r0, 0, _rl, 0],
+                                     'values': ['Mês a Mês', _r0, 14, _rl, 14], 'y2_axis': True,
+                                     'line': {'color': '#F4A261', 'width': 2.25}, 'marker': {'type': 'circle'}})
+                    _ch1.combine(_ln1)
+                    _ch1.set_title({'name': 'Faturamento líquido — Atual x Ano anterior'})
+                    _ch1.set_y_axis({'num_format': '#,##0'})
+                    _ln1.set_y2_axis({'num_format': '0%'})
+                    _ch1.set_legend({'position': 'bottom'})
+                    _ch1.set_size({'width': 760, 'height': 340})
+                    _ws2.insert_chart(_rt + 3, 0, _ch1)
+
+                    # Gráfico 2: linhas de clientes positivados
+                    _ch2 = _wb.add_chart({'type': 'line'})
+                    _ch2.add_series({'name': 'Atual', 'categories': ['Mês a Mês', _r0, 0, _rl, 0],
+                                     'values': ['Mês a Mês', _r0, 5, _rl, 5],
+                                     'line': {'color': '#28A745', 'width': 2.25}, 'marker': {'type': 'circle'}})
+                    _ch2.add_series({'name': 'Ano anterior', 'categories': ['Mês a Mês', _r0, 0, _rl, 0],
+                                     'values': ['Mês a Mês', _r0, 6, _rl, 6],
+                                     'line': {'color': '#9CA3AF', 'width': 2.25, 'dash_type': 'dash'}})
+                    _ch2.set_title({'name': 'Clientes positivados — Atual x Ano anterior'})
+                    _ch2.set_legend({'position': 'bottom'})
+                    _ch2.set_size({'width': 620, 'height': 340})
+                    _ws2.insert_chart(_rt + 3, 8, _ch2)
+
+                    # ── Abas 3 e 4: Estados / Vendedores ──
+                    def _dir_aba_comp(nome_aba, df_c, col_nome, rotulo):
+                        _ws = _wb.add_worksheet(nome_aba)
+                        _ws.write(0, 0, f'{rotulo.upper()} — ATUAL x ANO ANTERIOR', _f_tit)
+                        _ws.write(1, 0, _periodo_txt, _f_sub)
+                        for _i, _h in enumerate([rotulo, 'Atual', 'Ano anterior', 'Var. R$', 'Var. %']):
+                            _ws.write(2, _i, _h, _f_hdr)
+                        _ws.set_column(0, 0, 32)
+                        _ws.set_column(1, 4, 20)
+                        _d = df_c.sort_values('Atual', ascending=False).reset_index(drop=True)
+                        for _i, _row in _d.iterrows():
+                            _rr = 3 + _i
+                            _ws.write_string(_rr, 0, str(_row[col_nome]), _f_txt)
+                            _ws.write_number(_rr, 1, float(_row['Atual']), _f_moeda)
+                            _ws.write_number(_rr, 2, float(_row['Ano anterior']), _f_moeda)
+                            _ws.write_number(_rr, 3, float(_row['Var. R$']), _f_moeda)
+                            _vp = _row['Var. %']
+                            _pct_cell(_ws, _rr, 4, None if pd.isna(_vp) else float(_vp), _f_pct)
+                        if len(_d) > 0:
+                            _ult = 3 + len(_d) - 1
+                            _ws.conditional_format(3, 1, _ult, 1, {'type': 'data_bar', 'bar_color': '#8FB4E3'})
+                            _cond_verde_verm(_ws, 3, 3, _ult)
+                            _cond_verde_verm(_ws, 3, 4, _ult)
+
+                    _dir_aba_comp('Estados', _dir_est, 'Estado', 'Estado')
+                    if _dir_ven is not None:
+                        _dir_aba_comp('Vendedores', _dir_ven, 'Vendedor', 'Vendedor')
+                return _out.getvalue()
 
             st.download_button(
                 "📥 Exportar Visão Diretoria (Excel)",
-                to_excel(pd.concat(_dir_export, ignore_index=True)),
-                "visao_diretoria.xlsx",
-                "application/vnd.ms-excel",
+                _dir_gerar_excel(),
+                f"visao_diretoria_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="pv_dl_diretoria"
             )
 
