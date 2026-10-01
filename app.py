@@ -7675,7 +7675,7 @@ elif menu == "Performance de Vendedores":
                     'base': int(_base),
                     'posit': (len(_cli) / _base * 100) if _base > 0 else 0.0,
                     'notas': len(_nv),
-                    'ticket': (_bruto / len(_cli)) if _cli else 0.0,
+                    'ticket': ((_bruto - _dev) / len(_nv)) if len(_nv) > 0 else 0.0,  # ticket = líquido ÷ nº de NF de venda
                     'top10': _top10, 'set': _cli, 'nu': _nu,
                 }
 
@@ -7996,7 +7996,7 @@ elif menu == "Performance de Vendedores":
                         ('Clientes positivados', 'cli', 'n'), ('Clientes novos', 'novos', 'n'),
                         ('Clientes reativados (3m+)', 'reat', 'n'), ('Base de clientes', 'base', 'n'),
                         ('Positivação % da base', 'posit', '%'), ('Notas fiscais', 'notas', 'n'),
-                        ('Ticket médio por cliente', 'ticket', 'R$'), ('Top 10 clientes % do bruto', 'top10', '%'),
+                        ('Ticket médio por nota fiscal', 'ticket', 'R$'), ('Top 10 clientes % do bruto', 'top10', '%'),
                     ]
                     _r = 4
                     for _rot, _chv, _tp in _linhas_res:
