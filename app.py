@@ -7939,6 +7939,25 @@ elif menu == "Performance de Vendedores":
                     'novos': _a['novos'], 'reat': _a['reat'], 'dev_pct': _a['dev_pct'],
                 })
 
+            # ── Ticket médio por Estado (usado somente na aba "Estados" do Excel) ──
+            # ticket = faturamento líquido do estado (colunas "Atual"/"Ano anterior" da própria aba)
+            #          ÷ nº de NF de venda do estado; mesma definição do ticket geral.
+            def _dir_ticket_estado():
+                _nf_a = _atu_p['nu'][_atu_p['nu']['TipoMov'] == 'NF Venda'].groupby('Estado').size()
+                _nf_b = _ant_p['nu'][_ant_p['nu']['TipoMov'] == 'NF Venda'].groupby('Estado').size()
+                _res = {}
+                for _, _r in _dir_est.iterrows():
+                    _e = _r['Estado']
+                    _na = int(_nf_a.get(_e, 0))
+                    _nb = int(_nf_b.get(_e, 0))
+                    _ta = (_r['Atual'] / _na) if _na > 0 else None
+                    _tb = (_r['Ano anterior'] / _nb) if _nb > 0 else None
+                    _res[str(_e)] = {
+                        'nf_a': _na, 'nf_b': _nb, 'tk_a': _ta, 'tk_b': _tb,
+                        'tk_p': _dir_pct(_ta, _tb) if (_ta is not None and _tb) else None,
+                    }
+                return _res
+
             # ══════════════ EXCEL ══════════════
             def _dir_gerar_excel():
                 from xlsxwriter.utility import xl_rowcol_to_cell
@@ -8218,14 +8237,21 @@ elif menu == "Performance de Vendedores":
                     _dir_aba_trimestral('Trimestral', _trimestral, _total_row)
 
                     # ── Abas 3 e 4: Estados / Vendedores ──
-                    def _dir_aba_comp(nome_aba, df_c, col_nome, rotulo):
+                    def _dir_aba_comp(nome_aba, df_c, col_nome, rotulo, extras=None):
                         _ws = _wb.add_worksheet(nome_aba)
                         _ws.write(0, 0, f'{rotulo.upper()} — ATUAL x ANO ANTERIOR', _f_tit)
                         _ws.write(1, 0, _periodo_txt, _f_sub)
                         for _i, _h in enumerate([rotulo, 'Atual', 'Ano anterior', 'Var. R$', 'Var. %']):
                             _ws.write(2, _i, _h, _f_hdr)
+                        if extras is not None:
+                            for _i, _h in enumerate(['NF atual', 'NF ano ant.', 'Ticket médio atual',
+                                                     'Ticket médio ano ant.', 'Var. ticket %']):
+                                _ws.write(2, 5 + _i, _h, _f_hdr)
                         _ws.set_column(0, 0, 32)
                         _ws.set_column(1, 4, 20)
+                        if extras is not None:
+                            _ws.set_column(5, 6, 14)
+                            _ws.set_column(7, 9, 20)
                         _d = df_c.sort_values('Atual', ascending=False).reset_index(drop=True)
                         for _i, _row in _d.iterrows():
                             _rr = 3 + _i
@@ -8235,13 +8261,29 @@ elif menu == "Performance de Vendedores":
                             _ws.write_number(_rr, 3, float(_row['Var. R$']), _f_moeda)
                             _vp = _row['Var. %']
                             _pct_cell(_ws, _rr, 4, None if pd.isna(_vp) else float(_vp), _f_pct)
+                            if extras is not None:
+                                _x = extras.get(str(_row[col_nome]))
+                                if _x is not None:
+                                    _ws.write_number(_rr, 5, _x['nf_a'], _f_int)
+                                    _ws.write_number(_rr, 6, _x['nf_b'], _f_int)
+                                    if _x['tk_a'] is None:
+                                        _ws.write_string(_rr, 7, 'n/d', _f_nd)
+                                    else:
+                                        _ws.write_number(_rr, 7, _x['tk_a'], _f_moeda)
+                                    if _x['tk_b'] is None:
+                                        _ws.write_string(_rr, 8, 'n/d', _f_nd)
+                                    else:
+                                        _ws.write_number(_rr, 8, _x['tk_b'], _f_moeda)
+                                    _pct_cell(_ws, _rr, 9, _x['tk_p'], _f_pct)
                         if len(_d) > 0:
                             _ult = 3 + len(_d) - 1
                             _ws.conditional_format(3, 1, _ult, 1, {'type': 'data_bar', 'bar_color': '#8FB4E3'})
                             _cond_verde_verm(_ws, 3, 3, _ult)
                             _cond_verde_verm(_ws, 3, 4, _ult)
+                            if extras is not None:
+                                _cond_verde_verm(_ws, 3, 9, _ult)
 
-                    _dir_aba_comp('Estados', _dir_est, 'Estado', 'Estado')
+                    _dir_aba_comp('Estados', _dir_est, 'Estado', 'Estado', extras=_dir_ticket_estado())
                     if _dir_ven is not None:
                         _dir_aba_comp('Vendedores', _dir_ven, 'Vendedor', 'Vendedor')
                 return _out.getvalue()
