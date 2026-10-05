@@ -6689,7 +6689,7 @@ elif menu == "Performance de Vendedores":
         })
         st.dataframe(_pv_comp_disp, use_container_width=True)
 
-        # ── Geração do Excel com 3 abas ──────────────────────────────────────
+        # ── Geração do Excel com 6 abas ──────────────────────────────────────
         def _gerar_excel_performance(
             _vendas_periodo=None,
             _comp_data=None,
@@ -7175,6 +7175,162 @@ elif menu == "Performance de Vendedores":
                 ws3.write(_rp_row, 7, '', fmt_grand)
 
                 # ══════════════════════════════════════════════════════════
+                # ABA 3B — Resultado por Estado (separado por UF, com produtos)
+                # ══════════════════════════════════════════════════════════
+                ws3e = wb.add_worksheet('Resultado por Estado')
+                writer.sheets['Resultado por Estado'] = ws3e
+
+                # Reaproveita a base, o classificador de grupo e os formatos da aba anterior
+                _re_df = _rp_df.copy()
+                _re_df['Estado'] = (
+                    _re_df['Estado'].fillna('NÃO INFORMADO').astype(str).str.strip()
+                    .replace('', 'NÃO INFORMADO')
+                )
+                _re_total_empresa = _re_df['ValorItem'].sum()
+
+                # Estados ordenados do maior para o menor faturamento
+                _re_estados_lista = (
+                    _re_df.groupby('Estado')['ValorItem'].sum()
+                    .sort_values(ascending=False).index.tolist()
+                )
+
+                _re_col_widths = [12, 42, 22, 12, 20, 10, 18, 22]
+                for i, w in enumerate(_re_col_widths):
+                    ws3e.set_column(i, i, w)
+
+                ws3e.merge_range(0, 0, 0, 7, 'RESULTADO POR PRODUTO — POR ESTADO', fmt_titulo)
+                ws3e.write(1, 0,
+                    f'Região: {_pv_regiao}  |  Período: {_pv_periodo}  |  '
+                    f'Total Empresa no Período: R$ {formatar_numero_br(_re_total_empresa, 2)}  |  '
+                    f'Gerado em: {_pv_now.strftime("%d/%m/%Y %H:%M")}',
+                    fmt_subtitulo)
+
+                _re_row = 3
+
+                for _uf_nome in _re_estados_lista:
+                    _uf_df = _re_df[_re_df['Estado'] == _uf_nome].copy()
+                    if len(_uf_df) == 0:
+                        continue
+
+                    _uf_total = _uf_df['ValorItem'].sum()
+                    _uf_perc_empresa = (_uf_total / _re_total_empresa) if _re_total_empresa > 0 else 0
+
+                    # ── Cabeçalho do estado ───────────────────────────────
+                    ws3e.set_row(_re_row, 22)
+                    ws3e.merge_range(_re_row, 0, _re_row, 7,
+                        f'📍  {_uf_nome}   —   Total: R$ {formatar_numero_br(_uf_total, 2)}   '
+                        f'({_uf_perc_empresa:.2%} do total da empresa no período)',
+                        fmt_vend_header)
+                    _re_row += 1
+
+                    # ── Cabeçalho das colunas ─────────────────────────────
+                    _re_cols = ['Código', 'Produto', 'Grupo', 'Quantidade',
+                                'Faturamento (R$)', 'Clientes',
+                                '% no Total do Estado', '% do Grupo no Total']
+                    ws3e.set_row(_re_row, 20)
+                    for c_idx, col in enumerate(_re_cols):
+                        ws3e.write(_re_row, c_idx, col, fmt_header)
+                    _re_row += 1
+
+                    # ── Agregar por produto deste estado ──────────────────
+                    _ep = _uf_df.groupby(['NomeProduto', 'CodigoProduto', 'Grupo']).agg(
+                        Quantidade=('Quantidade', 'sum'),
+                        Faturamento=('ValorItem', 'sum'),
+                        Clientes=('CPF_CNPJ', 'nunique')
+                    ).reset_index().sort_values('Faturamento', ascending=False)
+
+                    _ep['Perc_Total'] = _ep['Faturamento'] / _uf_total if _uf_total > 0 else 0
+                    _ep_grupo_total = _uf_df.groupby('Grupo')['ValorItem'].sum().to_dict()
+                    _ep['Perc_Grupo'] = _ep['Grupo'].map(
+                        lambda g: (_ep_grupo_total.get(g, 0) / _uf_total) if _uf_total > 0 else 0
+                    )
+
+                    _ep_sorted_parts = [
+                        _ep[_ep['Grupo'] == g] for g in _grupos_ordem if g in _ep['Grupo'].values
+                    ]
+                    _ep_outros = _ep[~_ep['Grupo'].isin(_grupos_ordem)]
+                    _ep_sorted = pd.concat(_ep_sorted_parts + ([_ep_outros] if len(_ep_outros) > 0 else []))
+
+                    _ultimo_grupo_e = None
+                    for _, row in _ep_sorted.iterrows():
+                        # ── Separador de grupo ────────────────────────────
+                        if row['Grupo'] != _ultimo_grupo_e:
+                            _g = row['Grupo']
+                            _g_fat = _ep_grupo_total.get(_g, 0)
+                            _g_perc = (_g_fat / _uf_total) if _uf_total > 0 else 0
+                            ws3e.write(_re_row, 0, '', fmt_grupo_sep)
+                            ws3e.merge_range(_re_row, 1, _re_row, 5,
+                                f'▶  {_g}  —  Total: R$ {formatar_numero_br(_g_fat, 2)}  ({_g_perc:.2%} do total do estado)',
+                                fmt_grupo_sep)
+                            ws3e.write(_re_row, 6, _g_perc, fmt_grupo_perc)
+                            ws3e.write(_re_row, 7, '', fmt_grupo_sep)
+                            _re_row += 1
+                            _ultimo_grupo_e = _g
+
+                        # ── Linha do produto ──────────────────────────────
+                        ws3e.write(_re_row, 0, str(row.get('CodigoProduto', '')), fmt_text)
+                        ws3e.write(_re_row, 1, str(row['NomeProduto']), fmt_text)
+                        ws3e.write(_re_row, 2, str(row['Grupo']), fmt_text)
+                        ws3e.write(_re_row, 3, row['Quantidade'], fmt_num)
+                        ws3e.write(_re_row, 4, row['Faturamento'], fmt_moeda)
+                        ws3e.write(_re_row, 5, row['Clientes'], fmt_num)
+                        ws3e.write(_re_row, 6, row['Perc_Total'], fmt_perc)
+                        ws3e.write(_re_row, 7, row['Perc_Grupo'], fmt_perc)
+                        _re_row += 1
+
+                    # ── Subtotal do estado (clientes únicos no estado) ────
+                    ws3e.write(_re_row, 0, '', fmt_subtotal)
+                    ws3e.merge_range(_re_row, 1, _re_row, 2, f'SUBTOTAL — {_uf_nome}', fmt_subtotal)
+                    ws3e.write(_re_row, 3, _ep['Quantidade'].sum(), fmt_subtotal_num)
+                    ws3e.write(_re_row, 4, _uf_total, fmt_subtotal_moeda)
+                    ws3e.write(_re_row, 5, _uf_df['CPF_CNPJ'].nunique(), fmt_subtotal_num)
+                    ws3e.write(_re_row, 6, 1.0 if _uf_total > 0 else 0, fmt_subtotal_perc)
+                    ws3e.write(_re_row, 7, _uf_perc_empresa, fmt_subtotal_perc)
+                    _re_row += 1
+
+                    # ── Resumo por grupo do estado ────────────────────────
+                    _re_row += 1
+                    ws3e.write(_re_row, 0, f'Resumo por Grupo — {_uf_nome}', wb.add_format({
+                        'bold': True, 'font_color': '#163561', 'font_size': 9,
+                        'font_name': 'Calibri', 'italic': True
+                    }))
+                    _re_row += 1
+                    _re_g_cols = ['Grupo', 'Faturamento (R$)', '% no Total do Estado', 'Qtd Produtos Distintos']
+                    for c_idx, col in enumerate(_re_g_cols):
+                        ws3e.write(_re_row, c_idx, col, fmt_mes_header)
+                    _re_row += 1
+
+                    _ep_grupo_agg = _ep.groupby('Grupo').agg(
+                        Faturamento=('Faturamento', 'sum'),
+                        QtdProdutos=('NomeProduto', 'count')
+                    ).reset_index()
+                    _ep_grupo_agg['Perc'] = _ep_grupo_agg['Faturamento'] / _uf_total if _uf_total > 0 else 0
+                    _ep_grupo_agg = _ep_grupo_agg.sort_values('Faturamento', ascending=False)
+
+                    for _, grow in _ep_grupo_agg.iterrows():
+                        ws3e.write(_re_row, 0, grow['Grupo'], fmt_text)
+                        ws3e.write(_re_row, 1, grow['Faturamento'], fmt_moeda)
+                        ws3e.write(_re_row, 2, grow['Perc'], fmt_perc)
+                        ws3e.write(_re_row, 3, grow['QtdProdutos'], fmt_num)
+                        _re_row += 1
+
+                    # Espaço entre estados
+                    _re_row += 2
+
+                # ── Totalizador geral ao final ────────────────────────────
+                ws3e.set_row(_re_row, 20)
+                ws3e.write(_re_row, 0, '', fmt_grand)
+                ws3e.merge_range(_re_row, 1, _re_row, 2, 'TOTAL GERAL — TODOS OS ESTADOS', fmt_grand)
+                ws3e.write(_re_row, 3, _re_df['Quantidade'].sum(), fmt_grand_num)
+                ws3e.write(_re_row, 4, _re_total_empresa, fmt_grand_moeda)
+                ws3e.write(_re_row, 5, _re_df['CPF_CNPJ'].nunique(), fmt_grand_num)
+                ws3e.write(_re_row, 6, 1.0, wb.add_format({
+                    'bold': True, 'bg_color': '#1F4788', 'font_color': '#FFFFFF',
+                    'border': 1, 'font_name': 'Calibri', 'font_size': 10, 'num_format': '0.00%'
+                }))
+                ws3e.write(_re_row, 7, '', fmt_grand)
+
+                # ══════════════════════════════════════════════════════════
                 # ABA 4 — Clientes sem Compra (últimos 3 meses)
                 # ══════════════════════════════════════════════════════════
                 ws4 = wb.add_worksheet('Clientes sem Compra')
@@ -7390,7 +7546,7 @@ elif menu == "Performance de Vendedores":
             _ctr_col_data=_pv_col_data_contrato
         )
         st.download_button(
-            "📥 Exportar Comparativo (Excel) — 5 abas",
+            "📥 Exportar Comparativo (Excel) — 6 abas",
             _excel_bytes,
             f"performance_vendedores_{_pv_now.strftime('%Y%m%d_%H%M')}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -7939,25 +8095,6 @@ elif menu == "Performance de Vendedores":
                     'novos': _a['novos'], 'reat': _a['reat'], 'dev_pct': _a['dev_pct'],
                 })
 
-            # ── Ticket médio por Estado (usado somente na aba "Estados" do Excel) ──
-            # ticket = faturamento líquido do estado (colunas "Atual"/"Ano anterior" da própria aba)
-            #          ÷ nº de NF de venda do estado; mesma definição do ticket geral.
-            def _dir_ticket_estado():
-                _nf_a = _atu_p['nu'][_atu_p['nu']['TipoMov'] == 'NF Venda'].groupby('Estado').size()
-                _nf_b = _ant_p['nu'][_ant_p['nu']['TipoMov'] == 'NF Venda'].groupby('Estado').size()
-                _res = {}
-                for _, _r in _dir_est.iterrows():
-                    _e = _r['Estado']
-                    _na = int(_nf_a.get(_e, 0))
-                    _nb = int(_nf_b.get(_e, 0))
-                    _ta = (_r['Atual'] / _na) if _na > 0 else None
-                    _tb = (_r['Ano anterior'] / _nb) if _nb > 0 else None
-                    _res[str(_e)] = {
-                        'nf_a': _na, 'nf_b': _nb, 'tk_a': _ta, 'tk_b': _tb,
-                        'tk_p': _dir_pct(_ta, _tb) if (_ta is not None and _tb) else None,
-                    }
-                return _res
-
             # ══════════════ EXCEL ══════════════
             def _dir_gerar_excel():
                 from xlsxwriter.utility import xl_rowcol_to_cell
@@ -8237,21 +8374,14 @@ elif menu == "Performance de Vendedores":
                     _dir_aba_trimestral('Trimestral', _trimestral, _total_row)
 
                     # ── Abas 3 e 4: Estados / Vendedores ──
-                    def _dir_aba_comp(nome_aba, df_c, col_nome, rotulo, extras=None):
+                    def _dir_aba_comp(nome_aba, df_c, col_nome, rotulo):
                         _ws = _wb.add_worksheet(nome_aba)
                         _ws.write(0, 0, f'{rotulo.upper()} — ATUAL x ANO ANTERIOR', _f_tit)
                         _ws.write(1, 0, _periodo_txt, _f_sub)
                         for _i, _h in enumerate([rotulo, 'Atual', 'Ano anterior', 'Var. R$', 'Var. %']):
                             _ws.write(2, _i, _h, _f_hdr)
-                        if extras is not None:
-                            for _i, _h in enumerate(['NF atual', 'NF ano ant.', 'Ticket médio atual',
-                                                     'Ticket médio ano ant.', 'Var. ticket %']):
-                                _ws.write(2, 5 + _i, _h, _f_hdr)
                         _ws.set_column(0, 0, 32)
                         _ws.set_column(1, 4, 20)
-                        if extras is not None:
-                            _ws.set_column(5, 6, 14)
-                            _ws.set_column(7, 9, 20)
                         _d = df_c.sort_values('Atual', ascending=False).reset_index(drop=True)
                         for _i, _row in _d.iterrows():
                             _rr = 3 + _i
@@ -8261,29 +8391,13 @@ elif menu == "Performance de Vendedores":
                             _ws.write_number(_rr, 3, float(_row['Var. R$']), _f_moeda)
                             _vp = _row['Var. %']
                             _pct_cell(_ws, _rr, 4, None if pd.isna(_vp) else float(_vp), _f_pct)
-                            if extras is not None:
-                                _x = extras.get(str(_row[col_nome]))
-                                if _x is not None:
-                                    _ws.write_number(_rr, 5, _x['nf_a'], _f_int)
-                                    _ws.write_number(_rr, 6, _x['nf_b'], _f_int)
-                                    if _x['tk_a'] is None:
-                                        _ws.write_string(_rr, 7, 'n/d', _f_nd)
-                                    else:
-                                        _ws.write_number(_rr, 7, _x['tk_a'], _f_moeda)
-                                    if _x['tk_b'] is None:
-                                        _ws.write_string(_rr, 8, 'n/d', _f_nd)
-                                    else:
-                                        _ws.write_number(_rr, 8, _x['tk_b'], _f_moeda)
-                                    _pct_cell(_ws, _rr, 9, _x['tk_p'], _f_pct)
                         if len(_d) > 0:
                             _ult = 3 + len(_d) - 1
                             _ws.conditional_format(3, 1, _ult, 1, {'type': 'data_bar', 'bar_color': '#8FB4E3'})
                             _cond_verde_verm(_ws, 3, 3, _ult)
                             _cond_verde_verm(_ws, 3, 4, _ult)
-                            if extras is not None:
-                                _cond_verde_verm(_ws, 3, 9, _ult)
 
-                    _dir_aba_comp('Estados', _dir_est, 'Estado', 'Estado', extras=_dir_ticket_estado())
+                    _dir_aba_comp('Estados', _dir_est, 'Estado', 'Estado')
                     if _dir_ven is not None:
                         _dir_aba_comp('Vendedores', _dir_ven, 'Vendedor', 'Vendedor')
                 return _out.getvalue()
