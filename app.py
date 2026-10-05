@@ -7454,17 +7454,16 @@ elif menu == "Performance de Vendedores":
                     if _pv_ctr_col and _pv_ctr_col in _vc_df.columns:
                         _vc_df = _vc_df.sort_values(_pv_ctr_col, ascending=False)
 
-                    # Montar colunas de saída: prioridade para Cliente / Data / Valor / Vendedor,
-                    # seguidas de todas as demais colunas originais da planilha (produtos, etc.)
+                    # Montar colunas de saída: somente as colunas solicitadas, nesta ordem
+                    # (Cliente, Vendedor, Data, Valor Contrato, % Execução, CNPJ/CPF, Status)
                     _vc_col_cliente = next(
                         (c for c in _vc_df.columns if c.strip().lower() in
                          ('nome cliente', 'cliente', 'razão social', 'razao social')), None
                     )
-                    _vc_prioritarias = [c for c in [_vc_col_cliente, 'Funcionário', _pv_ctr_col,
-                                                     'Total Contrato (R$)'] if c and c in _vc_df.columns]
-                    _vc_demais = [c for c in _vc_df.columns
-                                  if c not in _vc_prioritarias and not c.startswith('_')]
-                    _vc_cols_final = _vc_prioritarias + _vc_demais
+                    _vc_cols_final = [c for c in [_vc_col_cliente, 'Funcionário', _pv_ctr_col,
+                                                  'Total Contrato (R$)', '% Execução',
+                                                  'CNPJ/CPF', 'Status']
+                                      if c and c in _vc_df.columns]
 
                     _vc_export = _vc_df[_vc_cols_final].copy()
 
