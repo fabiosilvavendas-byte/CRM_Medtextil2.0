@@ -1176,6 +1176,145 @@ def _pedido_buscar_por_descricao(df_prod, termo, limite=100):
         mask &= texto.str.contains(palavra, regex=False)
     return df_prod[mask].head(limite)
 
+def _pedido_detectar_marca(*textos):
+    """Procura Medmais / Ultratextil / Medtextil (com ou sem espaço/hífen, sem acento) nos textos."""
+    import re
+    t = ' '.join(_pedido_norm_txt(x) for x in textos
+                 if x is not None and str(x).strip() and str(x).strip().lower() != 'nan')
+    if re.search(r'MED\s*-?\s*MAIS', t):
+        return 'Medmais'
+    if re.search(r'ULTRA\s*-?\s*TEXTIL', t):
+        return 'Ultratextil'
+    if re.search(r'MED\s*-?\s*TEXTIL', t):
+        return 'Medtextil'
+    return ''
+
+def _pedido_marca_produto(row, colunas, extra=''):
+    """
+    Marca do produto no catálogo: coluna MARCA (se existir) ou LINHA
+    (ex.: 'Med Mais', 'MEDMAIS', 'Ultra Textil - EXTRA (B)'). Linhas de marca própria
+    (ex.: 'Conviva (Marca Própria)') mostram o nome da marca. Sem marca → '' .
+    """
+    for c in ('MARCA', 'LINHA', 'LINHAS'):
+        if c in colunas:
+            v = str(row.get(c, '') or '').strip()
+            if not v or v.lower() == 'nan':
+                continue
+            m = _pedido_detectar_marca(v)
+            if m:
+                return m
+            if 'MARCA PROPRIA' in _pedido_norm_txt(v):
+                return v.split('(')[0].strip().title()
+    # fallback: procura a marca nos demais textos do produto
+    outros = [row.get(c, '') for c in ('GRUPO', 'DESCRIÇÃO', 'DESCRICAO', 'DESCRICAONF') if c in colunas]
+    return _pedido_detectar_marca(*outros, extra)
+
+def gerar_excel_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
+    """Gera o pedido em Excel com as mesmas colunas do PDF (+ CLIENTE quando há mais de um)."""
+    import xlsxwriter
+    buf = io.BytesIO()
+    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
+    ws = wb.add_worksheet('Pedido')
+    f_tit = wb.add_format({'bold': True, 'font_size': 14, 'font_color': '#1F4788'})
+    f_lab = wb.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1})
+    f_val = wb.add_format({'border': 1})
+    f_head = wb.add_format({'bold': True, 'font_color': '#FFFFFF', 'bg_color': '#003366',
+                            'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    f_txt = wb.add_format({'border': 1, 'valign': 'vcenter', 'text_wrap': True})
+    f_ctr = wb.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter'})
+    f_num = wb.add_format({'border': 1, 'num_format': '#,##0', 'align': 'center'})
+    f_vol = wb.add_format({'border': 1, 'num_format': '#,##0.00', 'align': 'center'})
+    f_brl = wb.add_format({'border': 1, 'num_format': 'R$ #,##0.00'})
+    f_brl4 = wb.add_format({'border': 1, 'num_format': 'R$ #,##0.00##'})
+    t_lab = wb.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1})
+    t_num = wb.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1, 'num_format': '#,##0', 'align': 'center'})
+    t_vol = wb.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1, 'num_format': '#,##0.00', 'align': 'center'})
+    t_brl = wb.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1, 'num_format': 'R$ #,##0.00'})
+
+    ws.write(0, 0, 'MEDTEXTIL PRODUTOS TEXTIL HOSPITALARES', f_tit)
+    ws.write(1, 0, 'CNPJ: 40.357.820/0001-50  Inscrição Estadual: 16.390.286-0')
+    info = [
+        ('Representante', dados_cliente.get('representante', '')),
+        ('Cliente', dados_cliente.get('razao_social', '')),
+        ('CNPJ', dados_cliente.get('cnpj', '')),
+        ('Pedido Nº', dados_pedido.get('numero', '')),
+        ('Data da Venda', dados_pedido.get('data_venda', '')),
+        ('Condições de Pagto', dados_pedido.get('condicoes_pagto', '')),
+        ('Tipo de Frete', dados_pedido.get('tipo_frete', '')),
+        ('Tabela de Preço', dados_pedido.get('tabela_preco', '')),
+    ]
+    r = 3
+    for lab, val in info:
+        ws.write(r, 0, lab, f_lab)
+        ws.merge_range(r, 1, r, 4, str(val or ''), f_val)
+        r += 1
+    r += 1
+
+    multi = len({str(i.get('cliente', '') or '') for i in itens_pedido} - {''}) > 1
+    cols = (['CLIENTE'] if multi else []) + ['COD.', 'PRODUTO', 'MARCA', 'PESO', 'CAIXA DE EMBARQUE',
+            'VOLUME', 'QTDE', 'VALOR', 'TOTAL', 'HISTÓRICO', 'DATA HISTÓRICO']
+    larg = ([30] if multi else []) + [8, 48, 14, 9, 11, 10, 10, 14, 16, 14, 14]
+    ws.set_row(r, 30)
+    for c, nome in enumerate(cols):
+        ws.write(r, c, nome, f_head)
+        ws.set_column(c, c, larg[c])
+    ws.freeze_panes(r + 1, 0)
+    r_head = r
+    r += 1
+
+    tot_q = tot_v = tot_t = 0.0
+    for it in itens_pedido:
+        q = _pedido_para_float(it.get('quantidade', 0)) or 0
+        vol = _pedido_volume(q, it.get('cx_embarque', ''))
+        vu = _pedido_para_float(it.get('valor_unit', 0)) or 0
+        tot = _pedido_para_float(it.get('total', 0)) or 0
+        hist = _pedido_para_float(it.get('preco_historico', 0))
+        peso = it.get('peso', '')
+        pf = _pedido_para_float(peso)
+        cxf = _pedido_para_float(it.get('cx_embarque', ''))
+        marca = it.get('marca') or _pedido_detectar_marca(it.get('descricao', '')) or '-'
+        c = 0
+        if multi:
+            ws.write(r, c, str(it.get('cliente', '') or ''), f_txt); c += 1
+        ws.write(r, c, str(it.get('codigo', '')), f_ctr); c += 1
+        ws.write(r, c, str(it.get('descricao', '')), f_txt); c += 1
+        ws.write(r, c, marca, f_ctr); c += 1
+        ws.write(r, c, pf if pf is not None else str(peso or ''), f_ctr); c += 1
+        ws.write(r, c, cxf if cxf is not None else str(it.get('cx_embarque', '') or ''), f_ctr); c += 1
+        if vol is None:
+            ws.write(r, c, '-', f_ctr)
+        else:
+            ws.write_number(r, c, vol, f_vol)
+        c += 1
+        ws.write_number(r, c, q, f_num); c += 1
+        ws.write_number(r, c, vu, f_brl4); c += 1
+        ws.write_number(r, c, tot, f_brl); c += 1
+        if hist:
+            ws.write_number(r, c, hist, f_brl4)
+        else:
+            ws.write(r, c, '-', f_ctr)
+        c += 1
+        ws.write(r, c, str(it.get('data_historico', '') or '-'), f_ctr)
+        tot_q += q; tot_t += tot
+        tot_v += vol or 0
+        r += 1
+
+    # linha de total
+    off = 1 if multi else 0
+    for c in range(len(cols)):
+        ws.write(r, c, '', t_lab)
+    ws.write(r, 0, 'TOTAL', t_lab)
+    ws.write_number(r, 5 + off, tot_v, t_vol)
+    ws.write_number(r, 6 + off, tot_q, t_num)
+    ws.write_number(r, 8 + off, tot_t, t_brl)
+    r += 2
+    if observacao:
+        ws.write(r, 0, 'Observação', f_lab)
+        ws.merge_range(r, 1, r, 6, str(observacao), f_val)
+    ws.autofilter(r_head, 0, r_head + len(itens_pedido), len(cols) - 1)
+    wb.close()
+    return buf.getvalue()
+
 def _pedido_montar_itens_pendentes(df_itens, df_vendas, df_catalogo):
     """
     Converte linhas da planilha de pendentes em itens do pedido.
@@ -1197,16 +1336,19 @@ def _pedido_montar_itens_pendentes(df_itens, df_vendas, df_catalogo):
             rc = cat.get(cod)
             if rc is not None:
                 desc = _pedido_descricao_produto(rc, df_catalogo.columns)
+                marca = _pedido_marca_produto(rc, df_catalogo.columns, it['Descricao'])
                 peso, cx, pref = rc.get('GRAMATURA', ''), rc.get('CX_EMB', ''), (rc.get('PRECO', 0) or 0)
             else:
                 sem_cat += 1
                 desc = str(it['Descricao']).split(' - ', 1)[-1].strip()
+                marca = _pedido_detectar_marca(it['Descricao'])
                 peso, cx, pref = '', '', 0
             hist, dhist = _pedido_ultimo_faturado(df_vendas, cli_df, cod)
             qtd, vu = float(it['QtdPendente']), float(it['ValorUnit'])
             itens.append({
                 'cliente': str(cli_pend),
                 'codigo': cod, 'descricao': desc or str(it['Descricao']),
+                'marca': marca,
                 'peso': peso, 'cx_embarque': cx,
                 'quantidade': qtd, 'valor_unit': vu,
                 'preco_historico': hist, 'data_historico': dhist,
@@ -1407,7 +1549,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     
     # Cabeçalho da tabela de itens (cor azul igual ao modelo)
     style_cel = ParagraphStyle('CelItem', parent=styles['Normal'], fontSize=6.5, leading=7.5, fontName='Helvetica')
-    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA DE\nEMBARQUE', 'VOLUME', 'QTDE',
+    header_itens = ['COD.', 'PRODUTO', 'MARCA', 'PESO', 'CAIXA DE\nEMBARQUE', 'VOLUME', 'QTDE',
                     'VALOR', 'TOTAL', 'HISTÓRICO', 'DATA\nHISTÓRICO']
     data_itens = [header_itens]
 
@@ -1425,7 +1567,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
             _cli_item = str(item.get('cliente', '') or 'Sem cliente')
             if _cli_item != _cliente_ant:
                 linhas_grupo.append(len(data_itens))
-                data_itens.append([Paragraph(f"<b>{_cli_item}</b>", style_cel)] + [''] * 9)
+                data_itens.append([Paragraph(f"<b>{_cli_item}</b>", style_cel)] + [''] * 10)
                 _cliente_ant = _cli_item
         qtde_i = _pedido_para_float(item.get('quantidade', 0)) or 0
         vol = _pedido_volume(qtde_i, item.get('cx_embarque', ''))
@@ -1436,6 +1578,7 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         data_itens.append([
             str(item.get('codigo', '')),
             Paragraph(str(item.get('descricao', '')), style_cel),   # quebra de linha automática
+            item.get('marca') or _pedido_detectar_marca(item.get('descricao', '')) or '-',
             str(item.get('peso', '')),
             str(item.get('cx_embarque', '')),
             _pedido_fmt_volume(vol),
@@ -1451,11 +1594,11 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     total_valor = sum([item.get('total', 0) for item in itens_pedido])
 
     # Linha de total
-    data_itens.append(['', '', '', '', _pedido_fmt_volume(total_volume), f"{total_qtde:.0f}", '',
+    data_itens.append(['', '', '', '', '', _pedido_fmt_volume(total_volume), f"{total_qtde:.0f}", '',
                        f"R$ {formatar_numero_br(total_valor, 2)}", '', ''])
 
-    #               COD   PRODUTO  PESO  CX    VOL   QTDE  VALOR  TOTAL  HIST  DATA
-    col_widths = [12*mm, 46*mm, 12*mm, 15*mm, 14*mm, 14*mm, 20*mm, 23*mm, 19*mm, 15*mm]
+    #               COD   PRODUTO MARCA PESO  CX    VOL   QTDE  VALOR  TOTAL  HIST  DATA
+    col_widths = [10*mm, 38*mm, 17*mm, 11*mm, 14*mm, 13*mm, 13*mm, 19*mm, 22*mm, 18*mm, 15*mm]
     table_itens = Table(data_itens, colWidths=col_widths, repeatRows=1)
 
     # Estilo da tabela de itens (azul igual ao modelo)
@@ -1470,9 +1613,9 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         ('FONTSIZE', (0, 1), (-1, -2), 6.5),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (2, 1), (5, -1), 'CENTER'),   # PESO, CX, VOLUME, QTDE
-        ('ALIGN', (6, 1), (8, -1), 'RIGHT'),    # VALOR, TOTAL, HISTÓRICO
-        ('ALIGN', (9, 1), (9, -1), 'CENTER'),   # DATA HISTÓRICO
+        ('ALIGN', (2, 1), (6, -1), 'CENTER'),   # MARCA, PESO, CX, VOLUME, QTDE
+        ('ALIGN', (7, 1), (9, -1), 'RIGHT'),    # VALOR, TOTAL, HISTÓRICO
+        ('ALIGN', (10, 1), (10, -1), 'CENTER'), # DATA HISTÓRICO
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
         ('RIGHTPADDING', (0, 0), (-1, -1), 2),
         ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
@@ -4838,6 +4981,7 @@ elif menu == "__novo_pedido__":
             produto_info = {
                 'codigo':      str(prod_row.get('ID_COD', '')),
                 'descricao':   descricao_completa or str(codigo_selecionado),
+                'marca':       _pedido_marca_produto(prod_row, df_produtos_pedido.columns),
                 'peso':        prod_row.get('GRAMATURA', ''),
                 'cx_embarque': prod_row.get('CX_EMB', ''),
                 'preco_ref':   prod_row.get('PRECO', 0) or 0
@@ -4868,6 +5012,7 @@ elif menu == "__novo_pedido__":
                 st.session_state.itens_pedido.append({
                     'codigo':          produto_info['codigo'],
                     'descricao':       produto_info['descricao'],
+                    'marca':           produto_info.get('marca', ''),
                     'peso':            produto_info.get('peso', ''),
                     'cx_embarque':     produto_info.get('cx_embarque', ''),
                     'quantidade':      qtde_item,
@@ -4890,6 +5035,7 @@ elif menu == "__novo_pedido__":
         st.dataframe(pd.DataFrame([{
             'Código': produto_info['codigo'],
             'Produto': produto_info['descricao'][:50],
+            'Marca': produto_info.get('marca', '') or '-',
             'Peso': produto_info.get('peso', ''),
             'Cx Embarque': produto_info.get('cx_embarque', ''),
             'Volume': _pedido_fmt_volume(_pedido_volume(qtde_item, produto_info.get('cx_embarque', ''))),
@@ -4918,6 +5064,10 @@ elif menu == "__novo_pedido__":
         df_itens_display = df_itens.copy()
         if 'data_historico' not in df_itens_display.columns:
             df_itens_display['data_historico'] = ''
+        if 'marca' not in df_itens_display.columns:
+            df_itens_display['marca'] = ''
+        df_itens_display['marca'] = df_itens_display.apply(
+            lambda r: r['marca'] or _pedido_detectar_marca(r['descricao']) or '-', axis=1)
         df_itens_display['volume'] = df_itens_display.apply(
             lambda r: _pedido_fmt_volume(_pedido_volume(r['quantidade'], r.get('cx_embarque', ''))), axis=1)
         df_itens_display['preco_historico'] = df_itens_display['preco_historico'].apply(
@@ -4925,13 +5075,13 @@ elif menu == "__novo_pedido__":
         df_itens_display['data_historico']  = df_itens_display['data_historico'].replace('', '-').fillna('-')
         df_itens_display['valor_unit']      = df_itens_display['valor_unit'].apply(lambda x: f"R$ {formatar_numero_br(x, 2)}")
         df_itens_display['total']           = df_itens_display['total'].apply(lambda x: f"R$ {formatar_numero_br(x, 2)}")
-        _cols_tab = ['codigo', 'descricao', 'peso', 'cx_embarque', 'volume', 'quantidade',
+        _cols_tab = ['codigo', 'descricao', 'marca', 'peso', 'cx_embarque', 'volume', 'quantidade',
                      'valor_unit', 'total', 'preco_historico', 'data_historico', 'comissao']
         if 'cliente' in df_itens_display.columns and df_itens_display['cliente'].replace('', pd.NA).nunique() > 1:
             _cols_tab = ['cliente'] + _cols_tab
         df_itens_display = df_itens_display[_cols_tab]
         df_itens_display = df_itens_display.rename(columns={
-            'cliente':'CLIENTE','codigo':'COD.','descricao':'PRODUTO','peso':'PESO',
+            'cliente':'CLIENTE','codigo':'COD.','descricao':'PRODUTO','marca':'MARCA','peso':'PESO',
             'cx_embarque':'CX EMBARQUE','volume':'VOLUME','quantidade':'QTDE',
             'valor_unit':'VALOR','total':'TOTAL',
             'preco_historico':'HISTÓRICO','data_historico':'DATA HISTÓRICO','comissao':'COMISSÃO%'
@@ -4945,7 +5095,21 @@ elif menu == "__novo_pedido__":
         with col_met3:
             st.metric("Total Final", f"R$ {formatar_numero_br(df_itens['total'].sum(), 2)}")
         obs_pedido = st.text_area("Observação (Pedido)", key="obs_pedido_np", height=100)
-        col_btn1, col_btn2 = st.columns(2)
+        dados_cliente_pdf = {
+            'representante': representante, 'razao_social': _nome_cli_pdf,
+            'nome_fantasia': nome_fantasia, 'cnpj': cnpj_pedido,
+            'ie': insc_estadual, 'telefone': telefone_pedido,
+            'email': email_pedido, 'endereco': endereco_pedido,
+            'obs_cliente': obs_cliente
+        }
+        dados_pedido_pdf = {
+            'numero': num_pedido, 'tabela_preco': tabela_preco,
+            'tipo_frete': tipo_frete,
+            'data_venda': data_venda.strftime('%d/%m/%Y'),
+            'condicoes_pagto': condicoes_pagto
+        }
+        _base_arq = f"Pedido_{num_pedido or 'SN'}_{(_nome_cli_pdf or 'cliente').replace(' ','_')}"
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
         with col_btn1:
             if st.button("🗑️ Limpar Pedido", use_container_width=True, key="limpar_pedido_np"):
                 st.session_state.itens_pedido = []
@@ -4955,31 +5119,31 @@ elif menu == "__novo_pedido__":
         with col_btn2:
             if st.button("📄 Gerar PDF do Pedido", use_container_width=True, key="gerar_pdf_pedido_np", type="primary"):
                 try:
-                    dados_cliente_pdf = {
-                        'representante': representante, 'razao_social': _nome_cli_pdf,
-                        'nome_fantasia': nome_fantasia, 'cnpj': cnpj_pedido,
-                        'ie': insc_estadual, 'telefone': telefone_pedido,
-                        'email': email_pedido, 'endereco': endereco_pedido,
-                        'obs_cliente': obs_cliente
-                    }
-                    dados_pedido_pdf = {
-                        'numero': num_pedido, 'tabela_preco': tabela_preco,
-                        'tipo_frete': tipo_frete,
-                        'data_venda': data_venda.strftime('%d/%m/%Y'),
-                        'condicoes_pagto': condicoes_pagto
-                    }
                     pdf_bytes = gerar_pdf_pedido(dados_cliente_pdf, dados_pedido_pdf,
                                                   st.session_state.itens_pedido, obs_pedido)
                     st.download_button(
                         label="📥 Baixar PDF do Pedido",
                         data=pdf_bytes,
-                        file_name=f"Pedido_{num_pedido or 'SN'}_{(_nome_cli_pdf or 'cliente').replace(' ','_')}.pdf",
+                        file_name=f"{_base_arq}.pdf",
                         mime="application/pdf",
                         key="download_pdf_pedido_np"
                     )
                     st.success("✅ PDF gerado com sucesso!")
                 except Exception as _e_pdf:
                     st.error(f"❌ Erro ao gerar PDF: {str(_e_pdf)}")
+        with col_btn3:
+            try:
+                st.download_button(
+                    label="📊 Gerar Excel do Pedido",
+                    data=gerar_excel_pedido(dados_cliente_pdf, dados_pedido_pdf,
+                                            st.session_state.itens_pedido, obs_pedido),
+                    file_name=f"{_base_arq}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="download_xlsx_pedido_np"
+                )
+            except Exception as _e_xls:
+                st.error(f"❌ Erro ao gerar Excel: {str(_e_xls)}")
     else:
         st.info("ℹ️ Nenhum item adicionado. Use o formulário acima para adicionar produtos.")
 
