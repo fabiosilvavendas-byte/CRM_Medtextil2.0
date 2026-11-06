@@ -1026,6 +1026,156 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
     except Exception:
         return ''
 
+# ====================== LOADER — PEDIDOS PENDENTES (usado no Novo Pedido) ======================
+@st.cache_data(ttl=3600, show_spinner=False)
+def carregar_pedidos_pendentes_df(url):
+    """Lê a planilha PEDIDOSPENDENTES (mesma regra do módulo Pedidos Pendentes). Retorna (df, erro)."""
+    import zipfile, re as _re
+    import xml.etree.ElementTree as ET
+    try:
+        resp = requests.get(url, timeout=60)
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+            ns = {'ss': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+            with z.open('xl/sharedStrings.xml') as f:
+                shared = [si.text if si.text else '' for si in ET.parse(f).findall('.//ss:t', ns)]
+            with z.open('xl/worksheets/sheet1.xml') as f:
+                sheet = ET.parse(f)
+        data, cliente_atual, pedido_atual = [], None, None
+        for row in sheet.findall('.//ss:row', ns):
+            rd = {}
+            for cell in row.findall('.//ss:c', ns):
+                col = ''.join(c for c in cell.get('r', '') if c.isalpha())
+                v = cell.find('.//ss:v', ns)
+                if v is not None and v.text:
+                    if cell.get('t', 'n') == 's':
+                        idx = int(v.text)
+                        rd[col] = shared[idx] if idx < len(shared) else v.text
+                    else:
+                        rd[col] = v.text
+            if not rd:
+                continue
+            a, b = rd.get('A', ''), rd.get('B', '')
+            if a and not b and 'N° do pedido' not in a and 'Valor Total' not in a and a != 'Subgrupo:':
+                cliente_atual = a
+            elif 'N° do pedido' in a:
+                pedido_atual = b
+                desc = rd.get('C', '')
+                if desc and ' - ' in desc:
+                    m = _re.search(r'observa[çc][aã]o[:\s]*', desc, _re.IGNORECASE)
+                    if m:
+                        desc = desc[:m.start()].strip()
+                    codigo = desc.split(' - ')[0].strip()
+                    try:
+                        q_contr = float(rd.get('D', 0)); v_unit = float(rd.get('E', 0))
+                        q_entr = float(rd.get('H', 0))
+                        try:
+                            dt = pd.Timestamp('1899-12-30') + pd.Timedelta(days=float(rd.get('G', '')))
+                        except Exception:
+                            dt = None
+                        data.append({
+                            'Cliente': cliente_atual, 'NumeroPedido': pedido_atual,
+                            'CodigoProduto': codigo, 'Descricao': desc,
+                            'QtdContratada': q_contr, 'QtdEntregue': q_entr,
+                            'QtdPendente': q_contr - q_entr, 'ValorUnit': v_unit,
+                            'DataEmissao': dt, 'Vendedor': rd.get('J', ''),
+                        })
+                    except Exception:
+                        continue
+        dfp = pd.DataFrame(data)
+        if len(dfp) > 0:
+            dfp = dfp.drop_duplicates(subset=['NumeroPedido', 'CodigoProduto'])
+        return dfp, None
+    except Exception as e:
+        return pd.DataFrame(), str(e)
+
+# ====================== HELPERS — NOVO PEDIDO ======================
+def _pedido_norm_txt(valor):
+    """Maiúsculo, sem acentos e sem espaços extras (para busca por descrição)."""
+    import unicodedata
+    s = '' if valor is None else str(valor)
+    s = unicodedata.normalize('NFKD', s)
+    return ''.join(ch for ch in s if not unicodedata.combining(ch)).upper().strip()
+
+def _pedido_cod_norm(v):
+    """Normaliza código de produto: 123, '123', 123.0 e '123.0' viram '123'."""
+    try:
+        return str(int(float(str(v).strip().replace(',', '.'))))
+    except Exception:
+        return str(v).strip()
+
+def _pedido_para_float(v):
+    """Converte número (ou texto BR/US) em float; devolve None se não der."""
+    try:
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            f = float(v)
+        else:
+            s = str(v).replace('R$', '').strip()
+            if not s:
+                return None
+            if ',' in s:
+                s = s.replace('.', '').replace(',', '.')
+            f = float(s)
+        return None if f != f else f
+    except Exception:
+        return None
+
+def _pedido_volume(qtde, cx_embarque):
+    """Volume = quantidade / caixa de embarque (None se a caixa não for válida)."""
+    q = _pedido_para_float(qtde)
+    cx = _pedido_para_float(cx_embarque)
+    if q is None or not cx or cx <= 0:
+        return None
+    return q / cx
+
+def _pedido_fmt_volume(vol):
+    if vol is None:
+        return '-'
+    return formatar_numero_br(vol, 2).rstrip('0').rstrip(',')
+
+def _pedido_ultimo_faturado(df_base, razao_social, codigo):
+    """
+    Último preço FATURADO (NF Venda) do produto para o cliente.
+    Retorna (preco, data_formatada) ou (0.0, '') se nunca foi faturado.
+    """
+    try:
+        if df_base is None or not razao_social or codigo in (None, ''):
+            return 0.0, ''
+        cod = _pedido_cod_norm(codigo)
+        m = (df_base['RazaoSocial'] == razao_social) & \
+            (df_base['CodigoProduto'].apply(_pedido_cod_norm) == cod)
+        if 'TipoMov' in df_base.columns:
+            m &= (df_base['TipoMov'] == 'NF Venda')
+        h = df_base[m].dropna(subset=['PrecoUnit', 'DataEmissao'])
+        h = h[h['PrecoUnit'] > 0]
+        if h.empty:
+            return 0.0, ''
+        ult = h.sort_values('DataEmissao', ascending=False).iloc[0]
+        return float(ult['PrecoUnit']), pd.to_datetime(ult['DataEmissao']).strftime('%d/%m/%Y')
+    except Exception:
+        return 0.0, ''
+
+def _pedido_descricao_produto(row, colunas):
+    partes = [str(row.get(c, '') or '').strip() for c in
+              ['GRUPO', 'DESCRIÇÃO', 'DESCRICAO', 'LINHA', 'LINHAS'] if c in colunas]
+    partes = [p for p in partes if p and p.lower() != 'nan']
+    return ' '.join(partes)
+
+def _pedido_buscar_por_descricao(df_prod, termo, limite=100):
+    """Busca (todas as palavras, sem acento, em qualquer ordem) nas colunas descritivas do catálogo."""
+    if df_prod is None or not termo or len(termo.strip()) < 2:
+        return df_prod.iloc[0:0] if df_prod is not None else None
+    cols_busca = [c for c in ['GRUPO', 'DESCRIÇÃO', 'DESCRICAO', 'LINHA', 'LINHAS',
+                              'NOME_PRODUTO', 'PRODUTO', 'NOME'] if c in df_prod.columns]
+    if not cols_busca:
+        return df_prod.iloc[0:0]
+    texto = df_prod[cols_busca].fillna('').astype(str).agg(' '.join, axis=1).apply(_pedido_norm_txt)
+    mask = pd.Series(True, index=df_prod.index)
+    for palavra in _pedido_norm_txt(termo).split():
+        mask &= texto.str.contains(palavra, regex=False)
+    return df_prod[mask].head(limite)
+
 def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     """Gera PDF do pedido no formato da Medtextil"""
     from reportlab.lib.pagesizes import A4
@@ -1216,36 +1366,48 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
     elements.append(Spacer(1, 1*mm))
     
     # Cabeçalho da tabela de itens (cor azul igual ao modelo)
-    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA DE\nEMBARQUE', 'QTDE', 'VALOR', 'TOTAL']
+    style_cel = ParagraphStyle('CelItem', parent=styles['Normal'], fontSize=6.5, leading=7.5, fontName='Helvetica')
+    header_itens = ['COD.', 'PRODUTO', 'PESO', 'CAIXA DE\nEMBARQUE', 'VOLUME', 'QTDE',
+                    'VALOR', 'TOTAL', 'HISTÓRICO', 'DATA\nHISTÓRICO']
     data_itens = [header_itens]
-    
-    # Adicionar itens
+
+    def _fmt_preco(v):
+        f = _pedido_para_float(v)
+        return f"R$ {formatar_numero_br(f, 2)}" if f else '-'
+
+    total_volume = 0.0
     for item in itens_pedido:
-        descricao = str(item.get('descricao', ''))
-        # Quebrar descrição se muito longa
-        if len(descricao) > 45:
-            descricao = descricao[:45] + '...'
-        
+        qtde_i = _pedido_para_float(item.get('quantidade', 0)) or 0
+        vol = _pedido_volume(qtde_i, item.get('cx_embarque', ''))
+        if vol is not None:
+            total_volume += vol
+        data_hist = str(item.get('data_historico', '') or '').strip()
+
         data_itens.append([
             str(item.get('codigo', '')),
-            descricao,
+            Paragraph(str(item.get('descricao', '')), style_cel),   # quebra de linha automática
             str(item.get('peso', '')),
             str(item.get('cx_embarque', '')),
-            f"{item.get('quantidade', 0):.0f}",
-            f"R$ {item.get('valor_unit', 0):.2f}",
-            f"R$ {item.get('total', 0):.2f}"
+            _pedido_fmt_volume(vol),
+            f"{qtde_i:.0f}",
+            f"R$ {formatar_numero_br(item.get('valor_unit', 0) or 0, 2)}",
+            f"R$ {formatar_numero_br(item.get('total', 0) or 0, 2)}",
+            _fmt_preco(item.get('preco_historico', 0)),
+            data_hist or '-',
         ])
-    
+
     # Calcular totais
     total_qtde = sum([item.get('quantidade', 0) for item in itens_pedido])
     total_valor = sum([item.get('total', 0) for item in itens_pedido])
-    
-    # Linha de total (sem bordas superiores, fundo cinza)
-    data_itens.append(['', '', '', '', f"{total_qtde:.0f}", '', f"R$ {formatar_numero_br(total_valor, 2)}"])
-    
-    col_widths = [12*mm, 76*mm, 15*mm, 18*mm, 12*mm, 22*mm, 25*mm]
-    table_itens = Table(data_itens, colWidths=col_widths)
-    
+
+    # Linha de total
+    data_itens.append(['', '', '', '', _pedido_fmt_volume(total_volume), f"{total_qtde:.0f}", '',
+                       f"R$ {formatar_numero_br(total_valor, 2)}", '', ''])
+
+    #               COD   PRODUTO  PESO  CX    VOL   QTDE  VALOR  TOTAL  HIST  DATA
+    col_widths = [12*mm, 46*mm, 12*mm, 15*mm, 14*mm, 14*mm, 20*mm, 23*mm, 19*mm, 15*mm]
+    table_itens = Table(data_itens, colWidths=col_widths, repeatRows=1)
+
     # Estilo da tabela de itens (azul igual ao modelo)
     num_rows = len(data_itens)
     style_itens = [
@@ -1254,17 +1416,20 @@ def gerar_pdf_pedido(dados_cliente, dados_pedido, itens_pedido, observacao=''):
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#003366')),  # Azul escuro
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('FONTSIZE', (0, 0), (-1, 0), 6),
+        ('FONTSIZE', (0, 1), (-1, -2), 6.5),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (4, 1), (4, -1), 'CENTER'),  # Centralizar QTDE
-        ('ALIGN', (5, 1), (7, -1), 'RIGHT'),   # Alinhar valores à direita
+        ('ALIGN', (2, 1), (5, -1), 'CENTER'),   # PESO, CX, VOLUME, QTDE
+        ('ALIGN', (6, 1), (8, -1), 'RIGHT'),    # VALOR, TOTAL, HISTÓRICO
+        ('ALIGN', (9, 1), (9, -1), 'CENTER'),   # DATA HISTÓRICO
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
         ('RIGHTPADDING', (0, 0), (-1, -1), 2),
         ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, -1), (-1, -1), 9),
+        ('FONTSIZE', (0, -1), (-1, -1), 8),
     ]
-    
+
     table_itens.setStyle(TableStyle(style_itens))
     elements.append(table_itens)
     elements.append(Spacer(1, 3*mm))
@@ -4453,12 +4618,98 @@ elif menu == "__novo_pedido__":
             if df_produtos_pedido is not None:
                 df_produtos_pedido.columns = df_produtos_pedido.columns.str.upper()
 
+    # ── Pedidos pendentes por representante (alternativa ao preenchimento manual) ──
+    _ctx_pend = st.session_state.get('np_pend_ctx', {})
+    _tog = getattr(st, 'toggle', st.checkbox)
+    modo_pend = _tog("📥 Buscar pedidos pendentes por representante", key="np_modo_pend")
+    if modo_pend:
+        if not planilhas_disponiveis.get('pedidos_pendentes'):
+            st.warning("Planilha de pedidos pendentes (PEDIDOSPENDENTES) não encontrada no GitHub.")
+        else:
+            with st.spinner("📥 Carregando pedidos pendentes..."):
+                _df_pend, _erro_pend = carregar_pedidos_pendentes_df(planilhas_disponiveis['pedidos_pendentes']['url'])
+            if _erro_pend:
+                st.error(f"❌ Erro ao ler pedidos pendentes: {_erro_pend}")
+            elif _df_pend.empty:
+                st.warning("Nenhum pedido pendente encontrado na planilha.")
+            else:
+                _df_pend = _df_pend[_df_pend['QtdPendente'] > 0]
+                _reps = sorted([r for r in _df_pend['Vendedor'].dropna().unique().tolist() if str(r).strip()])
+                _pc1, _pc2 = st.columns(2)
+                with _pc1:
+                    _rep_sel = st.selectbox("Representante", [''] + _reps, key="np_pend_rep")
+                _df_rep = _df_pend[_df_pend['Vendedor'] == _rep_sel] if _rep_sel else _df_pend.iloc[0:0]
+                with _pc2:
+                    _cli_opts = {}
+                    for _c, _g in _df_rep.groupby('Cliente'):
+                        _cli_opts[f"{_c}  ({len(_g)} itens · R$ {formatar_numero_br((_g['QtdPendente'] * _g['ValorUnit']).sum(), 2)})"] = _c
+                    _cli_lbl = st.selectbox("Cliente com pendência", [''] + list(_cli_opts.keys()),
+                                            key="np_pend_cli", disabled=not _rep_sel)
+                if _rep_sel:
+                    _m1, _m2, _m3 = st.columns(3)
+                    _m1.metric("Clientes", _df_rep['Cliente'].nunique())
+                    _m2.metric("Pedidos", _df_rep['NumeroPedido'].nunique())
+                    _m3.metric("Valor pendente", f"R$ {formatar_numero_br((_df_rep['QtdPendente'] * _df_rep['ValorUnit']).sum(), 2)}")
+                if _rep_sel and _cli_lbl:
+                    st.caption("Os itens do cliente serão carregados com a **quantidade pendente** e o **valor do pedido**. "
+                               "Isso substitui os itens atuais; depois você ainda pode adicionar itens manualmente.")
+                    if st.button("📥 Carregar pedidos pendentes no pedido", type="primary", key="np_pend_carregar"):
+                        _cli_pend = _cli_opts[_cli_lbl]
+                        _itens_cli = _df_rep[_df_rep['Cliente'] == _cli_pend]
+                        # Cliente no cadastro de vendas (nome normalizado)
+                        _mapa_cli = {_pedido_norm_txt(n): n for n in df['RazaoSocial'].dropna().unique()}
+                        _cli_df = _mapa_cli.get(_pedido_norm_txt(_cli_pend), '')
+                        # Catálogo indexado por código
+                        _cat = {}
+                        if df_produtos_pedido is not None:
+                            for _, _r in df_produtos_pedido.iterrows():
+                                _cat[_pedido_cod_norm(_r.get('ID_COD', ''))] = _r
+                        _novos, _sem_cat = [], 0
+                        for _, _it in _itens_cli.iterrows():
+                            _cod = _pedido_cod_norm(_it['CodigoProduto'])
+                            _rc = _cat.get(_cod)
+                            if _rc is not None:
+                                _desc = _pedido_descricao_produto(_rc, df_produtos_pedido.columns)
+                                _peso, _cx, _pref = _rc.get('GRAMATURA', ''), _rc.get('CX_EMB', ''), (_rc.get('PRECO', 0) or 0)
+                            else:
+                                _sem_cat += 1
+                                _desc = str(_it['Descricao']).split(' - ', 1)[-1].strip()
+                                _peso, _cx, _pref = '', '', 0
+                            _hist, _dhist = _pedido_ultimo_faturado(df, _cli_df, _cod)
+                            _qtd, _vu = float(_it['QtdPendente']), float(_it['ValorUnit'])
+                            _novos.append({
+                                'codigo': _cod, 'descricao': _desc or str(_it['Descricao']),
+                                'peso': _peso, 'cx_embarque': _cx,
+                                'quantidade': _qtd, 'valor_unit': _vu,
+                                'preco_historico': _hist, 'data_historico': _dhist,
+                                'total': _qtd * _vu,
+                                'comissao': calcular_comissao(_vu, _pref),
+                                'pedido_origem': str(_it['NumeroPedido']),
+                            })
+                        st.session_state.itens_pedido = _novos
+                        st.session_state['np_pend_ctx'] = {
+                            'representante': _rep_sel, 'cliente_pend': _cli_pend, 'cliente_df': _cli_df,
+                            'pedidos': ', '.join(sorted({str(x) for x in _itens_cli['NumeroPedido']})),
+                        }
+                        if _cli_df:
+                            st.session_state['cliente_pedido_np'] = _cli_df
+                        st.session_state['np_pend_msg'] = (
+                            f"✅ {len(_novos)} itens carregados de {_cli_pend}."
+                            + (f" ⚠️ {_sem_cat} item(ns) sem cadastro no catálogo (peso/caixa em branco)." if _sem_cat else "")
+                            + ("" if _cli_df else " ⚠️ Cliente não localizado no histórico de vendas — histórico em branco."))
+                        st.rerun()
+        if st.session_state.get('np_pend_msg'):
+            st.info(st.session_state['np_pend_msg'])
+        _ctx_pend = st.session_state.get('np_pend_ctx', {})
+    st.markdown("---")
+
     st.markdown("### 👤 Informações do Cliente")
     col_cli1, col_cli2 = st.columns(2)
     with col_cli1:
         clientes_lista = sorted(df['RazaoSocial'].dropna().unique().tolist())
         cliente_selecionado = st.selectbox("Selecione o Cliente", [''] + clientes_lista, key="cliente_pedido_np")
     dados_cliente = {}
+    _nome_cli_pdf = cliente_selecionado or _ctx_pend.get('cliente_pend', '')
     if cliente_selecionado:
         df_cliente_row = df[df['RazaoSocial'] == cliente_selecionado].iloc[0]
         dados_cliente = {
@@ -4469,7 +4720,7 @@ elif menu == "__novo_pedido__":
             'vendedor':     df_cliente_row.get('Vendedor', '')
         }
     with col_cli2:
-        representante = st.text_input("Representante", value=dados_cliente.get('vendedor', ''), key="representante_pedido_np")
+        representante = st.text_input("Representante", value=_ctx_pend.get('representante') or dados_cliente.get('vendedor', ''), key="representante_pedido_np")
     col_cli3, col_cli4, col_cli5 = st.columns(3)
     with col_cli3:
         nome_fantasia = st.text_input("Nome Fantasia", value=dados_cliente.get('razao_social', ''), key="fantasia_pedido_np")
@@ -4490,7 +4741,7 @@ elif menu == "__novo_pedido__":
     st.markdown("### 📋 Informações do Pedido")
     col_ped1, col_ped2, col_ped3, col_ped4 = st.columns(4)
     with col_ped1:
-        num_pedido = st.text_input("Nº do Pedido", key="num_pedido_np")
+        num_pedido = st.text_input("Nº do Pedido", value=_ctx_pend.get('pedidos', ''), key="num_pedido_np")
     with col_ped2:
         tabela_preco = st.text_input("Tabela de Preço", key="tab_preco_np")
     with col_ped3:
@@ -4503,6 +4754,7 @@ elif menu == "__novo_pedido__":
     st.markdown("### 🛒 Adicionar Produtos ao Pedido")
     col_prod1, col_prod2, col_prod3, col_prod4 = st.columns([2, 1, 1, 1])
     produto_info = {}
+    codigo_selecionado = None
     with col_prod1:
         tipo_busca_prod = st.radio("Buscar por:", ["Código", "Descrição"], horizontal=True, key="tipo_busca_prod_np")
         if tipo_busca_prod == "Código":
@@ -4512,15 +4764,30 @@ elif menu == "__novo_pedido__":
             else:
                 codigo_selecionado = st.text_input("Código do Produto", key="cod_prod_pedido_np_txt")
         else:
-            busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido_np")
-            codigo_selecionado = None
+            busca_desc = st.text_input("Descrição do Produto", key="desc_prod_pedido_np",
+                                       placeholder="Ex: lençol casal branco (mín. 2 letras)")
+            if df_produtos_pedido is None:
+                st.warning("Catálogo de produtos indisponível para busca por descrição.")
+            elif busca_desc and len(busca_desc.strip()) >= 2:
+                _res_busca = _pedido_buscar_por_descricao(df_produtos_pedido, busca_desc)
+                if len(_res_busca) == 0:
+                    st.warning("Nenhum produto encontrado para essa descrição.")
+                else:
+                    _opcoes_desc = {}
+                    for _, _r in _res_busca.iterrows():
+                        _cod_r = str(_r.get('ID_COD', ''))
+                        _d_r = _pedido_descricao_produto(_r, df_produtos_pedido.columns) or _cod_r
+                        _opcoes_desc[f"{_cod_r} — {_d_r}"] = _cod_r
+                    _sel_desc = st.selectbox(
+                        f"Produtos encontrados ({len(_opcoes_desc)}{'+' if len(_opcoes_desc) >= 100 else ''})",
+                        [''] + list(_opcoes_desc.keys()), key="sel_desc_prod_pedido_np")
+                    codigo_selecionado = _opcoes_desc.get(_sel_desc) if _sel_desc else None
 
     if df_produtos_pedido is not None and codigo_selecionado:
         prod_row = df_produtos_pedido[df_produtos_pedido['ID_COD'].astype(str) == str(codigo_selecionado)]
         if len(prod_row) > 0:
             prod_row = prod_row.iloc[0]
-            _desc_parts = [str(prod_row.get(c, '') or '') for c in ['GRUPO','DESCRIÇÃO','DESCRICAO','LINHA','LINHAS'] if c in df_produtos_pedido.columns]
-            descricao_completa = ' '.join(p.strip() for p in _desc_parts if p.strip())
+            descricao_completa = _pedido_descricao_produto(prod_row, df_produtos_pedido.columns)
             produto_info = {
                 'codigo':      str(prod_row.get('ID_COD', '')),
                 'descricao':   descricao_completa or str(codigo_selecionado),
@@ -4528,16 +4795,17 @@ elif menu == "__novo_pedido__":
                 'cx_embarque': prod_row.get('CX_EMB', ''),
                 'preco_ref':   prod_row.get('PRECO', 0) or 0
             }
+            # Histórico = último preço FATURADO (NF Venda) deste produto para o cliente + data
+            produto_info['preco_historico'], produto_info['data_historico'] = \
+                _pedido_ultimo_faturado(df, cliente_selecionado, codigo_selecionado)
+            produto_info['preco_sugerido'] = produto_info['preco_historico'] or produto_info['preco_ref']
             if cliente_selecionado:
-                hist_cli = df[(df['RazaoSocial'] == cliente_selecionado) &
-                              (df['CodigoProduto'].astype(str) == str(codigo_selecionado))]
-                if len(hist_cli) > 0:
-                    hist_cli = hist_cli.sort_values('DataEmissao', ascending=False)
-                    produto_info['preco_sugerido'] = hist_cli.iloc[0]['PrecoUnit']
+                if produto_info['preco_historico'] > 0:
+                    st.caption(f"🕘 Último faturado para este cliente: "
+                               f"**R$ {formatar_numero_br(produto_info['preco_historico'], 2)}** "
+                               f"em **{produto_info['data_historico']}**")
                 else:
-                    produto_info['preco_sugerido'] = produto_info['preco_ref']
-            else:
-                produto_info['preco_sugerido'] = produto_info['preco_ref']
+                    st.caption("🕘 Este produto nunca foi faturado para este cliente (sugerido o preço de tabela).")
 
     with col_prod2:
         qtde_item = st.number_input("Quantidade", min_value=0, value=0, key="qtde_item_pedido_np")
@@ -4557,7 +4825,8 @@ elif menu == "__novo_pedido__":
                     'cx_embarque':     produto_info.get('cx_embarque', ''),
                     'quantidade':      qtde_item,
                     'valor_unit':      valor_item,
-                    'preco_historico': produto_info.get('preco_sugerido', 0),
+                    'preco_historico': produto_info.get('preco_historico', 0),
+                    'data_historico':  produto_info.get('data_historico', ''),
                     'total':           qtde_item * valor_item,
                     'comissao':        comissao
                 })
@@ -4569,15 +4838,17 @@ elif menu == "__novo_pedido__":
         st.markdown("---")
         st.markdown("### 👁️ Preview do Item")
         _total_prev = qtde_item * valor_item
-        _preco_hist  = produto_info.get('preco_sugerido', 0)
+        _preco_hist  = produto_info.get('preco_historico', 0)
         _comissao_p  = calcular_comissao(valor_item, produto_info.get('preco_ref', 0))
         st.dataframe(pd.DataFrame([{
             'Código': produto_info['codigo'],
             'Produto': produto_info['descricao'][:50],
             'Peso': produto_info.get('peso', ''),
             'Cx Embarque': produto_info.get('cx_embarque', ''),
+            'Volume': _pedido_fmt_volume(_pedido_volume(qtde_item, produto_info.get('cx_embarque', ''))),
             'Qtde': f"{formatar_numero_br(qtde_item, 0)}",
-            'Preço Histórico': f"R$ {formatar_numero_br(_preco_hist, 2)}",
+            'Preço Histórico': f"R$ {formatar_numero_br(_preco_hist, 2)}" if _preco_hist > 0 else '-',
+            'Data Histórico': produto_info.get('data_historico', '') or '-',
             'Valor Unit.': f"R$ {formatar_numero_br(valor_item, 2)}",
             'Total': f"R$ {formatar_numero_br(_total_prev, 2)}",
             'Comissão%': _comissao_p
@@ -4598,14 +4869,22 @@ elif menu == "__novo_pedido__":
         st.markdown("### 📦 Itens do Pedido")
         df_itens = pd.DataFrame(st.session_state.itens_pedido)
         df_itens_display = df_itens.copy()
-        df_itens_display['preco_historico'] = df_itens_display['preco_historico'].apply(lambda x: f"R$ {formatar_numero_br(x, 2)}")
+        if 'data_historico' not in df_itens_display.columns:
+            df_itens_display['data_historico'] = ''
+        df_itens_display['volume'] = df_itens_display.apply(
+            lambda r: _pedido_fmt_volume(_pedido_volume(r['quantidade'], r.get('cx_embarque', ''))), axis=1)
+        df_itens_display['preco_historico'] = df_itens_display['preco_historico'].apply(
+            lambda x: f"R$ {formatar_numero_br(x, 2)}" if x else '-')
+        df_itens_display['data_historico']  = df_itens_display['data_historico'].replace('', '-').fillna('-')
         df_itens_display['valor_unit']      = df_itens_display['valor_unit'].apply(lambda x: f"R$ {formatar_numero_br(x, 2)}")
         df_itens_display['total']           = df_itens_display['total'].apply(lambda x: f"R$ {formatar_numero_br(x, 2)}")
+        df_itens_display = df_itens_display[['codigo', 'descricao', 'peso', 'cx_embarque', 'volume', 'quantidade',
+                                             'valor_unit', 'total', 'preco_historico', 'data_historico', 'comissao']]
         df_itens_display = df_itens_display.rename(columns={
             'codigo':'COD.','descricao':'PRODUTO','peso':'PESO',
-            'cx_embarque':'CX EMBARQUE','quantidade':'QTDE',
-            'preco_historico':'PREÇO HISTÓRICO','valor_unit':'VALOR',
-            'total':'TOTAL','comissao':'COMISSÃO%'
+            'cx_embarque':'CX EMBARQUE','volume':'VOLUME','quantidade':'QTDE',
+            'valor_unit':'VALOR','total':'TOTAL',
+            'preco_historico':'HISTÓRICO','data_historico':'DATA HISTÓRICO','comissao':'COMISSÃO%'
         })
         st.dataframe(df_itens_display, use_container_width=True, height=300)
         col_met1, col_met2, col_met3 = st.columns(3)
@@ -4620,12 +4899,14 @@ elif menu == "__novo_pedido__":
         with col_btn1:
             if st.button("🗑️ Limpar Pedido", use_container_width=True, key="limpar_pedido_np"):
                 st.session_state.itens_pedido = []
+                st.session_state.pop('np_pend_ctx', None)
+                st.session_state.pop('np_pend_msg', None)
                 st.rerun()
         with col_btn2:
             if st.button("📄 Gerar PDF do Pedido", use_container_width=True, key="gerar_pdf_pedido_np", type="primary"):
                 try:
                     dados_cliente_pdf = {
-                        'representante': representante, 'razao_social': cliente_selecionado,
+                        'representante': representante, 'razao_social': _nome_cli_pdf,
                         'nome_fantasia': nome_fantasia, 'cnpj': cnpj_pedido,
                         'ie': insc_estadual, 'telefone': telefone_pedido,
                         'email': email_pedido, 'endereco': endereco_pedido,
@@ -4642,7 +4923,7 @@ elif menu == "__novo_pedido__":
                     st.download_button(
                         label="📥 Baixar PDF do Pedido",
                         data=pdf_bytes,
-                        file_name=f"Pedido_{num_pedido or 'SN'}_{(cliente_selecionado or 'cliente').replace(' ','_')}.pdf",
+                        file_name=f"Pedido_{num_pedido or 'SN'}_{(_nome_cli_pdf or 'cliente').replace(' ','_')}.pdf",
                         mime="application/pdf",
                         key="download_pdf_pedido_np"
                     )
