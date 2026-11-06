@@ -1027,7 +1027,6 @@ def calcular_prazo_historico(data_emissao, data_vencimento_str):
         return ''
 
 # ====================== LOADER — PEDIDOS PENDENTES (usado no Novo Pedido) ======================
-@st.cache_data(ttl=3600, show_spinner=False)
 def carregar_pedidos_pendentes_df(url):
     """Lê a planilha PEDIDOSPENDENTES (mesma regra do módulo Pedidos Pendentes). Retorna (df, erro)."""
     import zipfile, re as _re
@@ -4832,24 +4831,38 @@ elif menu == "__novo_pedido__":
             elif _df_pend.empty:
                 st.warning("Nenhum pedido pendente encontrado na planilha.")
             else:
-                _df_pend = _df_pend[_df_pend['QtdPendente'] > 0]
-                _reps = sorted([r for r in _df_pend['Vendedor'].dropna().unique().tolist() if str(r).strip()])
+                _df_pend_todos = _df_pend                                    # planilha completa
+                _df_pend = _df_pend_todos[_df_pend_todos['QtdPendente'] > 0]     # só o que ainda está pendente
+                _vend_col = _df_pend['Vendedor'].fillna('').astype(str)
+                _n_por_vend = _df_pend.groupby(_vend_col).size().to_dict()
+                _vend_todos = sorted(_df_pend_todos['Vendedor'].fillna('').astype(str).unique().tolist())
+                _rep_map = {}
+                for _v in _vend_todos:
+                    _nome_v = _v.strip() or '(sem vendedor)'
+                    _n = _n_por_vend.get(_v, 0)
+                    _rep_map[f"{_nome_v}  ({_n} itens pendentes)" if _n else f"{_nome_v}  (sem pendência)"] = _v
                 _pc1, _pc2 = st.columns(2)
                 with _pc1:
-                    _rep_sel = st.selectbox("Representante", [''] + _reps, key="np_pend_rep")
-                _df_rep = _df_pend[_df_pend['Vendedor'] == _rep_sel] if _rep_sel else _df_pend.iloc[0:0]
+                    _rep_lbl = st.selectbox("Representante", [''] + list(_rep_map.keys()), key="np_pend_rep")
+                _rep_ok = bool(_rep_lbl)
+                _rep_sel = _rep_map.get(_rep_lbl, '')
+                st.caption(f"{len(_vend_todos)} representantes na planilha · {len(_n_por_vend)} com itens pendentes")
+                _df_rep = _df_pend[_vend_col == _rep_sel] if _rep_ok else _df_pend.iloc[0:0]
                 with _pc2:
                     _cli_opts = {}
                     for _c, _g in _df_rep.groupby('Cliente'):
                         _cli_opts[f"{_c}  ({len(_g)} itens · R$ {formatar_numero_br((_g['QtdPendente'] * _g['ValorUnit']).sum(), 2)})"] = _c
                     _cli_lbl = st.selectbox("Cliente com pendência", [''] + list(_cli_opts.keys()),
-                                            key="np_pend_cli", disabled=not _rep_sel)
-                if _rep_sel:
+                                            key="np_pend_cli", disabled=not _rep_ok)
+                if _rep_ok and _df_rep.empty:
+                    st.info("Este representante não tem itens com quantidade pendente na planilha.")
+                if _rep_ok and not _df_rep.empty:
                     _m1, _m2, _m3 = st.columns(3)
                     _m1.metric("Clientes", _df_rep['Cliente'].nunique())
                     _m2.metric("Pedidos", _df_rep['NumeroPedido'].nunique())
                     _m3.metric("Valor pendente", f"R$ {formatar_numero_br((_df_rep['QtdPendente'] * _df_rep['ValorUnit']).sum(), 2)}")
-                if _rep_sel:
+
+                if _rep_ok and not _df_rep.empty:
                     st.caption("Os itens são carregados com a **quantidade pendente** e o **valor do pedido**. "
                                "Isso substitui os itens atuais; depois você ainda pode adicionar itens manualmente.")
                     _b1, _b2 = st.columns(2)
