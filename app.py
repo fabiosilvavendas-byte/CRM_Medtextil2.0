@@ -768,6 +768,7 @@ def listar_planilhas_github():
             'pedidos_pendentes': None,
             'tabela_ne': None,
             'contrato': None,
+            'producao': None,
             'todas': []
         }
         
@@ -807,6 +808,10 @@ def listar_planilhas_github():
                 if 'CONTRATO' in content.name.upper() and 'CONSULTA' in content.name.upper():
                     planilhas['contrato'] = info
 
+                # Identificar planilha de controle de produção
+                if 'CONTROLE_PRODUCAO' in content.name.upper().replace('Ç', 'C').replace('Ã', 'A').replace(' ', '_'):
+                    planilhas['producao'] = info
+
         
         if not planilhas['todas']:
             st.warning(f"⚠️ Nenhuma planilha Excel encontrada na pasta '{GITHUB_FOLDER}'")
@@ -815,7 +820,7 @@ def listar_planilhas_github():
     except Exception as e:
         st.error(f"❌ Erro ao conectar ao GitHub: {str(e)}")
         st.info(f"💡 Verificando: {GITHUB_REPO}/{GITHUB_FOLDER}")
-        return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'tabela_ne': None, 'contrato': None, 'todas': []}
+        return {'vendas': None, 'inadimplencia': None, 'vendas_produto': None, 'produtos_agrupados': None, 'pedidos_pendentes': None, 'tabela_ne': None, 'contrato': None, 'producao': None, 'todas': []}
 
 @st.cache_data(ttl=3600)
 def carregar_planilha_github(url):
@@ -845,12 +850,14 @@ _MODULOS_ADMIN = [
     "Histórico", "Pedidos Pendentes", "Rankings",
     "Performance de Vendedores", "Consulta Clientes",
     "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos", "Comissões",
+    "Produção",
 ]
 _MODULOS_GESTOR = [
     "Dashboard", "Positivação", "Inadimplência", "Clientes sem Compra",
     "Histórico", "Pedidos Pendentes", "Rankings",
     "Performance de Vendedores", "Consulta Clientes",
     "Meus Pedidos", "Fila de Aprovação", "Todos os Pedidos", "Comissões",
+    "Produção",
 ]
 _MODULOS_VENDEDOR = [
     "Histórico", "Consulta Clientes", "Meus Pedidos",
@@ -2248,6 +2255,11 @@ with st.sidebar:
             st.error("❌ Planilha de vendas não encontrada")
             st.info("Procurando por arquivo com 'CONSULTA_VENDEDORES' no nome")
 
+        if planilhas_disponiveis.get('producao'):
+            st.success(f"✅ Produção: {planilhas_disponiveis['producao']['nome']}")
+        else:
+            st.warning("⚠️ Planilha de produção não encontrada (use o upload no módulo)")
+
         if planilhas_disponiveis['inadimplencia']:
             st.success(f"✅ Inadimplência: {planilhas_disponiveis['inadimplencia']['nome']}")
         else:
@@ -2369,6 +2381,7 @@ _DESC = {
     "Pedidos Pendentes":  "Itens aguardando faturamento",
     "Rankings":           "Top vendedores e clientes",
     "Performance de Vendedores": "Painel completo de KPIs por vendedor",
+    "Produção":           "Relatórios por linha, máquina e produto",
 }
 _INFO_CARD = {}  # preenchido depois dos dados
 
@@ -2391,6 +2404,7 @@ _CATEGORIAS_NAV = {
         "Pedidos Pendentes",
         "Inadimplência",
         "Comissões",
+        "Produção",
     ],
     "CONSULTAS RÁPIDAS": [
         "Tabela de Preços",
@@ -2416,6 +2430,7 @@ _ICONES_NAV = {
     "Novo Pedido ERP":"🆕","Meus Pedidos":"📋",
     "Fila de Aprovação":"⏳","Todos os Pedidos":"🗂️",
     "Comissões":"💵",
+    "Produção":"🏭",
 }
 
 if 'menu_option' not in st.session_state:
@@ -2445,6 +2460,7 @@ _ICONES_CARD = {
     "Clientes sem Compra":"＋","Histórico":"◷",
     "Pedidos Pendentes":"▣","Rankings":"▲","Performance de Vendedores":"★",
     "Consulta Clientes":"＄","Histórico do Cliente":"◷","Novo Pedido":"📝",
+    "Produção":"🏭",
 }
 
 with st.sidebar:
@@ -2884,6 +2900,7 @@ if st.session_state.menu_option == '__home__':
         # 📋 RELATÓRIOS E ATENÇÃO
         {'nome':'Pedidos Pendentes',        'info':_info_pend,                                   'cat':'📋 Relatórios'},
         {'nome':'Inadimplência',            'info':_info_inad,                                   'cat':'📋 Relatórios'},
+        {'nome':'Produção',                 'info':'Filtros por período, máquina e produto · Excel', 'cat':'📋 Relatórios'},
         # 🔍 CONSULTAS RÁPIDAS
         {'nome':'Consulta Clientes',        'info':'Busca de produtos e preços por estado',      'cat':'🔍 Consultas'},
         {'nome':'Histórico',                'info':'Por cliente, vendedor ou produto',            'cat':'🔍 Consultas'},
@@ -11183,6 +11200,10 @@ elif menu == "__erp_todos_pedidos__":
 # Fontes: COMISSOES_VENDAS_*.xlsx, BOLETOS_EMITIDOS_*.xlsx, BOLETOS_PAGOS_*.xlsx
 # (lidas do GitHub; o sufixo de data no nome do arquivo é ignorado).
 # ══════════════════════════════════════════════════════════════════════════
+elif menu == "Produção":
+    from modulo_producao import render_producao
+    render_producao(planilhas_disponiveis)
+
 elif menu == "Comissões":
     import re as _com_re
 
