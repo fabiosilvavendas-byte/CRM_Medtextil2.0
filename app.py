@@ -747,6 +747,562 @@ GITHUB_REPO = "fabiosilvavendas-byte/CRM_Medtextil2.0"
 GITHUB_FOLDER = "dados"  # ⭐ PASTA ONDE ESTÃO AS PLANILHAS
 GITHUB_TOKEN = None  # Opcional: adicione token se repositório for privado
 
+# ══════════════════════════════════════════════════════════════════════════
+# MÓDULO PRODUÇÃO (integrado) — relatórios do CONTROLE_PRODUCAO com filtros e Excel
+# Selovac/Flowpack = máquinas de embalagem: métrica separada, fora dos totais.
+# ══════════════════════════════════════════════════════════════════════════
+import unicodedata
+import openpyxl
+
+MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+               'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
+# Colunas das abas mensais (A..W), na ordem em que aparecem na planilha
+_COLS_MES = ['Data', 'Maq_inf', 'Cod', 'Qtd', 'Unid_inf', 'Guia', 'PCT_inf',
+             'Produto', 'Subgrupo', 'Marca', 'QuantCx', 'PCT', 'TotalPacote',
+             'Volume', 'Rolos', 'Duzias', 'Alerta', 'LinhaCad', 'Regra',
+             'Setor', 'Maquina', 'UnidLanc', 'UnidVol']
+
+COR_PRIMARIA = '#1F4788'
+COR_EMBALAGEM = '#E07B00'
+
+# Máquinas de EMBALAGEM: embalam o que a dobradeira / atadura manual já produziram.
+# Por isso nunca entram nos totais de produção (evita contar o mesmo produto 2x).
+# chave = nome exibido; valor = trechos (sem acento, minúsculos) procurados em Máquina/Linha.
+EMBALAGEM_MAQ = {'Selovac': ('selovac',), 'Flowpack': ('flowpac',)}
+COLS_EMB = [f'Embalado {t} (pacotes)' for t in EMBALAGEM_MAQ]
+
+
+def _norm_prod(s):
+    s = unicodedata.normalize('NFKD', str(s or ''))
+    return ''.join(c for c in s if not unicodedata.combining(c)).lower()
+
+
+def _tipo_embalagem(maquina, linha):
+    """'Selovac' / 'Flowpack' se o lançamento é de máquina de embalagem; senão ''."""
+    alvo = _norm_prod(maquina) + ' | ' + _norm_prod(linha)
+    for tipo, trechos in EMBALAGEM_MAQ.items():
+        if any(t in alvo for t in trechos):
+            return tipo
+    return ''
+
+
+# ═════════════════════════════════════════════════════════════════════════
+#  LEITURA DA PLANILHA
+# ═════════════════════════════════════════════════════════════════════════
+def _ler_linhas_relatorio(wb):
+    """Tabela 3 da aba Parâmetros: 'Linhas do relatório' (ex.: Flowpack — Farma)."""
+    regras = []
+    if 'Parâmetros' not in wb.sheetnames:
+        return regras
+    ws = wb['Parâmetros']
+    for r in range(6, 31):
+        nome, setor, f_item, _, f_unid = [ws.cell(r, c).value for c in range(9, 14)]
+        if nome and setor:
+            regras.append({
+                'nome': str(nome).strip(),
+                'setor': str(setor).strip(),
+                'f_item': str(f_item).strip().upper() if f_item else '',
+                'f_unid': str(f_unid).strip().lower() if f_unid else '',
+            })
+    return regras
+
+
+def _linha_do_relatorio(row, regras):
+    """Mesma lógica da planilha: a ÚLTIMA linha cadastrada que casa setor + filtros."""
+    escolhida = row['Setor']
+    item = str(row['Produto'] or '').upper()
+    unid = str(row['UnidLanc'] or '').strip().lower()
+    for rg in regras:
+        if rg['setor'] != row['Setor']:
+            continue
+        if rg['f_item'] and rg['f_item'] not in item:
+            continue
+        if rg['f_unid'] and rg['f_unid'] != unid:
+            continue
+        escolhida = rg['nome']
+    return escolhida
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def carregar_producao(conteudo: bytes) -> pd.DataFrame:
+    """Lê as 12 abas mensais e devolve um DataFrame 'longo' (1 linha = 1 lançamento)."""
+    wb = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+    regras = _ler_linhas_relatorio(wb)
+
+    ano_ref = None
+    if 'Consolidado' in wb.sheetnames:
+        try:
+            ano_ref = int(wb['Consolidado']['B5'].value)
+        except (TypeError, ValueError):
+            ano_ref = None
+
+    registros = []
+    for num, aba in enumerate(MESES_ABREV, start=1):
+        if aba not in wb.sheetnames:
+            continue
+        for linha in wb[aba].iter_rows(min_row=8, max_col=23, values_only=True):
+            d = dict(zip(_COLS_MES, linha))
+            # ignora cabeçalhos de bloco, linhas vazias e linhas sem setor calculado
+            if d['Setor'] in (None, '', 'Setor (aut.)'):
+                continue
+            if d['Cod'] in (None, '', 'Cód') or d['Qtd'] in (None, '', 'Quantidade'):
+                continue
+            d['MesNum'] = num
+            registros.append(d)
+    wb.close()
+
+    if not registros:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(registros)
+    df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+    df['Ano'] = df['Data'].dt.year.fillna(ano_ref if ano_ref else datetime.now().year).astype(int)
+    df['Cod'] = pd.to_numeric(df['Cod'], errors='coerce').astype('Int64')
+    for c in ['Qtd', 'TotalPacote', 'Volume', 'Rolos', 'Duzias']:
+        df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
+    for c in ['Produto', 'Subgrupo', 'Marca', 'Maquina', 'UnidLanc', 'UnidVol', 'Alerta']:
+        df[c] = df[c].fillna('').astype(str).str.strip()
+    df['Linha'] = df.apply(lambda r: _linha_do_relatorio(r, regras), axis=1)
+    df['Embalagem'] = [_tipo_embalagem(a, b) for a, b in zip(df['Maquina'], df['Linha'])]
+    df['Mes'] = df['MesNum'].map(lambda n: MESES_ABREV[n - 1])
+    df['Periodo'] = df['Ano'].astype(str) + '-' + df['MesNum'].astype(str).str.zfill(2)
+    df['UnidVol'] = df['UnidVol'].replace('', '—')
+    df['UnidLanc'] = df['UnidLanc'].replace('', '—')
+    return df
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _baixar_bytes(url: str) -> bytes:
+    r = requests.get(url, timeout=60)
+    r.raise_for_status()
+    return r.content
+
+
+# ═════════════════════════════════════════════════════════════════════════
+#  AGREGAÇÕES (usadas na tela e no Excel — fonte única)
+# ═════════════════════════════════════════════════════════════════════════
+_AGG = dict(Lancamentos=('Cod', 'size'), Qtd=('Qtd', 'sum'),
+            TotalPacote=('TotalPacote', 'sum'), Rolos=('Rolos', 'sum'),
+            Duzias=('Duzias', 'sum'), Volume=('Volume', 'sum'))
+
+_RENOMEAR = {'Linha': 'Linha', 'Maquina': 'Máquina', 'UnidLanc': 'Unid. lançada',
+             'UnidVol': 'Unid. volume', 'Lancamentos': 'Lançamentos',
+             'Qtd': 'Qtd. lançada', 'TotalPacote': 'Total pacote',
+             'Rolos': 'Rolos', 'Duzias': 'Dúzias', 'Volume': 'Total Vol.',
+             'Cod': 'Cód', 'Produto': 'Produto (grupo)', 'Subgrupo': 'Subgrupo',
+             'Marca': 'Marca', 'Setor': 'Setor', 'Mes': 'Mês', 'Ano': 'Ano',
+             'Data': 'Data', 'Alerta': 'Alerta'}
+
+
+def agrupar(df, chaves):
+    out = df.groupby(chaves, dropna=False).agg(**_AGG).reset_index()
+    return out.rename(columns=_RENOMEAR)
+
+
+def tabela_por_linha(df):
+    return agrupar(df, ['Linha', 'UnidLanc', 'UnidVol']).sort_values('Linha')
+
+
+def tabela_por_maquina(df):
+    return agrupar(df, ['Maquina', 'Linha', 'UnidLanc', 'UnidVol']).sort_values(['Linha', 'Máquina'])
+
+
+def sem_embalagem(df):
+    """Lançamentos de produção 'de verdade' (exclui Selovac e Flowpack)."""
+    return df[df['Embalagem'] == '']
+
+
+def tabela_por_produto(df):
+    """Produção por produto. Selovac/Flowpack ficam em colunas SEPARADAS (pacotes embalados)
+    e não entram nas colunas de produção (Lançamentos, Rolos, Dúzias, Total Vol...)."""
+    ch = ['Cod', 'Produto', 'Subgrupo', 'Marca', 'UnidLanc', 'UnidVol']
+    t = sem_embalagem(df).groupby(ch, dropna=False).agg(**_AGG).reset_index()
+    for tipo in EMBALAGEM_MAQ:
+        col = f'Embalado {tipo} (pacotes)'
+        sub_ = df[df['Embalagem'] == tipo]
+        if sub_.empty:
+            t[col] = 0.0
+            continue
+        p = sub_.groupby(ch, dropna=False)['TotalPacote'].sum().rename(col).reset_index()
+        t = t.merge(p, on=ch, how='outer')
+    for c in list(_AGG) + COLS_EMB:
+        t[c] = t[c].fillna(0.0)
+    t = t.rename(columns=_RENOMEAR)
+    return t.sort_values('Cód')
+
+
+def tabela_por_mes(df):
+    """Matriz Linha × Mês com o Total Vol. (cada linha mantém a sua unidade)."""
+    if df.empty:
+        return pd.DataFrame()
+    base = df.groupby(['Linha', 'UnidVol', 'Ano', 'MesNum'])['Volume'].sum().reset_index()
+    base['Col'] = base['Ano'].astype(str) + '-' + base['MesNum'].astype(str).str.zfill(2)
+    mat = base.pivot_table(index=['Linha', 'UnidVol'], columns='Col',
+                           values='Volume', aggfunc='sum', fill_value=0.0)
+    mat.columns = [f"{MESES_ABREV[int(c[5:7]) - 1]}/{c[2:4]}" for c in mat.columns]
+    mat = mat.reset_index().rename(columns={'UnidVol': 'Unid. volume'})
+    return mat
+
+
+def tabela_detalhe(df):
+    cols = ['Data', 'Mes', 'Linha', 'Maquina', 'Cod', 'Produto', 'Subgrupo', 'Marca',
+            'Qtd', 'UnidLanc', 'TotalPacote', 'Rolos', 'Duzias', 'Volume', 'UnidVol', 'Alerta']
+    t = df[cols].sort_values(['Data', 'Linha', 'Maquina', 'Cod']).rename(columns=_RENOMEAR)
+    t = t.rename(columns={'Qtd': 'Qtd. lançada', 'UnidLanc': 'Unid. lançada',
+                          'UnidVol': 'Unid. volume', 'Volume': 'Total Vol.',
+                          'TotalPacote': 'Total pacote', 'Duzias': 'Dúzias'})
+    t['Data'] = t['Data'].dt.strftime('%d/%m/%Y')
+    return t
+
+
+# ═════════════════════════════════════════════════════════════════════════
+#  EXPORTAÇÃO EXCEL
+# ═════════════════════════════════════════════════════════════════════════
+def gerar_excel_producao(df, filtros_txt, titulo='Relatório de Produção'):
+    """Gera o .xlsx organizado: Resumo (capa) + Por Linha + Por Máquina + Por Produto
+    + Por Mês + Detalhe. Totais são fórmulas, para continuar somando se alguém editar."""
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine='xlsxwriter') as w:
+        wb = w.book
+        F = 'Arial'
+        f_tit = wb.add_format({'font_name': F, 'bold': True, 'font_size': 16, 'font_color': COR_PRIMARIA})
+        f_sub = wb.add_format({'font_name': F, 'font_size': 10, 'font_color': '#6C757D'})
+        f_lbl = wb.add_format({'font_name': F, 'bold': True, 'font_size': 10})
+        f_txt = wb.add_format({'font_name': F, 'font_size': 10})
+        f_wrap = wb.add_format({'font_name': F, 'font_size': 10, 'text_wrap': True, 'valign': 'top'})
+        f_head = wb.add_format({'font_name': F, 'bold': True, 'font_size': 10, 'font_color': 'white',
+                                'bg_color': COR_PRIMARIA, 'border': 1, 'border_color': '#D0D5DE',
+                                'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+        f_head_emb = wb.add_format({'font_name': F, 'bold': True, 'font_size': 10, 'font_color': 'white',
+                                    'bg_color': COR_EMBALAGEM, 'border': 1, 'border_color': '#D0D5DE',
+                                    'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+        f_cel = wb.add_format({'font_name': F, 'font_size': 10, 'border': 1, 'border_color': '#E9ECEF'})
+        f_int = wb.add_format({'font_name': F, 'font_size': 10, 'border': 1, 'border_color': '#E9ECEF',
+                               'num_format': '#,##0'})
+        f_dec = wb.add_format({'font_name': F, 'font_size': 10, 'border': 1, 'border_color': '#E9ECEF',
+                               'num_format': '#,##0.00'})
+        f_tot_l = wb.add_format({'font_name': F, 'bold': True, 'font_size': 10, 'bg_color': '#E8EFFD',
+                                 'border': 1, 'border_color': '#C5D5F0'})
+        f_tot_i = wb.add_format({'font_name': F, 'bold': True, 'font_size': 10, 'bg_color': '#E8EFFD',
+                                 'border': 1, 'border_color': '#C5D5F0', 'num_format': '#,##0'})
+        f_tot_d = wb.add_format({'font_name': F, 'bold': True, 'font_size': 10, 'bg_color': '#E8EFFD',
+                                 'border': 1, 'border_color': '#C5D5F0', 'num_format': '#,##0.00'})
+
+        COLS_INT = {'Lançamentos', 'Cód', 'Total pacote', 'Rolos', 'Dúzias', 'Qtd. lançada', 'Ano', *COLS_EMB}
+        COLS_DEC = {'Total Vol.'}
+
+        def _col_xl(n):  # índice 0-based -> letra(s) de coluna
+            s = ''
+            n += 1
+            while n:
+                n, r = divmod(n - 1, 26)
+                s = chr(65 + r) + s
+            return s
+
+        def escrever_tabela(nome_aba, tabela, somar=(), larguras=None, titulo_aba=None, nota=None):
+            """Escreve DataFrame com cabeçalho formatado, filtro, painel congelado e linha de total."""
+            tabela = tabela.copy()
+            tabela.to_excel(w, sheet_name=nome_aba, index=False, startrow=3, header=False)
+            ws = w.sheets[nome_aba]
+            ws.write(0, 0, titulo_aba or nome_aba, f_tit)
+            ws.write(1, 0, f'{titulo} — {filtros_txt}', f_sub)
+            n_l, n_c = tabela.shape
+            for j, col in enumerate(tabela.columns):
+                ws.write(2, j, col, f_head_emb if col in COLS_EMB else f_head)
+                fmt = f_int if col in COLS_INT else f_dec if col in COLS_DEC else f_cel
+                larg = (larguras or {}).get(col)
+                if larg is None:
+                    maxlen = max([len(str(col))] + [len(str(v)) for v in tabela[col].head(300)])
+                    larg = min(max(10, maxlen + 2), 46)
+                ws.set_column(j, j, larg, fmt)
+            # reescreve o corpo com formato (to_excel sem estilo não aplica border)
+            for i in range(n_l):
+                for j, col in enumerate(tabela.columns):
+                    v = tabela.iat[i, j]
+                    if pd.isna(v):
+                        v = ''
+                    fmt = f_int if col in COLS_INT else f_dec if col in COLS_DEC else f_cel
+                    if isinstance(v, (int, float)) or hasattr(v, 'item'):
+                        try:
+                            ws.write_number(3 + i, j, float(v), fmt)
+                            continue
+                        except (TypeError, ValueError):
+                            pass
+                    ws.write(3 + i, j, str(v), fmt)
+            ws.set_row(2, 30)
+            ws.freeze_panes(3, 0)
+            if n_l:
+                ws.autofilter(2, 0, 2 + n_l, n_c - 1)
+            # total (fórmulas) — só para grandezas somáveis entre linhas distintas
+            if n_l and somar:
+                r_tot = 3 + n_l
+                ws.write(r_tot, 0, 'TOTAL', f_tot_l)
+                for j, col in enumerate(tabela.columns):
+                    if col in somar:
+                        L = _col_xl(j)
+                        valor = float(tabela[col].sum())
+                        ws.write_formula(r_tot, j, f'=SUBTOTAL(109,{L}4:{L}{3 + n_l})',
+                                         f_tot_d if col in COLS_DEC else f_tot_i, valor)
+                    elif j > 0:
+                        ws.write(r_tot, j, '', f_tot_l)
+            if nota:
+                ws.write(3 + n_l + (2 if somar else 1), 0, nota, f_sub)
+            ws.set_landscape()
+            ws.fit_to_pages(1, 0)
+            ws.repeat_rows(2)
+            return ws
+
+        # ── Resumo (capa) ────────────────────────────────────────────────
+        ws0 = wb.add_worksheet('Resumo')
+        w.sheets['Resumo'] = ws0
+        ws0.hide_gridlines(2)
+        ws0.set_column(0, 0, 30)
+        ws0.set_column(1, 1, 22)
+        ws0.set_column(2, 5, 18)
+        ws0.write(0, 0, titulo, f_tit)
+        ws0.write(1, 0, f'Gerado em {datetime.now().strftime("%d/%m/%Y às %H:%M")}', f_sub)
+        ws0.write(3, 0, 'Filtros aplicados', f_lbl)
+        ws0.merge_range(4, 0, 4, 5, filtros_txt, f_wrap)
+        ws0.set_row(4, 48)
+        ws0.write(6, 0, 'Indicadores', f_lbl)
+        dn = sem_embalagem(df)
+        kp = [('Lançamentos (sem embalagem)', len(dn), f_int),
+              ('Produtos distintos', int(df['Cod'].nunique()), f_int),
+              ('Rolos (sem embalagem)', float(dn['Rolos'].sum()), f_int),
+              ('Dúzias (sem embalagem)', float(dn['Duzias'].sum()), f_int)]
+        for t_ in EMBALAGEM_MAQ:
+            kp.append((f'Embalado {t_} (pacotes)', float(df.loc[df['Embalagem'] == t_, 'TotalPacote'].sum()), f_int))
+        for i, (lab, val, fmt) in enumerate(kp):
+            ws0.write(7 + i, 0, lab, f_cel)
+            ws0.write_number(7 + i, 1, val, fmt)
+        # Volume por unidade (não se soma caixa com fardo)
+        r0 = 12 + len(EMBALAGEM_MAQ)
+        ws0.write(r0 - 1, 0, 'Total Vol. por unidade', f_lbl)
+        ws0.write(r0, 0, 'Unidade', f_head)
+        ws0.write(r0, 1, 'Total Vol.', f_head)
+        vol_un = dn.groupby('UnidVol')['Volume'].sum().sort_index()
+        for i, (un, val) in enumerate(vol_un.items()):
+            ws0.write(r0 + 1 + i, 0, un, f_cel)
+            ws0.write_number(r0 + 1 + i, 1, float(val), f_dec)
+        r1 = r0 + 3 + len(vol_un)
+        ws0.write(r1, 0, 'Observação', f_lbl)
+        ws0.merge_range(r1 + 1, 0, r1 + 3, 5,
+                        'Total Vol. é expresso na unidade de cada linha (caixa, fardo...). '
+                        'Por isso volumes de unidades diferentes não são somados entre si. '
+                        'Rolos e Dúzias são grandezas comparáveis entre linhas. '
+                        'Selovac e Flowpack são máquinas de embalagem: ficam em métrica separada e não entram nos totais. '
+                        'Os valores vêm da planilha CONTROLE_PRODUCAO (já calculados).', f_wrap)
+        ws0.set_row(r1 + 1, 20)
+        n_alerta = int((df['Alerta'] != 'OK').sum())
+        if n_alerta:
+            ws0.write(r1 + 5, 0, f'⚠ {n_alerta} lançamento(s) com alerta — veja a aba Detalhe.', f_lbl)
+
+        # ── Abas de dados ───────────────────────────────────────────────
+        escrever_tabela('Por Linha', tabela_por_linha(df),
+                        somar=('Lançamentos', 'Rolos', 'Dúzias'), titulo_aba='Produção por Linha')
+        escrever_tabela('Por Máquina', tabela_por_maquina(df),
+                        somar=('Lançamentos', 'Rolos', 'Dúzias'), titulo_aba='Produção por Máquina')
+        escrever_tabela('Por Produto', tabela_por_produto(df),
+                        somar=('Lançamentos', 'Rolos', 'Dúzias'), titulo_aba='Produção por Produto',
+                        nota='Colunas laranjas (Selovac/Flowpack) = pacotes embalados; são métricas '
+                             'separadas e NÃO entram nos totais de produção.')
+        mes = tabela_por_mes(df)
+        if not mes.empty:
+            cols_mes = [c for c in mes.columns if c not in ('Linha', 'Unid. volume')]
+            escrever_tabela('Por Mês', mes, somar=(), titulo_aba='Total Vol. por Linha e Mês')
+            ws = w.sheets['Por Mês']
+            for j, col in enumerate(mes.columns):
+                if col in cols_mes:
+                    ws.set_column(j, j, 11, f_dec)
+        escrever_tabela('Detalhe', tabela_detalhe(df),
+                        somar=('Total pacote', 'Rolos', 'Dúzias'), titulo_aba='Lançamentos detalhados')
+
+        # ordem das abas: Resumo primeiro
+        wb.worksheets_objs.sort(key=lambda s: 0 if s.name == 'Resumo' else 1)
+        w.sheets['Resumo'].activate()
+        w.sheets['Resumo'].set_first_sheet()
+    return out.getvalue()
+
+
+# ═════════════════════════════════════════════════════════════════════════
+#  INTERFACE STREAMLIT
+# ═════════════════════════════════════════════════════════════════════════
+def _fmt(v, casas=0):
+    s = f"{v:,.{casas}f}"
+    return s.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def _kpi(col, label, valor, cor=COR_PRIMARIA, sub=''):
+    col.markdown(
+        f"""<div style="background:#fff;border:1px solid #E9ECEF;border-left:4px solid {cor};
+        border-radius:10px;padding:12px 14px;">
+        <div style="font-size:0.72rem;color:#6C757D;font-weight:600;text-transform:uppercase;
+        letter-spacing:.04em;">{label}</div>
+        <div style="font-size:1.35rem;color:#1F2937;font-weight:700;">{valor}</div>
+        <div style="font-size:0.7rem;color:#ADB5BD;">{sub}</div></div>""",
+        unsafe_allow_html=True)
+
+
+def _ordem_mes(df):
+    return df.sort_values(['Ano', 'MesNum'])
+
+
+def render_producao(planilhas_disponiveis=None):
+    st.markdown('<h2 style="color:#4A7BC8;font-weight:700;margin-bottom:4px;font-size:1.35rem;">'
+                '🏭 Relatórios de Produção</h2>', unsafe_allow_html=True)
+    st.caption('Filtre por período, linha, máquina e produto e baixe o relatório organizado em Excel.')
+
+    # ── Fonte de dados: GitHub (automático) ou upload manual ───────────────
+    conteudo, origem = None, ''
+    info = (planilhas_disponiveis or {}).get('producao')
+    with st.expander('📂 Fonte dos dados', expanded=not info):
+        up = st.file_uploader('Enviar planilha CONTROLE_PRODUCAO (.xlsx) — substitui a do GitHub',
+                              type=['xlsx'], key='prod_upload')
+        if info:
+            st.caption(f"Planilha do GitHub: **{info['nome']}**")
+    if up is not None:
+        conteudo, origem = up.getvalue(), f'upload: {up.name}'
+    elif info:
+        try:
+            conteudo, origem = _baixar_bytes(info['url']), f"GitHub: {info['nome']}"
+        except Exception as e:
+            st.error(f'❌ Não consegui baixar a planilha de produção: {e}')
+    if conteudo is None:
+        st.info('Envie a planilha CONTROLE_PRODUCAO acima, ou coloque-a na pasta `dados/` do GitHub '
+                '(o nome precisa conter CONTROLE_PRODUCAO).')
+        return
+
+    try:
+        with st.spinner('Lendo lançamentos de produção...'):
+            base = carregar_producao(conteudo)
+    except Exception as e:
+        st.error(f'❌ Não consegui ler a planilha: {e}')
+        return
+    if base.empty:
+        st.warning('Nenhum lançamento encontrado. Verifique se o arquivo foi salvo pelo Excel '
+                   '(valores calculados precisam estar gravados).')
+        return
+
+    # ── Filtros (em cascata) ───────────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown('**⚙️ Filtros do relatório**')
+        c1, c2, c3 = st.columns([1, 1, 1])
+        anos = sorted(base['Ano'].unique().tolist(), reverse=True)
+        ano_sel = c1.multiselect('Ano', anos, default=anos[:1], key='prod_ano')
+        d1 = base[base['Ano'].isin(ano_sel)] if ano_sel else base
+
+        meses_disp = sorted(d1['MesNum'].unique().tolist())
+        rotulos = {m: MESES_NOME[m - 1] for m in meses_disp}
+        mes_sel = c2.multiselect('Mês (vazio = todos)', meses_disp,
+                                 format_func=lambda m: rotulos[m], key='prod_mes')
+        d2 = d1[d1['MesNum'].isin(mes_sel)] if mes_sel else d1
+
+        linhas = sorted(d2['Linha'].unique().tolist())
+        linha_sel = c3.multiselect('Linha / Setor (vazio = todas)', linhas, key='prod_linha')
+        d3 = d2[d2['Linha'].isin(linha_sel)] if linha_sel else d2
+
+        c4, c5, c6 = st.columns([1, 1, 1])
+        maqs = sorted(d3['Maquina'].unique().tolist())
+        maq_sel = c4.multiselect('Máquina (vazio = todas)', maqs, key='prod_maq')
+        d4 = d3[d3['Maquina'].isin(maq_sel)] if maq_sel else d3
+
+        marcas = sorted([m for m in d4['Marca'].unique().tolist() if m])
+        marca_sel = c5.multiselect('Marca (vazio = todas)', marcas, key='prod_marca')
+        d5 = d4[d4['Marca'].isin(marca_sel)] if marca_sel else d4
+
+        d5 = d5.copy()
+        d5['_rot'] = d5['Cod'].astype(str) + ' — ' + d5['Produto'] + ' · ' + d5['Subgrupo']
+        prods = sorted(d5['_rot'].unique().tolist())
+        prod_sel = c6.multiselect('Produto (vazio = todos)', prods, key='prod_prod')
+        df = d5[d5['_rot'].isin(prod_sel)] if prod_sel else d5
+        df = df.drop(columns=['_rot'])
+
+    # texto dos filtros (vai para a capa do Excel)
+    def _txt(lbl, vals, fmt=lambda x: x):
+        return f"{lbl}: {', '.join(str(fmt(v)) for v in vals) if vals else 'todos'}"
+    filtros_txt = ' | '.join([
+        _txt('Ano', ano_sel or anos),
+        _txt('Mês', mes_sel, lambda m: MESES_NOME[m - 1]),
+        _txt('Linha', linha_sel), _txt('Máquina', maq_sel),
+        _txt('Marca', marca_sel), _txt('Produto', prod_sel),
+    ])
+
+    if df.empty:
+        st.warning('Nenhum lançamento para os filtros escolhidos.')
+        return
+
+    # ── KPIs ────────────────────────────────────────────────────────────
+    dn = sem_embalagem(df)
+    vol_un = dn.groupby('UnidVol')['Volume'].sum().sort_index()
+    k = st.columns(4 + min(len(vol_un), 2))
+    _kpi(k[0], 'Lançamentos', _fmt(len(dn)), sub=f"{df['Cod'].nunique()} produtos · sem embalagem")
+    _kpi(k[1], 'Rolos', _fmt(dn['Rolos'].sum()), '#2E86AB')
+    _kpi(k[2], 'Dúzias', _fmt(dn['Duzias'].sum()), '#F4A261')
+    _kpi(k[3], 'Máquinas', _fmt(df['Maquina'].nunique()), '#6C757D', sub=f"{df['Linha'].nunique()} linhas")
+    for i, (un, val) in enumerate(list(vol_un.items())[:2]):
+        _kpi(k[4 + i], f'Total Vol. ({un})', _fmt(val, 1), '#28A745')
+    if len(vol_un) > 2:
+        st.caption('Demais unidades de volume: ' +
+                   ' · '.join(f'{u}: {_fmt(v, 1)}' for u, v in list(vol_un.items())[2:]))
+
+    emb = df[df['Embalagem'] != ''].groupby('Embalagem')['TotalPacote'].sum()
+    if len(emb):
+        st.caption('📦 Embalagem (métrica separada, fora dos totais acima): ' +
+                   ' · '.join(f'{t}: {_fmt(v)} pacotes' for t, v in emb.items()))
+
+    n_alerta = int((df['Alerta'] != 'OK').sum())
+    if n_alerta:
+        st.warning(f'⚠️ {n_alerta} lançamento(s) com alerta na planilha (ex.: código não cadastrado). '
+                   'Eles entram nas quantidades, mas podem estar sem volume. Veja a aba Detalhe.')
+
+    # ── Download ──────────────────────────────────────────────────────
+    nome_arq = f"Relatorio_Producao_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    st.download_button('📥 Baixar relatório em Excel (conforme filtros)',
+                       data=gerar_excel_producao(df, filtros_txt), file_name=nome_arq,
+                       mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                       type='primary', key='prod_download')
+    st.caption(f'Fonte: {origem}')
+
+    # ── Abas de visualização ──────────────────────────────────────────
+    cfg_num = {
+        'Lançamentos': st.column_config.NumberColumn(format='%d'),
+        'Qtd. lançada': st.column_config.NumberColumn(format='%,.0f'),
+        'Total pacote': st.column_config.NumberColumn(format='%,.0f'),
+        'Rolos': st.column_config.NumberColumn(format='%,.0f'),
+        'Dúzias': st.column_config.NumberColumn(format='%,.0f'),
+        'Total Vol.': st.column_config.NumberColumn(format='%,.2f'),
+        **{c: st.column_config.NumberColumn(format='%,.0f') for c in COLS_EMB},
+    }
+    t1, t2, t3, t4, t5 = st.tabs(['Por Linha', 'Por Máquina', 'Por Produto', 'Por Mês', 'Detalhe'])
+    with t1:
+        st.dataframe(tabela_por_linha(df), hide_index=True, use_container_width=True, column_config=cfg_num)
+    with t2:
+        st.dataframe(tabela_por_maquina(df), hide_index=True, use_container_width=True, column_config=cfg_num)
+    with t3:
+        st.caption('Selovac e Flowpack embalam o que a dobradeira e a atadura manual já produziram: '
+                   'aparecem nas colunas "Embalado ..." e não somam nos totais de produção.')
+        st.dataframe(tabela_por_produto(df), hide_index=True, use_container_width=True, column_config=cfg_num)
+    with t4:
+        und = sorted(df['UnidVol'].unique().tolist())
+        un_sel = st.selectbox('Unidade de volume do gráfico', und, key='prod_un_graf')
+        g = (df[df['UnidVol'] == un_sel].groupby(['Ano', 'MesNum', 'Mes', 'Linha'])['Volume']
+             .sum().reset_index().sort_values(['Ano', 'MesNum']))
+        g['Período'] = g['Mes'] + '/' + g['Ano'].astype(str).str[-2:]
+        fig = px.bar(g, x='Período', y='Volume', color='Linha', barmode='stack',
+                     labels={'Volume': f'Total Vol. ({un_sel})'})
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                          margin=dict(l=10, r=10, t=20, b=10), legend_title_text='')
+        st.plotly_chart(fig, use_container_width=True)
+        mat = tabela_por_mes(df)
+        st.dataframe(mat, hide_index=True, use_container_width=True)
+    with t5:
+        st.dataframe(tabela_detalhe(df), hide_index=True, use_container_width=True,
+                     column_config=cfg_num)
+
+
 @st.cache_data(ttl=3600)
 def listar_planilhas_github():
     """Lista todos os arquivos Excel da pasta 'dados' no repositório GitHub"""
@@ -11201,7 +11757,6 @@ elif menu == "__erp_todos_pedidos__":
 # (lidas do GitHub; o sufixo de data no nome do arquivo é ignorado).
 # ══════════════════════════════════════════════════════════════════════════
 elif menu == "Produção":
-    from modulo_producao import render_producao
     render_producao(planilhas_disponiveis)
 
 elif menu == "Comissões":
