@@ -826,9 +826,27 @@ def _linha_do_relatorio(row, regras):
     return escolhida
 
 
+def _diagnostico_arquivo(conteudo):
+    """Explica por que o arquivo baixado não é um .xlsx válido (zip)."""
+    ini = conteudo[:200]
+    if ini.startswith(b'version https://git-lfs'):
+        causa = 'o arquivo está no Git LFS e o GitHub devolveu só o ponteiro (suba sem LFS)'
+    elif ini.startswith(b'\xd0\xcf\x11\xe0'):
+        causa = 'é um .xls antigo (ou arquivo temporário do Excel) com extensão .xlsx; abra no Excel e salve como .xlsx'
+    elif ini.lstrip().lower().startswith((b'<!doctype', b'<html')):
+        causa = 'o GitHub devolveu uma página HTML (limite de acesso ou link inválido); tente Recarregar Dados'
+    elif len(conteudo) < 1000:
+        causa = 'o arquivo está vazio/muito pequeno (pode ser um temporário "~$" do Excel)'
+    else:
+        causa = 'o conteúdo não é um .xlsx; reabra no Excel e salve novamente como .xlsx'
+    return f'arquivo inválido ({len(conteudo):,} bytes): {causa}.'.replace(',', '.')
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def carregar_producao(conteudo: bytes) -> pd.DataFrame:
     """Lê as 12 abas mensais e devolve um DataFrame 'longo' (1 linha = 1 lançamento)."""
+    if conteudo[:2] != b'PK':
+        raise ValueError(_diagnostico_arquivo(conteudo))
     wb = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
     regras = _ler_linhas_relatorio(wb)
 
@@ -1365,7 +1383,9 @@ def listar_planilhas_github():
                     planilhas['contrato'] = info
 
                 # Identificar planilha de controle de produção
-                if 'CONTROLE_PRODUCAO' in content.name.upper().replace('Ç', 'C').replace('Ã', 'A').replace(' ', '_'):
+                if ('CONTROLE_PRODUCAO' in content.name.upper().replace('Ç', 'C').replace('Ã', 'A').replace(' ', '_')
+                        and not content.name.startswith('~$')
+                        and content.name.lower().endswith(('.xlsx', '.xlsm'))):
                     planilhas['producao'] = info
 
         
